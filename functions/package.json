@@ -1,0 +1,23 @@
+{
+  "name": "viberadar-functions",
+  "private": true,
+  "engines": {
+    "node": "20"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf lib",
+    "lint": "tsc --noEmit",
+    "serve": "npm run build && firebase emulators:start --only functions,firestore",
+    "deploy": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^6.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.2",
+    "typescript": "^5.9.3"
+  }
+}
