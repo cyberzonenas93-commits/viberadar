@@ -4,6 +4,7 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
+import { fetchBillboardSignals } from "./clients/billboard";
 import { fetchAudiomackSignals } from "./clients/audiomack";
 import { fetchAudiusSignals } from "./clients/audius";
 import { fetchDeezerSignals } from "./clients/deezer";
@@ -188,6 +189,16 @@ async function runIngestion(): Promise<IngestionSummary> {
       }
     }
     logger.info(`Region ${region} signals`, regionCounts);
+  }
+
+  // Billboard charts (US-only, outside region loop)
+  try {
+    const billboardSignals = await fetchBillboardSignals();
+    collectedSignals.push(...billboardSignals);
+    // billboard added to signals
+    logger.info(`Billboard: ${billboardSignals.length} signals`);
+  } catch (err) {
+    logger.warn("Billboard fetch failed", err);
   }
 
   const existingSnapshots = await loadExistingTrackState();

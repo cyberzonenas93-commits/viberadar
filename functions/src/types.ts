@@ -7,7 +7,8 @@ export interface SourceTrackSignal {
     | "beatport"
     | "audius"
     | "audiomack"
-    | "deezer";
+    | "deezer"
+    | "billboard";
   sourceId: string;
   title: string;
   artist: string;
