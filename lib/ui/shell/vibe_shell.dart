@@ -16,6 +16,7 @@ import '../../services/set_builder_service.dart';
 import '../widgets/dashboard_cards.dart';
 import '../widgets/filter_bar.dart';
 import '../widgets/sidebar_nav.dart';
+import '../features/greatest_of/greatest_of_screen.dart';
 import '../widgets/track_detail_panel.dart';
 import '../features/artists/artists_screen.dart';
 import '../widgets/track_table.dart';
@@ -257,12 +258,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       case AppSection.artists:
         return const ArtistsScreen();
       case AppSection.greatestOf:
-        return const _PlaceholderView(
-          icon: Icons.star_rounded,
-          title: 'Greatest Of',
-          description: 'Discover the most impactful tracks of any artist, ever.',
-          featureFlag: 'Phase 4',
-        );
+        return const GreatestOfScreen();
       case AppSection.aiCopilot:
         return const _PlaceholderView(
           icon: Icons.auto_awesome_rounded,
