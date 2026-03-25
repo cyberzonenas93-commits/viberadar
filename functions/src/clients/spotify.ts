@@ -71,6 +71,10 @@ const IRRELEVANT_PATTERNS = [
   /\b(country|folk|bluegrass|gospel|christian|classical|metal|punk|emo)\b/i,
 ];
 
+// Note: Spotify editorial playlists (Top 50 Ghana, etc.) return 404 with
+// Client Credentials auth. Regional relevance is handled in the normalize
+// layer via genreRegionAffinity() instead.
+
 function isRelevant(title: string, artist: string): boolean {
   const combined = `${title} ${artist}`;
   return !IRRELEVANT_PATTERNS.some((pattern) => pattern.test(combined));

@@ -61,11 +61,18 @@ export function mergeSignalsIntoTracks(
     );
     current.platformLinks[signal.source] = signal.platformUrl;
     current.signals.push(signal);
-    if (signal.region) {
-      current.regionScores[signal.region] = Math.max(
-        current.regionScores[signal.region] ?? 0,
-        (signal.engagement + signal.growthRate + signal.recency) / 3,
-      );
+    if (signal.region && signal.region !== "GLOBAL") {
+      const rawScore = (signal.engagement + signal.growthRate + signal.recency) / 3;
+      // Apply genre-region affinity: only give high scores when genre
+      // actually matches the region's music scene.
+      const affinity = genreRegionAffinity(current.genre, signal.region);
+      const adjustedScore = rawScore * affinity;
+      if (adjustedScore > 0.05) {
+        current.regionScores[signal.region] = Math.max(
+          current.regionScores[signal.region] ?? 0,
+          adjustedScore,
+        );
+      }
     }
 
     merged.set(key, current);
@@ -316,6 +323,56 @@ function average(values: number[]): number {
     return 0;
   }
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+/**
+ * Returns a 0-1 multiplier for how well a genre fits a region's music scene.
+ * 1.0 = perfect fit, 0.1 = barely relevant, used to prevent Tame Impala
+ * from showing as "Hot in Ghana" just because Spotify returned it for market=GH.
+ */
+function genreRegionAffinity(genre: string, region: string): number {
+  const g = (genre || "").toLowerCase();
+  const r = region.toUpperCase();
+
+  const map: Record<string, Record<string, number>> = {
+    "GH": {
+      "afrobeats": 1.0, "dancehall": 0.7, "hip-hop": 0.5, "r&b": 0.4,
+      "house": 0.3, "amapiano": 0.3, "drill": 0.2,
+      "pop": 0.05, "dance": 0.1, "open format": 0.05, "latin": 0.05,
+    },
+    "NG": {
+      "afrobeats": 1.0, "hip-hop": 0.5, "r&b": 0.5, "dancehall": 0.4,
+      "amapiano": 0.3, "house": 0.2,
+      "pop": 0.05, "dance": 0.1, "open format": 0.05, "latin": 0.05,
+    },
+    "ZA": {
+      "amapiano": 1.0, "gqom": 0.9, "house": 0.7, "afrobeats": 0.4,
+      "hip-hop": 0.3, "dance": 0.3,
+    },
+    "GB": {
+      "drill": 0.9, "uk garage": 0.9, "house": 0.7, "dance": 0.6,
+      "hip-hop": 0.6, "afrobeats": 0.5, "r&b": 0.5, "pop": 0.4,
+    },
+    "US": {
+      "hip-hop": 0.8, "r&b": 0.8, "latin": 0.6, "house": 0.5,
+      "dance": 0.5, "pop": 0.5, "afrobeats": 0.3,
+    },
+    "DE": {
+      "house": 0.8, "dance": 0.8, "hip-hop": 0.5, "pop": 0.4,
+      "afrobeats": 0.2,
+    },
+  };
+
+  const regionMap = map[r];
+  if (!regionMap) return 0.3; // Unknown region, moderate penalty
+
+  // Check for partial genre match
+  for (const [genreKey, score] of Object.entries(regionMap)) {
+    if (g.includes(genreKey) || genreKey.includes(g)) return score;
+  }
+
+  // Genre doesn't match this region — near-zero score
+  return 0.02;
 }
 
 const BLOCKED_PATTERNS = [
