@@ -1,6 +1,8 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
@@ -414,472 +416,275 @@ class _RegionsView extends StatelessWidget {
     final regions = regionStats.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final fallbackRegion = regions.firstOrNull?.key ?? 'Global';
-    final selectedRegion = activeRegion == 'Global'
-        ? fallbackRegion
-        : activeRegion;
+    final selectedRegion =
+        activeRegion == 'Global' ? fallbackRegion : activeRegion;
     final focusedTracks = [...tracks]
       ..sort(
-        (a, b) => regionScoreForTrack(
-          b,
-          selectedRegion,
-        ).compareTo(regionScoreForTrack(a, selectedRegion)),
+        (a, b) => regionScoreForTrack(b, selectedRegion)
+            .compareTo(regionScoreForTrack(a, selectedRegion)),
       );
     final regionalLeaders = focusedTracks
         .where((track) => regionScoreForTrack(track, selectedRegion) > 0)
-        .take(8)
         .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _TitleBlock(
-          title: 'Regional pulse',
-          subtitle:
-              'Compare regional heat, then pivot the global table around any market where a record starts breaking.',
-        ),
-        const SizedBox(height: 18),
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: regions.take(8).map((entry) {
-            final selected = entry.key == selectedRegion;
-            return InkWell(
-              onTap: () => onSelectRegion(entry.key),
-              borderRadius: BorderRadius.circular(22),
-              child: Container(
-                width: 180,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: selected
-                      ? AppTheme.cyan.withValues(alpha: 0.14)
-                      : AppTheme.panel,
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: selected
-                        ? AppTheme.cyan.withValues(alpha: 0.45)
-                        : AppTheme.edge,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      entry.key,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.titleLarge?.copyWith(color: Colors.white),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '${entry.value.toStringAsFixed(2)} aggregate heat',
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 22),
-        Expanded(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
-                flex: 5,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.panel,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppTheme.edge),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${formatRegionLabel(selectedRegion)} breakout board',
-                                  style: Theme.of(context).textTheme.titleLarge
-                                      ?.copyWith(color: Colors.white),
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  regionalLeaders.isEmpty
-                                      ? 'No live tracks are mapped to this region yet.'
-                                      : 'Top records currently heating up in this market.',
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: Colors.white70),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          FilledButton.tonalIcon(
-                            onPressed: () =>
-                                onOpenRegionWorkbench(selectedRegion),
-                            icon: const Icon(Icons.table_rows_rounded),
-                            label: const Text('Open in table'),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
-                          _RegionStatChip(
-                            label: 'Tracks mapped',
-                            value: '${regionalLeaders.length}',
-                          ),
-                          _RegionStatChip(
-                            label: 'Heat total',
-                            value:
-                                regionStats[selectedRegion]?.toStringAsFixed(
-                                  2,
-                                ) ??
-                                '0.00',
-                          ),
-                          _RegionStatChip(
-                            label: 'Lead record',
-                            value: regionalLeaders.firstOrNull?.title ?? 'None',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 18),
-                      Expanded(
-                        child: regionalLeaders.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'Select a different region or ingest more data to populate this board.',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context).textTheme.bodyLarge
-                                      ?.copyWith(color: Colors.white54),
-                                ),
-                              )
-                            : ListView.separated(
-                                itemCount: regionalLeaders.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 12),
-                                itemBuilder: (context, index) {
-                                  final track = regionalLeaders[index];
-                                  final regionHeat = regionScoreForTrack(
-                                    track,
-                                    selectedRegion,
-                                  );
-                                  return InkWell(
-                                    onTap: () => onActivateTrack(track.id),
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: Container(
-                                      padding: const EdgeInsets.all(16),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.panelRaised,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: AppTheme.edge,
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            width: 38,
-                                            height: 38,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              color: AppTheme.cyan.withValues(
-                                                alpha: 0.12,
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              '${index + 1}',
-                                              style: Theme.of(context)
-                                                  .textTheme
-                                                  .titleSmall
-                                                  ?.copyWith(
-                                                    color: AppTheme.textPrimary,
-                                                    fontWeight: FontWeight.w700,
-                                                  ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 14),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  track.title,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleMedium
-                                                      ?.copyWith(
-                                                        color: AppTheme.textPrimary,
-                                                      ),
-                                                ),
-                                                const SizedBox(height: 4),
-                                                Text(
-                                                  '${track.artist} · ${track.genre}',
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .bodyMedium
-                                                      ?.copyWith(
-                                                        color: AppTheme.textSecondary,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 14),
-                                          Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                '${(regionHeat * 100).round()}',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .titleLarge
-                                                    ?.copyWith(
-                                                      color: AppTheme.cyan,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                              ),
-                                              Text(
-                                                'heat',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .labelMedium
-                                                    ?.copyWith(
-                                                      color: Colors.white54,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
+                      const Icon(Icons.public_rounded,
+                          color: AppTheme.pink, size: 24),
+                      const SizedBox(width: 10),
+                      Text('Regional Pulse',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(color: AppTheme.textPrimary)),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${regionalLeaders.length} tracks in ${formatRegionLabel(selectedRegion)}',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                ],
               ),
-              const SizedBox(width: 18),
-              Expanded(
-                flex: 3,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.panel,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppTheme.edge),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'How to use this',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.titleMedium?.copyWith(color: Colors.white),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Pick a market, review the breakout board, then open that region in the main table to crate, sort, and build a set.',
-                        style: Theme.of(
-                          context,
-                        ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 18),
-                      ...[
-                        'Tap a region card to focus the market.',
-                        'Tap any track row to load it in the detail panel.',
-                        'Use "Open in table" to jump back into the full workstation with that region filter applied.',
-                      ].map(
-                        (item) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Padding(
-                                padding: EdgeInsets.only(top: 5),
-                                child: Icon(
-                                  Icons.circle,
-                                  size: 8,
-                                  color: AppTheme.pink,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  item,
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(color: Colors.white70),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              const Spacer(),
+              FilledButton.tonalIcon(
+                onPressed: () => onOpenRegionWorkbench(selectedRegion),
+                icon: const Icon(Icons.table_rows_rounded, size: 16),
+                label: const Text('Open in table'),
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 16),
+        // Region selector chips
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: regions.take(12).map((entry) {
+                final selected = entry.key == selectedRegion;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: selected,
+                    label: Text(entry.key),
+                    labelStyle: TextStyle(
+                      color: selected
+                          ? Colors.white
+                          : AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                    backgroundColor: AppTheme.panel,
+                    selectedColor: AppTheme.cyan.withValues(alpha: 0.25),
+                    side: BorderSide(
+                      color: selected
+                          ? AppTheme.cyan.withValues(alpha: 0.5)
+                          : AppTheme.edge.withValues(alpha: 0.5),
+                    ),
+                    onSelected: (_) => onSelectRegion(entry.key),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Artwork grid
+        Expanded(
+          child: regionalLeaders.isEmpty
+              ? const Center(
+                  child: Text('No tracks match this region',
+                      style: TextStyle(color: AppTheme.textTertiary)))
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: regionalLeaders.length,
+                  itemBuilder: (context, i) {
+                    final track = regionalLeaders[i];
+                    final score =
+                        (regionScoreForTrack(track, selectedRegion) * 100)
+                            .toInt();
+                    return _ShellTrackCard(
+                      track: track,
+                      rank: i + 1,
+                      score: score,
+                      onTap: () => onActivateTrack(track.id),
+                    );
+                  },
+                ),
         ),
       ],
     );
   }
 }
 
-class _RegionStatChip extends StatelessWidget {
-  const _RegionStatChip({required this.label, required this.value});
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.panelRaised,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.edge),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: Theme.of(
-              context,
-            ).textTheme.labelMedium?.copyWith(color: Colors.white54),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GenresView extends StatelessWidget {
+class _GenresView extends StatefulWidget {
   const _GenresView({required this.tracks, required this.onSelectGenre});
 
   final List<Track> tracks;
   final ValueChanged<String> onSelectGenre;
 
   @override
+  State<_GenresView> createState() => _GenresViewState();
+}
+
+class _GenresViewState extends State<_GenresView> {
+  String _selectedGenre = 'All';
+
+  @override
   Widget build(BuildContext context) {
     final genreStats = <String, List<Track>>{};
-    for (final track in tracks) {
-      genreStats.putIfAbsent(track.genre, () => []).add(track);
+    for (final track in widget.tracks) {
+      if (track.genre.isNotEmpty) {
+        genreStats.putIfAbsent(track.genre, () => []).add(track);
+      }
     }
-    final entries = genreStats.entries.toList()
-      ..sort((a, b) => b.value.length.compareTo(a.value.length));
+    final genreNames = genreStats.keys.toList()..sort();
+
+    final displayTracks = _selectedGenre == 'All'
+        ? ([...widget.tracks]
+          ..sort((a, b) => b.trendScore.compareTo(a.trendScore)))
+        : ([...(genreStats[_selectedGenre] ?? <Track>[])]
+          ..sort((a, b) => b.trendScore.compareTo(a.trendScore)));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _TitleBlock(
-          title: 'Genre landscape',
-          subtitle:
-              'See where momentum is clustering across your ingestion pipeline and jump straight into a focused crate strategy.',
-        ),
-        const SizedBox(height: 18),
-        Expanded(
-          child: ListView.separated(
-            itemCount: entries.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final entry = entries[index];
-              final averageTrend = entry.value
-                  .map((track) => track.trendScore)
-                  .average;
-              return InkWell(
-                onTap: () => onSelectGenre(entry.key),
-                borderRadius: BorderRadius.circular(24),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.panel,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppTheme.edge),
-                  ),
-                  child: Row(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Container(
-                        width: 58,
-                        height: 58,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(18),
-                          gradient: LinearGradient(
-                            colors: [
-                              AppTheme.violet.withValues(alpha: 0.8),
-                              AppTheme.cyan.withValues(alpha: 0.8),
-                            ],
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.library_music_rounded,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              entry.key,
-                              style: Theme.of(context).textTheme.titleLarge
-                                  ?.copyWith(color: Colors.white),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              '${entry.value.length} tracked records · avg trend ${(averageTrend * 100).round()}',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(color: Colors.white70),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Icon(
-                        Icons.chevron_right_rounded,
-                        color: Colors.white54,
-                      ),
+                      const Icon(Icons.library_music_rounded,
+                          color: AppTheme.violet, size: 24),
+                      const SizedBox(width: 10),
+                      Text('Genre Landscape',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(color: AppTheme.textPrimary)),
                     ],
                   ),
-                ),
-              );
-            },
+                  const SizedBox(height: 4),
+                  Text(
+                    '${displayTracks.length} tracks${_selectedGenre != 'All' ? ' in $_selectedGenre' : ' across ${genreNames.length} genres'}',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
           ),
+        ),
+        const SizedBox(height: 16),
+        // Genre selector chips
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    selected: _selectedGenre == 'All',
+                    label: const Text('All'),
+                    labelStyle: TextStyle(
+                      color: _selectedGenre == 'All'
+                          ? Colors.white
+                          : AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                    backgroundColor: AppTheme.panel,
+                    selectedColor: AppTheme.violet.withValues(alpha: 0.25),
+                    side: BorderSide(
+                      color: _selectedGenre == 'All'
+                          ? AppTheme.violet.withValues(alpha: 0.5)
+                          : AppTheme.edge.withValues(alpha: 0.5),
+                    ),
+                    onSelected: (_) => setState(() => _selectedGenre = 'All'),
+                  ),
+                ),
+                ...genreNames.map((genre) {
+                  final selected = genre == _selectedGenre;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      selected: selected,
+                      label: Text('$genre (${genreStats[genre]!.length})'),
+                      labelStyle: TextStyle(
+                        color:
+                            selected ? Colors.white : AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                      backgroundColor: AppTheme.panel,
+                      selectedColor: AppTheme.violet.withValues(alpha: 0.25),
+                      side: BorderSide(
+                        color: selected
+                            ? AppTheme.violet.withValues(alpha: 0.5)
+                            : AppTheme.edge.withValues(alpha: 0.5),
+                      ),
+                      onSelected: (_) =>
+                          setState(() => _selectedGenre = genre),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Artwork grid
+        Expanded(
+          child: displayTracks.isEmpty
+              ? const Center(
+                  child: Text('No tracks in this genre',
+                      style: TextStyle(color: AppTheme.textTertiary)))
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: displayTracks.length,
+                  itemBuilder: (context, i) {
+                    final track = displayTracks[i];
+                    final score = (track.trendScore * 100).toInt();
+                    return _ShellTrackCard(
+                      track: track,
+                      rank: i + 1,
+                      score: score,
+                      onTap: () => widget.onSelectGenre(track.genre),
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -923,7 +728,6 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
   @override
   void didUpdateWidget(covariant _SetBuilderView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Auto-regenerate when more tracks load in
     if (widget.allTracks.length != _lastTrackCount && _generated.isEmpty) {
       _regenerate();
     }
@@ -934,228 +738,141 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _TitleBlock(
-          title: 'Set Builder',
-          subtitle:
-              'Generate a mixing-friendly run order with gradual BPM progression, energy shaping, and fewer key clashes.',
-        ),
-        const SizedBox(height: 18),
-        Expanded(
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Expanded(
-                flex: 3,
-                child: SingleChildScrollView(
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: AppTheme.panel,
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: AppTheme.edge),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Build parameters',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: widget.genres.contains(_genre)
-                                    ? _genre
-                                    : widget.genres.firstOrNull,
-                                decoration: const InputDecoration(
-                                  labelText: 'Genre',
-                                ),
-                                items: widget.genres
-                                    .map(
-                                      (item) => DropdownMenuItem(
-                                        value: item,
-                                        child: Text(item),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) =>
-                                    setState(() => _genre = value ?? 'All'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                initialValue: widget.vibes.contains(_vibe)
-                                    ? _vibe
-                                    : widget.vibes.firstOrNull,
-                                decoration: const InputDecoration(
-                                  labelText: 'Vibe',
-                                ),
-                                items: widget.vibes
-                                    .map(
-                                      (item) => DropdownMenuItem(
-                                        value: item,
-                                        child: Text(item),
-                                      ),
-                                    )
-                                    .toList(),
-                                onChanged: (value) =>
-                                    setState(() => _vibe = value ?? 'All'),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        Text('Duration: $_duration mins'),
-                        Slider(
-                          min: 30,
-                          max: 180,
-                          divisions: 10,
-                          value: _duration.toDouble(),
-                          onChanged: (value) =>
-                              setState(() => _duration = value.round()),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'BPM lane: ${_bpmRange.start.round()} - ${_bpmRange.end.round()}',
-                        ),
-                        RangeSlider(
-                          min: 60,
-                          max: 200,
-                          divisions: 20,
-                          values: _bpmRange,
-                          onChanged: (value) =>
-                              setState(() => _bpmRange = value),
-                        ),
-                        const SizedBox(height: 10),
-                        Row(
-                          children: [
-                            FilledButton.icon(
-                              onPressed: _regenerate,
-                              icon: const Icon(Icons.auto_fix_high_rounded),
-                              label: const Text('Generate Set'),
-                            ),
-                            const SizedBox(width: 12),
-                            FilledButton.tonalIcon(
-                              onPressed:
-                                  _generated.isEmpty ? null : _saveCrate,
-                              icon: const Icon(Icons.save_rounded),
-                              label: const Text('Save as Crate'),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 18),
-              Expanded(
-                flex: 4,
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: AppTheme.panel,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppTheme.edge),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        'Generated run order',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(color: Colors.white),
-                      ),
-                      const SizedBox(height: 12),
-                      Expanded(
-                        child: _generated.isEmpty
-                            ? Center(
-                                child: Text(
-                                  'No matching tracks yet. Adjust your lane and regenerate.',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyLarge
-                                      ?.copyWith(color: Colors.white70),
-                                ),
-                              )
-                            : ReorderableListView.builder(
-                                itemCount: _generated.length,
-                                onReorder: (oldIndex, newIndex) {
-                                  setState(() {
-                                    final adjusted = newIndex > oldIndex
-                                        ? newIndex - 1
-                                        : newIndex;
-                                    final track =
-                                        _generated.removeAt(oldIndex);
-                                    _generated.insert(adjusted, track);
-                                  });
-                                },
-                                itemBuilder: (context, index) {
-                                  final track = _generated[index];
-                                  return Container(
-                                    key: ValueKey(track.id),
-                                    margin: const EdgeInsets.only(bottom: 10),
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.panelRaised,
-                                      borderRadius: BorderRadius.circular(18),
-                                      border:
-                                          Border.all(color: AppTheme.edge),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          '${index + 1}'.padLeft(2, '0'),
-                                        ),
-                                        const SizedBox(width: 14),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                track.title,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 4),
-                                              Text(
-                                                '${track.artist} · ${track.bpm} BPM · ${track.keySignature}',
-                                                style: Theme.of(context)
-                                                    .textTheme
-                                                    .bodySmall
-                                                    ?.copyWith(
-                                                      color: AppTheme.textTertiary,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Text(
-                                          formatTrendScore(track.trendScore),
-                                          style: const TextStyle(
-                                            color: AppTheme.cyan,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                      ),
+                      const Icon(Icons.auto_fix_high_rounded,
+                          color: AppTheme.amber, size: 24),
+                      const SizedBox(width: 10),
+                      Text('Set Builder',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(color: AppTheme.textPrimary)),
                     ],
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_generated.length} tracks in generated set',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              FilledButton.icon(
+                onPressed: _regenerate,
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: const Text('Generate'),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                onPressed: _generated.isEmpty ? null : _saveCrate,
+                icon: const Icon(Icons.save_rounded, size: 16),
+                label: const Text('Save Crate'),
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 16),
+        // Build parameter controls
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+            decoration: BoxDecoration(
+              color: AppTheme.panel,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+            ),
+            child: Row(
+              children: [
+                // Genre dropdown
+                _SetBuilderDropdown(
+                  label: 'Genre',
+                  value: _genre,
+                  options: widget.genres,
+                  onChanged: (v) => setState(() => _genre = v),
+                ),
+                const SizedBox(width: 12),
+                // Vibe dropdown
+                _SetBuilderDropdown(
+                  label: 'Vibe',
+                  value: _vibe,
+                  options: widget.vibes,
+                  onChanged: (v) => setState(() => _vibe = v),
+                ),
+                const SizedBox(width: 16),
+                // Duration
+                Text('${_duration}m',
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 12)),
+                SizedBox(
+                  width: 100,
+                  child: Slider(
+                    min: 30,
+                    max: 180,
+                    divisions: 10,
+                    value: _duration.toDouble(),
+                    onChanged: (v) =>
+                        setState(() => _duration = v.round()),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                // BPM range
+                Text(
+                    '${_bpmRange.start.round()}-${_bpmRange.end.round()} BPM',
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 12)),
+                SizedBox(
+                  width: 120,
+                  child: RangeSlider(
+                    min: 60,
+                    max: 200,
+                    divisions: 20,
+                    values: _bpmRange,
+                    onChanged: (v) => setState(() => _bpmRange = v),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        // Artwork grid
+        Expanded(
+          child: _generated.isEmpty
+              ? const Center(
+                  child: Text(
+                      'No matching tracks. Adjust parameters and regenerate.',
+                      style: TextStyle(color: AppTheme.textTertiary)))
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                  gridDelegate:
+                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: _generated.length,
+                  itemBuilder: (context, i) {
+                    final track = _generated[i];
+                    final score = (track.trendScore * 100).toInt();
+                    return _ShellTrackCard(
+                      track: track,
+                      rank: i + 1,
+                      score: score,
+                    );
+                  },
+                ),
         ),
       ],
     );
@@ -1198,6 +915,56 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
         const SnackBar(content: Text('Crate saved to your workspace.')),
       );
     }
+  }
+}
+
+class _SetBuilderDropdown extends StatelessWidget {
+  const _SetBuilderDropdown({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.panelRaised,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$label: ',
+              style: const TextStyle(
+                  color: AppTheme.textTertiary, fontSize: 11)),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: options.contains(value) ? value : options.firstOrNull,
+              isDense: true,
+              dropdownColor: AppTheme.panelRaised,
+              style: const TextStyle(
+                  color: AppTheme.textPrimary, fontSize: 12),
+              items: options
+                  .map((o) =>
+                      DropdownMenuItem(value: o, child: Text(o)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) onChanged(v);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -1621,5 +1388,264 @@ class _TitleBlock extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Shared artwork grid card used by _RegionsView, _GenresView, _SetBuilderView.
+class _ShellTrackCard extends StatefulWidget {
+  final Track track;
+  final int rank;
+  final int score;
+  final VoidCallback? onTap;
+  const _ShellTrackCard({
+    required this.track,
+    required this.rank,
+    required this.score,
+    this.onTap,
+  });
+
+  @override
+  State<_ShellTrackCard> createState() => _ShellTrackCardState();
+}
+
+class _ShellTrackCardState extends State<_ShellTrackCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    final isTop3 = widget.rank <= 3;
+    final rankColor = widget.rank == 1
+        ? AppTheme.amber
+        : widget.rank == 2
+            ? const Color(0xFFC0C0C0)
+            : widget.rank == 3
+                ? const Color(0xFFCD7F32)
+                : null;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap ?? () => _openShellTrack(t),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isTop3
+                  ? rankColor!.withValues(alpha: _hovered ? 0.5 : 0.3)
+                  : AppTheme.edge
+                      .withValues(alpha: _hovered ? 0.6 : 0.35),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(13)),
+                      child: SizedBox.expand(
+                        child: t.artworkUrl.isNotEmpty
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) =>
+                                    _ShellArtPlaceholder(),
+                              )
+                            : _ShellArtPlaceholder(),
+                      ),
+                    ),
+                    // Rank badge
+                    Positioned(
+                      top: 8,
+                      left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isTop3
+                              ? rankColor!.withValues(alpha: 0.9)
+                              : Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '#${widget.rank}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight:
+                                isTop3 ? FontWeight.w800 : FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Score badge
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cyan.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${widget.score}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Play hover overlay
+                    if (_hovered)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(13)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppTheme.cyan,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.cyan
+                                        .withValues(alpha: 0.5),
+                                    blurRadius: 16,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(Icons.play_arrow_rounded,
+                                  color: Colors.white, size: 24),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.title,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      t.artist,
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          '${t.bpm}',
+                          style: const TextStyle(
+                              color: AppTheme.textTertiary, fontSize: 10),
+                        ),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: AppTheme.edge.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            t.keySignature,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          t.genre,
+                          style: TextStyle(
+                            color: AppTheme.violet.withValues(alpha: 0.7),
+                            fontSize: 9,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShellArtPlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppTheme.edge, AppTheme.panelRaised],
+        ),
+      ),
+      child: const Center(
+        child: Icon(Icons.music_note_rounded,
+            color: AppTheme.textTertiary, size: 32),
+      ),
+    );
+  }
+}
+
+Future<void> _openShellTrack(Track track) async {
+  const priority = [
+    'spotify',
+    'apple',
+    'youtube',
+    'deezer',
+    'soundcloud',
+    'audius',
+  ];
+  String? url;
+  for (final key in priority) {
+    final u = track.platformLinks[key];
+    if (u != null && u.isNotEmpty) {
+      url = u;
+      break;
+    }
+  }
+  url ??= track.platformLinks.values.firstOrNull;
+  if (url == null) return;
+  final uri = Uri.tryParse(url);
+  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
 }
 
