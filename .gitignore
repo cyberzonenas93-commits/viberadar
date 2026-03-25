@@ -55,3 +55,4 @@ app.*.map.json
 node_modules/
 functions/lib/
 functions/.env.*
+.claude/worktrees/
