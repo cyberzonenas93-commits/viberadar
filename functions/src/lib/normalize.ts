@@ -82,7 +82,11 @@ export function mergeSignalsIntoTracks(
     for (const [region, rawScore] of Object.entries(entry.regionScores)) {
       const affinity = genreRegionAffinity(finalGenre, region);
       const score = rawScore * affinity;
-      if (score > 0.05) {
+      // Debug: log unexpected high scores for non-matching genres
+      if (region === "GH" && score > 0.15 && !finalGenre.toLowerCase().includes("afrobeats") && !finalGenre.toLowerCase().includes("dancehall")) {
+        console.log(`[REGION DEBUG] GH: "${entry.title}" by ${entry.artist} | genre=${finalGenre} | raw=${rawScore.toFixed(3)} * affinity=${affinity} = ${score.toFixed(3)}`);
+      }
+      if (score > 0.15) {
         adjusted[region] = score;
       }
     }
@@ -347,30 +351,27 @@ function genreRegionAffinity(genre: string, region: string): number {
 
   const map: Record<string, Record<string, number>> = {
     "GH": {
-      "afrobeats": 1.0, "dancehall": 0.7, "hip-hop": 0.5, "r&b": 0.4,
-      "house": 0.3, "amapiano": 0.3, "drill": 0.2,
-      "pop": 0.05, "dance": 0.1, "open format": 0.05, "latin": 0.05,
+      "afrobeats": 1.0, "dancehall": 0.4, "amapiano": 0.3,
     },
     "NG": {
-      "afrobeats": 1.0, "hip-hop": 0.5, "r&b": 0.5, "dancehall": 0.4,
-      "amapiano": 0.3, "house": 0.2,
-      "pop": 0.05, "dance": 0.1, "open format": 0.05, "latin": 0.05,
+      "afrobeats": 1.0, "dancehall": 0.3, "hip-hop": 0.05, "r&b": 0.05,
     },
     "ZA": {
-      "amapiano": 1.0, "gqom": 0.9, "house": 0.7, "afrobeats": 0.4,
-      "hip-hop": 0.3, "dance": 0.3,
+      "amapiano": 1.0, "gqom": 0.9, "house": 0.15, "afrobeats": 0.1,
     },
     "GB": {
-      "drill": 0.9, "uk garage": 0.9, "house": 0.7, "dance": 0.6,
-      "hip-hop": 0.6, "afrobeats": 0.5, "r&b": 0.5, "pop": 0.4,
+      "drill": 0.9, "uk garage": 0.9, "house": 0.6, "dance": 0.5,
+      "hip-hop": 0.5, "afrobeats": 0.4, "r&b": 0.4, "pop": 0.2,
+      "open format": 0.05,
     },
     "US": {
-      "hip-hop": 0.8, "r&b": 0.8, "latin": 0.6, "house": 0.5,
-      "dance": 0.5, "pop": 0.5, "afrobeats": 0.3,
+      "hip-hop": 0.8, "r&b": 0.8, "latin": 0.6, "house": 0.4,
+      "dance": 0.4, "pop": 0.3, "afrobeats": 0.2,
+      "open format": 0.05,
     },
     "DE": {
-      "house": 0.8, "dance": 0.8, "hip-hop": 0.5, "pop": 0.4,
-      "afrobeats": 0.2,
+      "house": 0.8, "dance": 0.7, "hip-hop": 0.3, "pop": 0.2,
+      "afrobeats": 0.1, "open format": 0.05,
     },
   };
 

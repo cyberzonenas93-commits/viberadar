@@ -22,16 +22,16 @@ class HomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final sorted = [...allTracks]..sort((a, b) => b.trendScore.compareTo(a.trendScore));
-    final top = sorted.take(50).toList();
+    final top = sorted.take(80).toList();
     final rising = allTracks.where((t) => t.isRisingFast).toList()
       ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
-    final risingTop = rising.take(10).toList();
+    final risingTop = rising.take(15).toList();
 
     final region = userProfile.preferredRegion;
     final regional = [...allTracks]..sort((a, b) {
       return _regionalRelevance(b, region).compareTo(_regionalRelevance(a, region));
     });
-    final regionalTop = regional.where((t) => _regionalRelevance(t, region) > 0.3).take(12).toList();
+    final regionalTop = regional.where((t) => _regionalRelevance(t, region) > 0.25).take(24).toList();
 
     // Genre breakdown
     final genreCounts = <String, int>{};
@@ -219,7 +219,7 @@ class HomeScreen extends ConsumerWidget {
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
-            child: _SectionHeader(icon: Icons.local_fire_department_rounded, label: 'Hot Right Now', color: AppTheme.amber, count: '${(top.length - 3).clamp(0, 24)}'),
+            child: _SectionHeader(icon: Icons.local_fire_department_rounded, label: 'Hot Right Now', color: AppTheme.amber, count: '${(top.length - 3).clamp(0, 48)}'),
           ),
         ),
         SliverPadding(
@@ -237,7 +237,7 @@ class HomeScreen extends ConsumerWidget {
                 if (idx >= top.length) return null;
                 return _TrackCard(track: top[idx], rank: idx + 1, ref: ref);
               },
-              childCount: (top.length - 3).clamp(0, 24),
+              childCount: (top.length - 3).clamp(0, 48),
             ),
           ),
         ),
