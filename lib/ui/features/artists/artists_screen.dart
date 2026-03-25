@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
+import '../../../services/spotify_artist_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Artist aggregate model
@@ -331,8 +332,39 @@ class _ArtistCatalogScreen extends ConsumerStatefulWidget {
 }
 
 class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
-  String _sortBy = 'score'; // 'score', 'title', 'bpm', 'genre'
+  String _sortBy = 'score';
+  String _view = 'all'; // 'all', 'top', 'radar'
   final Set<String> _selectedTrackIds = {};
+  final _spotifyService = SpotifyArtistService();
+  List<SpotifyTrackInfo>? _spotifyCatalogue;
+  bool _loadingCatalogue = false;
+  String? _catalogueError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSpotifyCatalogue();
+  }
+
+  Future<void> _loadSpotifyCatalogue() async {
+    setState(() { _loadingCatalogue = true; _catalogueError = null; });
+    try {
+      final catalogue = await _spotifyService.getFullCatalogue(widget.artist.name);
+      if (mounted) {
+        setState(() {
+          _spotifyCatalogue = catalogue;
+          _loadingCatalogue = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _catalogueError = e.toString();
+          _loadingCatalogue = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -340,17 +372,25 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
     final a = widget.artist;
     final crateState = ref.watch(crateProvider);
 
-    // Sort tracks
-    final tracks = [...a.tracks];
+    // Combine radar tracks with Spotify catalogue
+    final radarTracks = [...a.tracks];
+    radarTracks.sort((a, b) => b.trendScore.compareTo(a.trendScore));
+
+    final spotifyTracks = _spotifyCatalogue ?? [];
+    final topTracks = spotifyTracks.where((t) => t.isTopTrack).toList();
+
+    // Sort Spotify tracks
+    var displaySpotify = _view == 'top' ? topTracks : [...spotifyTracks];
     switch (_sortBy) {
       case 'title':
-        tracks.sort((a, b) => a.title.compareTo(b.title));
-      case 'bpm':
-        tracks.sort((a, b) => a.bpm.compareTo(b.bpm));
-      case 'genre':
-        tracks.sort((a, b) => a.genre.compareTo(b.genre));
+        displaySpotify.sort((a, b) => a.name.compareTo(b.name));
+      case 'album':
+        displaySpotify.sort((a, b) => a.albumName.compareTo(b.albumName));
+      case 'popularity':
+        displaySpotify.sort((a, b) => b.popularity.compareTo(a.popularity));
       default:
-        tracks.sort((a, b) => b.trendScore.compareTo(a.trendScore));
+        // Keep default order (top tracks first, then by album)
+        break;
     }
 
     return Column(
@@ -502,34 +542,37 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
             ],
           ),
         ),
-        Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
-        // Selection bar
-        if (_selectedTrackIds.isNotEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 8),
-            color: AppTheme.violet.withValues(alpha: 0.06),
-            child: Row(
-              children: [
-                Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 12, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 12),
-                TextButton(
-                  onPressed: () => setState(() => _selectedTrackIds.addAll(tracks.map((t) => t.id))),
-                  child: const Text('Select All', style: TextStyle(fontSize: 11)),
-                ),
-                TextButton(
-                  onPressed: () => setState(() => _selectedTrackIds.clear()),
-                  child: const Text('Clear', style: TextStyle(fontSize: 11)),
+        // View tabs
+        Container(
+          padding: const EdgeInsets.fromLTRB(28, 10, 28, 8),
+          child: Row(
+            children: [
+              _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displaySpotify.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
+              const SizedBox(width: 8),
+              _ViewTab(label: 'Top Tracks', subtitle: '${topTracks.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
+              const SizedBox(width: 8),
+              _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
+              const Spacer(),
+              if (_selectedTrackIds.isNotEmpty) ...[
+                Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 11, fontWeight: FontWeight.w600)),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => setState(() => _selectedTrackIds.clear()),
+                  child: const Text('Clear', style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
                 ),
               ],
-            ),
+            ],
           ),
-        // Track list
+        ),
+        Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
+        // Track list — either Spotify catalogue or radar tracks
         Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
-            itemCount: tracks.length,
+          child: _view == 'radar'
+              ? ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+            itemCount: radarTracks.length,
             itemBuilder: (context, i) {
-              final track = tracks[i];
+              final track = radarTracks[i];
               final isSelected = _selectedTrackIds.contains(track.id);
               return _CatalogTrackRow(
                 track: track,
@@ -546,9 +589,225 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 },
               );
             },
-          ),
+          )
+              : _loadingCatalogue
+                  ? const Center(child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(color: AppTheme.violet),
+                        SizedBox(height: 12),
+                        Text('Loading full catalogue from Spotify...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      ],
+                    ))
+                  : _catalogueError != null
+                      ? Center(child: Text('Could not load catalogue', style: TextStyle(color: AppTheme.textTertiary)))
+                      : displaySpotify.isEmpty
+                          ? const Center(child: Text('No tracks found', style: TextStyle(color: AppTheme.textTertiary)))
+                          : ListView.builder(
+                              padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+                              itemCount: displaySpotify.length,
+                              itemBuilder: (context, i) {
+                                final st = displaySpotify[i];
+                                final isSelected = _selectedTrackIds.contains(st.id);
+                                return _SpotifyTrackRow(
+                                  track: st,
+                                  rank: i + 1,
+                                  isSelected: isSelected,
+                                  onToggleSelect: () {
+                                    setState(() {
+                                      if (isSelected) {
+                                        _selectedTrackIds.remove(st.id);
+                                      } else {
+                                        _selectedTrackIds.add(st.id);
+                                      }
+                                    });
+                                  },
+                                );
+                              },
+                            ),
         ),
       ],
+    );
+  }
+}
+
+// Spotify catalogue track row
+class _SpotifyTrackRow extends StatefulWidget {
+  final SpotifyTrackInfo track;
+  final int rank;
+  final bool isSelected;
+  final VoidCallback onToggleSelect;
+
+  const _SpotifyTrackRow({
+    required this.track,
+    required this.rank,
+    required this.isSelected,
+    required this.onToggleSelect,
+  });
+
+  @override
+  State<_SpotifyTrackRow> createState() => _SpotifyTrackRowState();
+}
+
+class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: widget.isSelected
+              ? AppTheme.violet.withValues(alpha: 0.08)
+              : _hovered ? AppTheme.panelRaised : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: widget.isSelected ? Border.all(color: AppTheme.violet.withValues(alpha: 0.3)) : null,
+        ),
+        child: Row(
+          children: [
+            // Checkbox
+            GestureDetector(
+              onTap: widget.onToggleSelect,
+              child: Container(
+                width: 22, height: 22,
+                decoration: BoxDecoration(
+                  color: widget.isSelected ? AppTheme.violet : Colors.transparent,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: widget.isSelected ? AppTheme.violet : AppTheme.edge, width: 1.5),
+                ),
+                child: widget.isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 14) : null,
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Rank
+            SizedBox(
+              width: 28,
+              child: Text('${widget.rank}', style: TextStyle(color: t.isTopTrack ? AppTheme.amber : AppTheme.textTertiary, fontWeight: t.isTopTrack ? FontWeight.w700 : FontWeight.w500, fontSize: 12)),
+            ),
+            // Artwork
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: t.albumArt != null
+                  ? CachedNetworkImage(imageUrl: t.albumArt!, width: 44, height: 44, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                  : _SmallArtPlaceholder(),
+            ),
+            const SizedBox(width: 14),
+            // Title + Album
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (t.isTopTrack)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Icon(Icons.star_rounded, color: AppTheme.amber, size: 14),
+                        ),
+                      Expanded(
+                        child: Text(t.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(t.albumName, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            // Duration
+            SizedBox(
+              width: 45,
+              child: Text(t.durationFormatted, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right),
+            ),
+            const SizedBox(width: 12),
+            // Release date
+            if (t.releaseDate != null)
+              SizedBox(
+                width: 55,
+                child: Text(t.releaseDate!.length >= 4 ? t.releaseDate!.substring(0, 4) : '', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), textAlign: TextAlign.right),
+              ),
+            const SizedBox(width: 12),
+            // Popularity bar
+            if (t.popularity > 0)
+              SizedBox(
+                width: 50,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: t.popularity / 100,
+                          backgroundColor: AppTheme.edge.withValues(alpha: 0.4),
+                          valueColor: AlwaysStoppedAnimation(AppTheme.cyan.withValues(alpha: 0.7)),
+                          minHeight: 4,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text('${t.popularity}', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
+                  ],
+                ),
+              ),
+            const SizedBox(width: 8),
+            // Play
+            if (t.spotifyUrl.isNotEmpty)
+              IconButton(
+                icon: const Icon(Icons.play_circle_filled_rounded, color: Color(0xFF1DB954), size: 22),
+                onPressed: () async {
+                  final uri = Uri.tryParse(t.spotifyUrl);
+                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                tooltip: 'Play on Spotify',
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// View tab widget
+class _ViewTab extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final bool isActive;
+  final VoidCallback onTap;
+  const _ViewTab({required this.label, required this.subtitle, required this.isActive, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.violet.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? AppTheme.violet.withValues(alpha: 0.3) : AppTheme.edge.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Text(label, style: TextStyle(color: isActive ? AppTheme.violet : AppTheme.textSecondary, fontSize: 12, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400)),
+            const SizedBox(width: 6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: (isActive ? AppTheme.violet : AppTheme.textTertiary).withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(subtitle, style: TextStyle(color: isActive ? AppTheme.violet : AppTheme.textTertiary, fontSize: 9, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
