@@ -588,6 +588,8 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
             children: [
               _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displaySpotify.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
               const SizedBox(width: 8),
+              _ViewTab(label: 'Albums', subtitle: _loadingCatalogue ? '...' : '${_albumGroups(spotifyTracks).length}', isActive: _view == 'albums', onTap: () => setState(() => _view = 'albums')),
+              const SizedBox(width: 8),
               _ViewTab(label: 'Top Tracks', subtitle: '${topTracks.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
               const SizedBox(width: 8),
               _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
@@ -604,9 +606,11 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
           ),
         ),
         Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
-        // Grid view — Spotify catalogue or radar tracks
+        // Grid view — Spotify catalogue, albums, or radar tracks
         Expanded(
-          child: _view == 'radar'
+          child: _view == 'albums'
+              ? _buildAlbumsView(spotifyTracks)
+              : _view == 'radar'
               ? GridView.builder(
                   padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -652,6 +656,113 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
       ],
     );
   }
+
+  /// Group tracks by album name, preserving track order.
+  static List<_AlbumGroup> _albumGroups(List<SpotifyTrackInfo> tracks) {
+    final map = <String, _AlbumGroup>{};
+    for (final t in tracks) {
+      final key = t.albumName.isEmpty ? 'Singles' : t.albumName;
+      map.putIfAbsent(key, () => _AlbumGroup(
+        name: key,
+        artworkUrl: t.albumArt,
+        releaseDate: t.releaseDate,
+        tracks: [],
+      )).tracks.add(t);
+    }
+    // Sort albums by release date descending (newest first)
+    final groups = map.values.toList();
+    groups.sort((a, b) {
+      final dateA = a.releaseDate ?? '';
+      final dateB = b.releaseDate ?? '';
+      return dateB.compareTo(dateA);
+    });
+    return groups;
+  }
+
+  Widget _buildAlbumsView(List<SpotifyTrackInfo> allSpotifyTracks) {
+    if (_loadingCatalogue) {
+      return const Center(child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(color: AppTheme.violet),
+          SizedBox(height: 12),
+          Text('Loading albums...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        ],
+      ));
+    }
+
+    final albums = _albumGroups(allSpotifyTracks);
+    if (albums.isEmpty) {
+      return const Center(child: Text('No albums found', style: TextStyle(color: AppTheme.textTertiary)));
+    }
+
+    return CustomScrollView(
+      slivers: [
+        for (final album in albums) ...[
+          // Album header
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 20, 28, 10),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: album.artworkUrl != null
+                        ? CachedNetworkImage(imageUrl: album.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover)
+                        : Container(width: 48, height: 48, color: AppTheme.edge, child: const Icon(Icons.album_rounded, color: AppTheme.textTertiary, size: 20)),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(album.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${album.tracks.length} track${album.tracks.length > 1 ? 's' : ''}${album.releaseDate != null && album.releaseDate!.length >= 4 ? '  ·  ${album.releaseDate!.substring(0, 4)}' : ''}',
+                          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          // Album tracks grid
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 8),
+            sliver: SliverGrid(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200,
+                childAspectRatio: 0.72,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              delegate: SliverChildBuilderDelegate(
+                (context, i) => _SpotifyTrackCard(track: album.tracks[i], rank: i + 1),
+                childCount: album.tracks.length,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AlbumGroup {
+  final String name;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final List<SpotifyTrackInfo> tracks;
+
+  _AlbumGroup({
+    required this.name,
+    required this.artworkUrl,
+    required this.releaseDate,
+    required this.tracks,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
