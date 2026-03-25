@@ -73,8 +73,8 @@ class _TrackTableState extends State<TrackTable> {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppTheme.edge),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
       ),
       clipBehavior: Clip.antiAlias,
       child: SingleChildScrollView(

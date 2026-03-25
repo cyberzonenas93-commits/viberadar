@@ -35,7 +35,7 @@ class TrackDetailPanel extends StatelessWidget {
       return Container(
         decoration: BoxDecoration(
           color: AppTheme.panel,
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppTheme.edge),
         ),
         alignment: Alignment.center,
@@ -60,7 +60,7 @@ class TrackDetailPanel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppTheme.edge),
       ),
       child: Column(
@@ -72,7 +72,7 @@ class TrackDetailPanel extends StatelessWidget {
                 Text(
                   'Track Detail',
                   style: theme.textTheme.titleMedium?.copyWith(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const Spacer(),
@@ -133,7 +133,7 @@ class TrackDetailPanel extends StatelessWidget {
                           Text(
                             track.title,
                             style: theme.textTheme.headlineSmall?.copyWith(
-                              color: Colors.white,
+                              color: AppTheme.textPrimary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -141,7 +141,7 @@ class TrackDetailPanel extends StatelessWidget {
                           Text(
                             track.artist,
                             style: theme.textTheme.titleMedium?.copyWith(
-                              color: Colors.white70,
+                              color: AppTheme.textSecondary,
                             ),
                           ),
                         ],
@@ -202,7 +202,7 @@ class TrackDetailPanel extends StatelessWidget {
                           child: Text(
                             'Rising fast: momentum is spiking across sources.',
                             style: theme.textTheme.bodyMedium?.copyWith(
-                              color: Colors.white,
+                              color: AppTheme.textPrimary,
                             ),
                           ),
                         ),
@@ -227,14 +227,14 @@ class TrackDetailPanel extends StatelessWidget {
                           Text(
                             'Trend graph',
                             style: theme.textTheme.titleSmall?.copyWith(
-                              color: Colors.white,
+                              color: AppTheme.textPrimary,
                             ),
                           ),
                           const Spacer(),
                           Text(
                             'Updated ${formatUpdatedAt(track.updatedAt)}',
                             style: theme.textTheme.labelMedium?.copyWith(
-                              color: Colors.white60,
+                              color: AppTheme.textTertiary,
                             ),
                           ),
                         ],
@@ -334,7 +334,7 @@ class TrackDetailPanel extends StatelessWidget {
                 Text(
                   'Platform links',
                   style: theme.textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -357,7 +357,7 @@ class TrackDetailPanel extends StatelessWidget {
                 Text(
                   'Similar tracks',
                   style: theme.textTheme.titleSmall?.copyWith(
-                    color: Colors.white,
+                    color: AppTheme.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -379,14 +379,14 @@ class TrackDetailPanel extends StatelessWidget {
                               Text(
                                 similar.title,
                                 style: theme.textTheme.titleSmall?.copyWith(
-                                  color: Colors.white,
+                                  color: AppTheme.textPrimary,
                                 ),
                               ),
                               const SizedBox(height: 4),
                               Text(
                                 '${similar.artist} · ${similar.genre}',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.white60,
+                                  color: AppTheme.textTertiary,
                                 ),
                               ),
                             ],
@@ -529,7 +529,7 @@ class _FallbackArtwork extends StatelessWidget {
           title,
           textAlign: TextAlign.center,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-            color: Colors.white,
+            color: AppTheme.textPrimary,
             fontWeight: FontWeight.w700,
           ),
         ),

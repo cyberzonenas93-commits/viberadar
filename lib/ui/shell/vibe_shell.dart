@@ -619,7 +619,7 @@ class _RegionsView extends StatelessWidget {
                                                   .textTheme
                                                   .titleSmall
                                                   ?.copyWith(
-                                                    color: Colors.white,
+                                                    color: AppTheme.textPrimary,
                                                     fontWeight: FontWeight.w700,
                                                   ),
                                             ),
@@ -639,7 +639,7 @@ class _RegionsView extends StatelessWidget {
                                                       .textTheme
                                                       .titleMedium
                                                       ?.copyWith(
-                                                        color: Colors.white,
+                                                        color: AppTheme.textPrimary,
                                                       ),
                                                 ),
                                                 const SizedBox(height: 4),
@@ -652,7 +652,7 @@ class _RegionsView extends StatelessWidget {
                                                       .textTheme
                                                       .bodyMedium
                                                       ?.copyWith(
-                                                        color: Colors.white70,
+                                                        color: AppTheme.textSecondary,
                                                       ),
                                                 ),
                                               ],
@@ -793,7 +793,7 @@ class _RegionStatChip extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white,
+              color: AppTheme.textPrimary,
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -862,7 +862,7 @@ class _GenresView extends StatelessWidget {
                         ),
                         child: const Icon(
                           Icons.library_music_rounded,
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -980,7 +980,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: widget.genres.contains(_genre)
+                                initialValue: widget.genres.contains(_genre)
                                     ? _genre
                                     : widget.genres.firstOrNull,
                                 decoration: const InputDecoration(
@@ -1001,7 +1001,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                value: widget.vibes.contains(_vibe)
+                                initialValue: widget.vibes.contains(_vibe)
                                     ? _vibe
                                     : widget.vibes.firstOrNull,
                                 decoration: const InputDecoration(
@@ -1145,7 +1145,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                                                     .textTheme
                                                     .bodySmall
                                                     ?.copyWith(
-                                                      color: Colors.white60,
+                                                      color: AppTheme.textTertiary,
                                                     ),
                                               ),
                                             ],
@@ -1518,7 +1518,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                 context,
                 title: 'DJ defaults',
                 child: DropdownButtonFormField<String>(
-                  value:
+                  initialValue:
                       widget.regions.contains(
                         widget.userProfile.preferredRegion,
                       )

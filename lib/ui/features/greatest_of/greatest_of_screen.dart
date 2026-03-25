@@ -35,7 +35,7 @@ class _GreatestOfScreenState extends State<GreatestOfScreen> {
             children: [
               Text('Greatest Of', style: theme.textTheme.headlineMedium?.copyWith(color: Colors.white)),
               const SizedBox(height: 6),
-              const Text('Discover an artist\'s most impactful tracks of all time.', style: TextStyle(color: Color(0xFF9099B8), fontSize: 13)),
+              const Text('Discover an artist\'s most impactful tracks of all time.', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
               const SizedBox(height: 20),
               Row(
                 children: [
@@ -91,17 +91,17 @@ class _GreatestOfScreenState extends State<GreatestOfScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(t.title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-                          Text(t.artist, style: const TextStyle(color: Color(0xFF9099B8), fontSize: 12)),
+                          Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+                          Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                         ],
                       ),
                     ),
-                    Text('${t.bpm} BPM', style: const TextStyle(color: Color(0xFF9099B8), fontSize: 12)),
+                    Text('${t.bpm} BPM', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                     const SizedBox(width: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(color: AppTheme.edge, borderRadius: BorderRadius.circular(6)),
-                      child: Text(t.key, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
+                      child: Text(t.key, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
                     ),
                     const SizedBox(width: 16),
                     Text('${t.score}', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 16)),
@@ -140,7 +140,7 @@ class _Chip extends StatelessWidget {
           value: value,
           isDense: true,
           dropdownColor: AppTheme.panel,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
           items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
           onChanged: (v) { if (v != null) onChanged(v); },
         ),

@@ -1,11 +1,11 @@
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AiCopilotService {
   static const _prefKeyApiKey = 'openai_api_key';
   static const _prefKeyModel = 'openai_model';
-  static const _defaultModel = 'gpt-5.4';
   static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
   static const _systemPrompt =
@@ -18,9 +18,16 @@ class AiCopilotService {
       'deep-dives. Be concise, knowledgeable, and speak in DJ/music-industry '
       'language.';
 
+  /// Returns the effective API key: user-override from SharedPreferences first,
+  /// then falls back to the .env file value.
   Future<String?> getApiKey() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_prefKeyApiKey);
+    final userKey = prefs.getString(_prefKeyApiKey);
+    if (userKey != null && userKey.trim().isNotEmpty) return userKey;
+    // Fall back to .env
+    final envKey = dotenv.env['OPENAI_API_KEY'];
+    if (envKey != null && envKey.trim().isNotEmpty) return envKey;
+    return null;
   }
 
   Future<void> setApiKey(String key) async {
@@ -30,7 +37,9 @@ class AiCopilotService {
 
   Future<String> getModel() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_prefKeyModel) ?? _defaultModel;
+    final userModel = prefs.getString(_prefKeyModel);
+    if (userModel != null && userModel.trim().isNotEmpty) return userModel;
+    return dotenv.env['OPENAI_MODEL'] ?? 'gpt-4.1';
   }
 
   Future<void> setModel(String model) async {
@@ -77,10 +86,10 @@ class AiCopilotService {
       } else {
         final err = jsonDecode(response.body);
         final errMsg = err['error']?['message'] ?? 'API error ${response.statusCode}';
-        return '⚠️ OpenAI error: $errMsg\n\n${_simulateResponse(userMessage)}';
+        return '⚠️ OpenAI error: $errMsg';
       }
     } catch (e) {
-      return '⚠️ Network error — falling back to simulation.\n\n${_simulateResponse(userMessage)}';
+      return '⚠️ Network error — check your connection and try again.';
     }
   }
 

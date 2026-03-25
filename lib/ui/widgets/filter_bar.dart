@@ -34,124 +34,176 @@ class FilterBar extends StatelessWidget {
     final theme = Theme.of(context);
 
     return Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: AppTheme.panel,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppTheme.edge),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: searchController,
-                    focusNode: searchFocusNode,
-                    onChanged: onSearchChanged,
-                    maxLength: 100,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search_rounded),
-                      hintText: 'Search tracks, artists, genres, vibes',
-                      counterText: '',
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: searchController,
+                  focusNode: searchFocusNode,
+                  onChanged: onSearchChanged,
+                  maxLength: 100,
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textTertiary, size: 18),
+                    hintText: 'Search tracks, artists, genres, vibes',
+                    hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                    counterText: '',
+                    filled: true,
+                    fillColor: AppTheme.panelRaised,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.tonalIcon(
-                  onPressed: onRefresh,
-                  icon: const Icon(Icons.refresh_rounded),
-                  label: const Text('Refresh'),
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppTheme.edge),
-                  ),
-                  child: Text(
-                    'Cmd+K search · Cmd+F filters',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: Colors.white60,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
                     ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _SelectField(
-                    label: 'Genre',
-                    value: filters.genre,
-                    values: genres,
-                    onChanged: (value) =>
-                        onFiltersChanged(filters.copyWith(genre: value)),
+              ),
+              const SizedBox(width: 12),
+              _ActionButton(
+                icon: Icons.refresh_rounded,
+                label: 'Refresh',
+                onPressed: onRefresh,
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.panelRaised,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.edge.withValues(alpha: 0.4)),
+                ),
+                child: Text(
+                  '⌘K search  ·  ⌘F filters',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: AppTheme.textTertiary,
+                    fontSize: 10,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _SelectField(
-                    label: 'Vibe',
-                    value: filters.vibe,
-                    values: vibes,
-                    onChanged: (value) =>
-                        onFiltersChanged(filters.copyWith(vibe: value)),
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _SelectField(
+                  label: 'Genre',
+                  value: filters.genre,
+                  values: genres,
+                  onChanged: (value) =>
+                      onFiltersChanged(filters.copyWith(genre: value)),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _SelectField(
-                    label: 'Region',
-                    value: filters.region,
-                    values: regions,
-                    onChanged: (value) =>
-                        onFiltersChanged(filters.copyWith(region: value)),
-                  ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SelectField(
+                  label: 'Vibe',
+                  value: filters.vibe,
+                  values: vibes,
+                  onChanged: (value) =>
+                      onFiltersChanged(filters.copyWith(vibe: value)),
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: _SliderField(
-                    label: 'BPM range',
-                    value: filters.bpmRange,
-                    min: 60,
-                    max: 200,
-                    formatValue: (value) => value.round().toString(),
-                    onChanged: (value) =>
-                        onFiltersChanged(filters.copyWith(bpmRange: value)),
-                  ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _SelectField(
+                  label: 'Region',
+                  value: filters.region,
+                  values: regions,
+                  onChanged: (value) =>
+                      onFiltersChanged(filters.copyWith(region: value)),
                 ),
-                const SizedBox(width: 18),
-                Expanded(
-                  child: _SliderField(
-                    label: 'Energy level',
-                    value: filters.energyRange,
-                    min: 0,
-                    max: 1,
-                    formatValue: (value) => '${(value * 100).round()}%',
-                    onChanged: (value) =>
-                        onFiltersChanged(filters.copyWith(energyRange: value)),
-                  ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _SliderField(
+                  label: 'BPM range',
+                  value: filters.bpmRange,
+                  min: 60,
+                  max: 200,
+                  formatValue: (value) => value.round().toString(),
+                  onChanged: (value) =>
+                      onFiltersChanged(filters.copyWith(bpmRange: value)),
+                  accentColor: AppTheme.cyan,
                 ),
-              ],
-            ),
-          ],
-        ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: _SliderField(
+                  label: 'Energy level',
+                  value: filters.energyRange,
+                  min: 0,
+                  max: 1,
+                  formatValue: (value) => '${(value * 100).round()}%',
+                  onChanged: (value) =>
+                      onFiltersChanged(filters.copyWith(energyRange: value)),
+                  accentColor: AppTheme.pink,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
 
+class _ActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+  const _ActionButton({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
 
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppTheme.violet.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppTheme.violet, size: 16),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.violet,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class _SelectField extends StatelessWidget {
   const _SelectField({
@@ -169,8 +221,24 @@ class _SelectField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      value: values.contains(value) ? value : values.firstOrNull,
-      decoration: InputDecoration(labelText: label),
+      initialValue: values.contains(value) ? value : values.firstOrNull,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+        filled: true,
+        fillColor: AppTheme.panelRaised,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      dropdownColor: AppTheme.panelRaised,
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
       items: values
           .map((item) => DropdownMenuItem(value: item, child: Text(item)))
           .toList(),
@@ -191,6 +259,7 @@ class _SliderField extends StatelessWidget {
     required this.max,
     required this.formatValue,
     required this.onChanged,
+    required this.accentColor,
   });
 
   final String label;
@@ -199,41 +268,68 @@ class _SliderField extends StatelessWidget {
   final double max;
   final String Function(double value) formatValue;
   final ValueChanged<RangeValues> onChanged;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 4),
       decoration: BoxDecoration(
         color: AppTheme.panelRaised,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.edge),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Text(label, style: Theme.of(context).textTheme.titleSmall),
-              const Spacer(),
               Text(
-                '${formatValue(value.start)} - ${formatValue(value.end)}',
-                style: Theme.of(
-                  context,
-                ).textTheme.labelLarge?.copyWith(color: Colors.white60),
+                label,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: accentColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  '${formatValue(value.start)} – ${formatValue(value.end)}',
+                  style: TextStyle(
+                    color: accentColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
-          RangeSlider(
-            values: value,
-            min: min,
-            max: max,
-            divisions: 20,
-            labels: RangeLabels(
-              formatValue(value.start),
-              formatValue(value.end),
+          SliderTheme(
+            data: SliderThemeData(
+              activeTrackColor: accentColor,
+              inactiveTrackColor: AppTheme.edge,
+              thumbColor: accentColor,
+              overlayColor: accentColor.withValues(alpha: 0.1),
+              rangeThumbShape: const RoundRangeSliderThumbShape(enabledThumbRadius: 6),
+              trackHeight: 3,
             ),
-            onChanged: onChanged,
+            child: RangeSlider(
+              values: value,
+              min: min,
+              max: max,
+              divisions: 20,
+              labels: RangeLabels(
+                formatValue(value.start),
+                formatValue(value.end),
+              ),
+              onChanged: onChanged,
+            ),
           ),
         ],
       ),

@@ -50,7 +50,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             '${lib.duplicateCount} duplicates found'
                         : 'Scan your local music folder to index tracks',
                     style:
-                        const TextStyle(color: Color(0xFF9099B8), fontSize: 13),
+                        const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                   ),
                 ],
               ),
@@ -73,7 +73,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               ),
           ]),
         ),
-        if (!lib.hasLibrary && !lib.isScanning)
+        // ── Error / empty states ───────────────────────────────────────────────
+        if (lib.isLoading)
+          const Expanded(
+            child: Center(
+              child: CircularProgressIndicator(color: AppTheme.cyan),
+            ),
+          )
+        else if (lib.error != null)
+          Expanded(child: _ErrorState(message: lib.error!))
+        else if (!lib.hasLibrary && !lib.isScanning && lib.scannedPath != null)
+          // Scan completed but found zero audio files
+          Expanded(child: _ZeroFilesState(path: lib.scannedPath!))
+        else if (!lib.hasLibrary && !lib.isScanning)
           const Expanded(child: _EmptyState())
         else ...[
           Padding(
@@ -82,12 +94,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               Expanded(
                 child: TextField(
                   onChanged: (v) => setState(() => _searchQuery = v),
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Search tracks, artists…',
-                    hintStyle: const TextStyle(color: Color(0xFF9099B8)),
+                    hintStyle: const TextStyle(color: AppTheme.textSecondary),
                     prefixIcon: const Icon(Icons.search,
-                        color: Color(0xFF9099B8), size: 18),
+                        color: AppTheme.textSecondary, size: 18),
                     filled: true,
                     fillColor: AppTheme.panel,
                     border: OutlineInputBorder(
@@ -107,7 +119,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               DropdownButton<String>(
                 value: _filterGenre,
                 dropdownColor: AppTheme.panel,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                 underline: const SizedBox(),
                 items: genres
                     .map((g) =>
@@ -130,7 +142,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                         const SizedBox(height: 16),
                         Text(
                           'Scanning… ${lib.scanProgress} / ${lib.scanTotal}',
-                          style: const TextStyle(color: Color(0xFF9099B8)),
+                          style: const TextStyle(color: AppTheme.textSecondary),
                         ),
                       ],
                     ),
@@ -184,13 +196,13 @@ class _EmptyState extends StatelessWidget {
         const SizedBox(height: 24),
         const Text('No library scanned yet',
             style: TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 18)),
         const SizedBox(height: 8),
         const Text('Pick a folder with your music files to start.',
             style:
-                TextStyle(color: Color(0xFF9099B8), fontSize: 13)),
+                TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
         const SizedBox(height: 20),
         const Wrap(spacing: 16, children: [
           _InfoChip(
@@ -228,7 +240,7 @@ class _InfoChip extends StatelessWidget {
         const SizedBox(width: 8),
         Text(label,
             style:
-                const TextStyle(color: Color(0xFF9099B8), fontSize: 11)),
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
       ]),
     );
   }
@@ -256,7 +268,7 @@ class _ScanProgressChip extends StatelessWidget {
       const SizedBox(width: 10),
       Text('$scanned / $total',
           style: const TextStyle(
-              color: Color(0xFF9099B8), fontSize: 12)),
+              color: AppTheme.textSecondary, fontSize: 12)),
     ]);
   }
 }
@@ -301,13 +313,13 @@ class _TrackRow extends StatelessWidget {
             children: [
               Text(track.title,
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w500),
                   overflow: TextOverflow.ellipsis),
               Text(track.artist,
                   style: const TextStyle(
-                      color: Color(0xFF9099B8), fontSize: 11),
+                      color: AppTheme.textSecondary, fontSize: 11),
                   overflow: TextOverflow.ellipsis),
             ],
           ),
@@ -320,18 +332,113 @@ class _TrackRow extends StatelessWidget {
         const SizedBox(width: 8),
         Text(track.durationFormatted,
             style: const TextStyle(
-                color: Color(0xFF9099B8), fontSize: 11)),
+                color: AppTheme.textSecondary, fontSize: 11)),
         const SizedBox(width: 8),
         Text(track.fileSizeFormatted,
             style: const TextStyle(
-                color: Color(0xFF9099B8), fontSize: 11)),
+                color: AppTheme.textSecondary, fontSize: 11)),
         const SizedBox(width: 8),
         InkWell(
           onTap: onDelete,
           child: const Icon(Icons.delete_outline_rounded,
-              color: Color(0xFF9099B8), size: 16),
+              color: AppTheme.textSecondary, size: 16),
         ),
       ]),
+    );
+  }
+}
+
+// ── Error state ───────────────────────────────────────────────────────────────
+
+class _ErrorState extends StatelessWidget {
+  final String message;
+  const _ErrorState({required this.message});
+
+  bool get _isPermission =>
+      message.toLowerCase().contains('permission') ||
+      message.toLowerCase().contains('denied') ||
+      message.toLowerCase().contains('access');
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: AppTheme.pink.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppTheme.pink.withValues(alpha: 0.3)),
+            ),
+            child: Icon(
+              _isPermission
+                  ? Icons.lock_outline_rounded
+                  : Icons.error_outline_rounded,
+              size: 48,
+              color: AppTheme.pink,
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            _isPermission ? 'Permission denied' : 'Scan failed',
+            style: const TextStyle(
+                color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 18),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _isPermission
+                ? 'VibeRadar doesn\'t have access to that folder.\n'
+                    'Grant Full Disk Access in System Settings → Privacy & Security.'
+                : message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+// ── Zero-files state ──────────────────────────────────────────────────────────
+
+class _ZeroFilesState extends StatelessWidget {
+  final String path;
+  const _ZeroFilesState({required this.path});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(40),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: AppTheme.violet.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
+            ),
+            child: const Icon(Icons.search_off_rounded,
+                size: 48, color: AppTheme.violet),
+          ),
+          const SizedBox(height: 24),
+          const Text('No audio files found',
+              style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18)),
+          const SizedBox(height: 8),
+          Text(
+            'Scanned: $path\n\nNo MP3, FLAC, WAV, AAC, M4A, OGG or AIFF files found.\nTry selecting a different folder.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+        ]),
+      ),
     );
   }
 }
@@ -341,7 +448,7 @@ class _MetaChip extends StatelessWidget {
   final Color color;
   const _MetaChip(
       {required this.label,
-      this.color = const Color(0xFF9099B8)});
+      this.color = AppTheme.textSecondary});
 
   @override
   Widget build(BuildContext context) {

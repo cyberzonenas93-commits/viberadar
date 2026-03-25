@@ -1,8 +1,14 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
+
 import '../models/library_track.dart';
-import '../services/library_scanner_service.dart';
 import '../services/duplicate_detector_service.dart';
 import '../services/library_persistence_service.dart';
+import '../services/library_scanner_service.dart';
 
 // ── Services ──────────────────────────────────────────────────────────────────
 
@@ -74,7 +80,6 @@ const _sentinel = Object();
 class LibraryNotifier extends Notifier<LibraryState> {
   @override
   LibraryState build() {
-    // Auto-load persisted library on first access
     _loadFromCache();
     return const LibraryState(isLoading: true);
   }
@@ -128,7 +133,6 @@ class LibraryNotifier extends Notifier<LibraryState> {
         scanProgress: tracks.length,
         scanTotal: tracks.length,
       );
-      // Persist after scan
       await _persistence.save(tracks, path);
     } catch (e) {
       state = state.copyWith(isScanning: false, error: e.toString());
@@ -151,6 +155,36 @@ class LibraryNotifier extends Notifier<LibraryState> {
 final libraryProvider =
     NotifierProvider<LibraryNotifier, LibraryState>(LibraryNotifier.new);
 
+// ── Crate Persistence ─────────────────────────────────────────────────────────
+
+Future<File> _getCratesCacheFile() async {
+  final dir = await getApplicationDocumentsDirectory();
+  final cacheDir = Directory(p.join(dir.path, 'VibeRadar'));
+  await cacheDir.create(recursive: true);
+  return File(p.join(cacheDir.path, 'crates_cache.json'));
+}
+
+Future<Map<String, List<String>>> _loadCratesFromDisk() async {
+  try {
+    final file = await _getCratesCacheFile();
+    if (!file.existsSync()) return {};
+    final raw = await file.readAsString();
+    final json = jsonDecode(raw) as Map<String, dynamic>;
+    return json.map(
+      (k, v) => MapEntry(k, (v as List).cast<String>()),
+    );
+  } catch (_) {
+    return {};
+  }
+}
+
+Future<void> _saveCratesToDisk(Map<String, List<String>> crates) async {
+  try {
+    final file = await _getCratesCacheFile();
+    await file.writeAsString(jsonEncode(crates));
+  } catch (_) {}
+}
+
 // ── Crate State ───────────────────────────────────────────────────────────────
 
 class CrateState {
@@ -164,17 +198,31 @@ class CrateState {
 
 class CrateNotifier extends Notifier<CrateState> {
   @override
-  CrateState build() => const CrateState();
+  CrateState build() {
+    // Load persisted crates asynchronously on first build
+    _loadFromCache();
+    return const CrateState();
+  }
+
+  Future<void> _loadFromCache() async {
+    final loaded = await _loadCratesFromDisk();
+    if (loaded.isNotEmpty) {
+      state = CrateState(crates: loaded);
+    }
+  }
 
   void createCrate(String name) {
     if (state.crates.containsKey(name)) return;
-    state = state.copyWith(crates: {...state.crates, name: []});
+    final updated = {...state.crates, name: <String>[]};
+    state = state.copyWith(crates: updated);
+    _saveCratesToDisk(updated);
   }
 
   void addTrackToCrate(String crateName, String trackId) {
     final current = Map<String, List<String>>.from(state.crates);
     current[crateName] = [...(current[crateName] ?? []), trackId];
     state = state.copyWith(crates: current);
+    _saveCratesToDisk(current);
   }
 
   void removeTrackFromCrate(String crateName, String trackId) {
@@ -182,12 +230,14 @@ class CrateNotifier extends Notifier<CrateState> {
     current[crateName] =
         (current[crateName] ?? []).where((id) => id != trackId).toList();
     state = state.copyWith(crates: current);
+    _saveCratesToDisk(current);
   }
 
   void deleteCrate(String name) {
     final current = Map<String, List<String>>.from(state.crates);
     current.remove(name);
     state = state.copyWith(crates: current);
+    _saveCratesToDisk(current);
   }
 }
 

@@ -22,7 +22,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     (
       isUser: false,
       text:
-          'Hey DJ! I\'m your Vibe Radar AI Copilot powered by gpt-5.4. '
+          'Hey DJ! I\'m your Vibe Radar AI Copilot powered by GPT-4.1. '
           'Ask me anything — trending tracks, set recommendations, '
           'harmonic mixing advice, or regional music intel.',
     ),
@@ -30,7 +30,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _isTyping = false;
   bool _showSettings = false;
   String? _apiKey;
-  String _model = 'gpt-5.4';
+  String _model = 'gpt-4.1';
 
   static const _suggestions = [
     'What\'s trending in West Africa right now?',
@@ -69,31 +69,54 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final connected =
-        _apiKey != null && _apiKey!.isNotEmpty;
+    final connected = _apiKey != null && _apiKey!.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
+        Container(
+          padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                AppTheme.violet.withValues(alpha: 0.08),
+                Colors.transparent,
+              ],
+            ),
+          ),
           child: Row(children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppTheme.violet, AppTheme.pink],
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('AI Copilot',
-                      style: theme.textTheme.headlineMedium
-                          ?.copyWith(color: Colors.white)),
-                  const SizedBox(height: 6),
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(color: AppTheme.textPrimary)),
+                  const SizedBox(height: 4),
                   Row(children: [
                     Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppTheme.violet.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Text(_model,
                           style: const TextStyle(
@@ -101,36 +124,52 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                               fontSize: 10,
                               fontWeight: FontWeight.w700)),
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 10),
                     Container(
-                      width: 6,
-                      height: 6,
+                      width: 7,
+                      height: 7,
                       decoration: BoxDecoration(
-                        color: connected
-                            ? AppTheme.lime
-                            : AppTheme.pink,
+                        color: connected ? AppTheme.lime : AppTheme.amber,
                         shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (connected ? AppTheme.lime : AppTheme.amber)
+                                .withValues(alpha: 0.4),
+                            blurRadius: 6,
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Text(
-                      connected ? 'Connected' : 'Simulation mode',
-                      style: const TextStyle(
-                          color: Color(0xFF9099B8), fontSize: 11),
+                      connected ? 'Connected' : 'No API key',
+                      style: TextStyle(
+                        color: connected ? AppTheme.lime : AppTheme.amber,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ]),
                 ],
               ),
             ),
-            IconButton(
-              icon: Icon(
-                _showSettings
-                    ? Icons.close
-                    : Icons.settings_rounded,
-                color: const Color(0xFF9099B8),
+            Material(
+              color: _showSettings
+                  ? AppTheme.violet.withValues(alpha: 0.15)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: () => setState(() => _showSettings = !_showSettings),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
+                    _showSettings ? Icons.close_rounded : Icons.settings_rounded,
+                    color: _showSettings ? AppTheme.violet : AppTheme.textTertiary,
+                    size: 20,
+                  ),
+                ),
               ),
-              onPressed: () =>
-                  setState(() => _showSettings = !_showSettings),
             ),
           ]),
         ),
@@ -138,20 +177,20 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         // Settings panel
         if (_showSettings)
           Padding(
-            padding: const EdgeInsets.fromLTRB(28, 12, 28, 0),
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
             child: Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.panel,
+                color: AppTheme.panelRaised,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.edge),
+                border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('OpenAI API Key',
                       style: TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
@@ -161,22 +200,19 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                         controller: _apiKeyController,
                         obscureText: true,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 12),
+                            color: AppTheme.textPrimary, fontSize: 12),
                         decoration: InputDecoration(
                           hintText: 'sk-…',
-                          hintStyle: const TextStyle(
-                              color: Color(0xFF9099B8)),
+                          hintStyle: const TextStyle(color: AppTheme.textTertiary),
                           filled: true,
-                          fillColor: AppTheme.panelRaised,
+                          fillColor: AppTheme.panel,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: AppTheme.edge),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: AppTheme.edge),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
                           ),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 8),
@@ -186,11 +222,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                     const SizedBox(width: 10),
                     ElevatedButton(
                       onPressed: () async {
-                        final key =
-                            _apiKeyController.text.trim();
-                        await ref
-                            .read(_aiServiceProvider)
-                            .setApiKey(key);
+                        final key = _apiKeyController.text.trim();
+                        await ref.read(_aiServiceProvider).setApiKey(key);
                         if (mounted) {
                           setState(() {
                             _apiKey = key;
@@ -198,52 +231,88 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                           });
                         }
                       },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.violet,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 10),
-                      ),
                       child: const Text('Save'),
                     ),
                   ]),
                   const SizedBox(height: 12),
                   const Text('Model',
                       style: TextStyle(
-                          color: Colors.white,
+                          color: AppTheme.textPrimary,
                           fontSize: 12,
                           fontWeight: FontWeight.w600)),
                   const SizedBox(height: 8),
-                  DropdownButton<String>(
-                    value: _model,
-                    dropdownColor: AppTheme.panel,
-                    style: const TextStyle(
-                        color: Colors.white, fontSize: 12),
-                    underline: const SizedBox(),
-                    items: [
-                      'gpt-5.4',
-                      'gpt-4.1',
-                      'gpt-4o',
-                      'gpt-4o-mini',
-                    ]
-                        .map((m) => DropdownMenuItem(
-                            value: m, child: Text(m)))
-                        .toList(),
-                    onChanged: (v) async {
-                      if (v != null) {
-                        await ref
-                            .read(_aiServiceProvider)
-                            .setModel(v);
-                        if (mounted) setState(() => _model = v);
-                      }
-                    },
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.panel,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                    ),
+                    child: DropdownButton<String>(
+                      value: _model,
+                      dropdownColor: AppTheme.panelRaised,
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary, fontSize: 12),
+                      underline: const SizedBox(),
+                      isExpanded: true,
+                      items: [
+                        'gpt-4.1',
+                        'gpt-4o',
+                        'gpt-4o-mini',
+                        'gpt-4.1-mini',
+                      ]
+                          .map((m) => DropdownMenuItem(
+                              value: m, child: Text(m)))
+                          .toList(),
+                      onChanged: (v) async {
+                        if (v != null) {
+                          await ref.read(_aiServiceProvider).setModel(v);
+                          if (mounted) setState(() => _model = v);
+                        }
+                      },
+                    ),
                   ),
                 ],
               ),
             ),
           ),
 
-        const SizedBox(height: 16),
-        const Divider(color: AppTheme.edge, height: 1),
+        if (!connected && !_showSettings)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.amber.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppTheme.amber.withValues(alpha: 0.2)),
+              ),
+              child: Row(children: [
+                Icon(Icons.key_rounded, color: AppTheme.amber.withValues(alpha: 0.7), size: 16),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Add your OpenAI API key in Settings to get live AI responses.',
+                    style: TextStyle(
+                      color: AppTheme.amber.withValues(alpha: 0.8),
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => setState(() => _showSettings = true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.amber,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  ),
+                  child: const Text('Add Key', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+            ),
+          ),
+
+        const SizedBox(height: 8),
+        Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
 
         // Messages
         Expanded(
@@ -256,8 +325,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                 return const _TypingIndicator();
               }
               final msg = _messages[i];
-              return _ChatBubble(
-                  isUser: msg.isUser, text: msg.text);
+              return _ChatBubble(isUser: msg.isUser, text: msg.text);
             },
           ),
         ),
@@ -265,28 +333,26 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         // Suggestions
         if (_messages.length == 1)
           SizedBox(
-            height: 40,
+            height: 38,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 28),
+              padding: const EdgeInsets.symmetric(horizontal: 28),
               itemCount: _suggestions.length,
-              separatorBuilder: (_, _x) =>
-                  const SizedBox(width: 8),
+              separatorBuilder: (context, index) => const SizedBox(width: 8),
               itemBuilder: (ctx, i) => GestureDetector(
                 onTap: () => _send(_suggestions[i]),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: AppTheme.panel,
+                    color: AppTheme.violet.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppTheme.edge),
+                    border: Border.all(color: AppTheme.violet.withValues(alpha: 0.2)),
                   ),
                   child: Text(_suggestions[i],
                       style: const TextStyle(
-                          color: Color(0xFF9099B8),
-                          fontSize: 11)),
+                          color: AppTheme.violet,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500)),
                 ),
               ),
             ),
@@ -294,30 +360,29 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
         // Input bar
         Padding(
-          padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
+          padding: const EdgeInsets.fromLTRB(28, 10, 28, 20),
           child: Row(children: [
             Expanded(
               child: TextField(
                 controller: _controller,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 13),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                 onSubmitted: _send,
                 decoration: InputDecoration(
-                  hintText:
-                      'Ask about trends, mixing tips, set ideas…',
-                  hintStyle: const TextStyle(
-                      color: Color(0xFF9099B8), fontSize: 13),
+                  hintText: 'Ask about trends, mixing tips, set ideas…',
+                  hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
                   filled: true,
-                  fillColor: AppTheme.panel,
+                  fillColor: AppTheme.panelRaised,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: AppTheme.edge),
+                    borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide:
-                        const BorderSide(color: AppTheme.edge),
+                    borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.violet),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
                       horizontal: 16, vertical: 12),
@@ -326,17 +391,29 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             ),
             const SizedBox(width: 10),
             GestureDetector(
-              onTap: _isTyping
-                  ? null
-                  : () => _send(_controller.text),
+              onTap: _isTyping ? null : () => _send(_controller.text),
               child: Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: _isTyping
-                      ? AppTheme.edge
-                      : AppTheme.violet,
+                  gradient: _isTyping
+                      ? null
+                      : const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [AppTheme.violet, Color(0xFF6D4AE6)],
+                        ),
+                  color: _isTyping ? AppTheme.edge : null,
                   borderRadius: BorderRadius.circular(12),
+                  boxShadow: _isTyping
+                      ? null
+                      : [
+                          BoxShadow(
+                            color: AppTheme.violet.withValues(alpha: 0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                 ),
                 child: _isTyping
                     ? const Center(
@@ -348,8 +425,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                               strokeWidth: 2),
                         ),
                       )
-                    : const Icon(Icons.send_rounded,
-                        color: Colors.white, size: 18),
+                    : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
               ),
             ),
           ]),
@@ -367,18 +443,53 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     _controller.clear();
     _scrollToBottom();
 
-    final response =
-        await ref.read(_aiServiceProvider).chat(_history, text);
-    _history.add({'role': 'user', 'content': text});
-    _history.add({'role': 'assistant', 'content': response});
-
-    if (mounted) {
-      setState(() {
-        _isTyping = false;
-        _messages.add((isUser: false, text: response));
-      });
-      _scrollToBottom();
+    try {
+      final response =
+          await ref.read(_aiServiceProvider).chat(_history, text);
+      _history.add({'role': 'user', 'content': text});
+      _history.add({'role': 'assistant', 'content': response});
+      if (mounted) {
+        setState(() {
+          _isTyping = false;
+          _messages.add((isUser: false, text: response));
+        });
+      }
+    } catch (e) {
+      final errMsg = _friendlyError(e.toString());
+      if (mounted) {
+        setState(() {
+          _isTyping = false;
+          _messages.add((isUser: false, text: errMsg));
+        });
+      }
+    } finally {
+      if (mounted) _scrollToBottom();
     }
+  }
+
+  String _friendlyError(String raw) {
+    final lower = raw.toLowerCase();
+    if (lower.contains('network') ||
+        lower.contains('socket') ||
+        lower.contains('connection') ||
+        lower.contains('host lookup')) {
+      return '⚠️ Network error — check your internet connection and try again.';
+    }
+    if (lower.contains('invalid_api_key') || lower.contains('401')) {
+      return '⚠️ Invalid API key. Open Settings and re-enter your OpenAI key.';
+    }
+    if (lower.contains('model_not_found') ||
+        lower.contains('does not exist') ||
+        lower.contains('invalid model')) {
+      return '⚠️ Invalid model "$_model". Open Settings and choose a different model.';
+    }
+    if (lower.contains('rate_limit') || lower.contains('429')) {
+      return '⚠️ Rate limit reached. Wait a moment and try again.';
+    }
+    if (lower.contains('insufficient_quota') || lower.contains('402')) {
+      return '⚠️ OpenAI quota exceeded. Check your billing at platform.openai.com.';
+    }
+    return '⚠️ Something went wrong: $raw';
   }
 
   void _scrollToBottom() {
@@ -402,23 +513,27 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(
         mainAxisAlignment: isUser
             ? MainAxisAlignment.end
             : MainAxisAlignment.start,
-        crossAxisAlignment: CrossAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!isUser) ...[
             Container(
-              width: 28,
-              height: 28,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
-                color: AppTheme.violet.withValues(alpha: 0.2),
-                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppTheme.violet, AppTheme.pink],
+                ),
+                borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.auto_awesome_rounded,
-                  color: AppTheme.violet, size: 14),
+                  color: Colors.white, size: 14),
             ),
             const SizedBox(width: 10),
           ],
@@ -427,30 +542,41 @@ class _ChatBubble extends StatelessWidget {
               padding: const EdgeInsets.symmetric(
                   horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isUser ? AppTheme.violet : AppTheme.panel,
+                color: isUser
+                    ? AppTheme.violet
+                    : AppTheme.panelRaised,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
-                  bottomLeft:
-                      Radius.circular(isUser ? 16 : 4),
-                  bottomRight:
-                      Radius.circular(isUser ? 4 : 16),
+                  bottomLeft: Radius.circular(isUser ? 16 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 16),
                 ),
                 border: isUser
                     ? null
-                    : Border.all(color: AppTheme.edge),
+                    : Border.all(color: AppTheme.edge.withValues(alpha: 0.4)),
+                boxShadow: isUser
+                    ? [
+                        BoxShadow(
+                          color: AppTheme.violet.withValues(alpha: 0.2),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
+                    : null,
               ),
-              child: Text(text,
-                  style: TextStyle(
-                    color: isUser
-                        ? Colors.white
-                        : const Color(0xFFCDD3F0),
-                    fontSize: 13,
-                    height: 1.5,
-                  )),
+              child: SelectableText(
+                text,
+                style: TextStyle(
+                  color: isUser
+                      ? Colors.white
+                      : AppTheme.textPrimary,
+                  fontSize: 13,
+                  height: 1.5,
+                ),
+              ),
             ),
           ),
-          if (isUser) const SizedBox(width: 38),
+          if (isUser) const SizedBox(width: 40),
         ],
       ),
     );
@@ -463,34 +589,91 @@ class _TypingIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Row(children: [
         Container(
-          width: 28,
-          height: 28,
+          width: 30,
+          height: 30,
           decoration: BoxDecoration(
-            color: AppTheme.violet.withValues(alpha: 0.2),
-            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppTheme.violet, AppTheme.pink],
+            ),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(Icons.auto_awesome_rounded,
-              color: AppTheme.violet, size: 14),
+              color: Colors.white, size: 14),
         ),
         const SizedBox(width: 10),
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: AppTheme.panel,
+            color: AppTheme.panelRaised,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppTheme.edge),
+            border: Border.all(color: AppTheme.edge.withValues(alpha: 0.4)),
           ),
-          child: const Text('···',
-              style: TextStyle(
-                  color: AppTheme.cyan,
-                  fontSize: 18,
-                  letterSpacing: 4)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _DotPulse(delay: 0),
+              const SizedBox(width: 4),
+              _DotPulse(delay: 150),
+              const SizedBox(width: 4),
+              _DotPulse(delay: 300),
+            ],
+          ),
         ),
       ]),
+    );
+  }
+}
+
+class _DotPulse extends StatefulWidget {
+  final int delay;
+  const _DotPulse({required this.delay});
+
+  @override
+  State<_DotPulse> createState() => _DotPulseState();
+}
+
+class _DotPulseState extends State<_DotPulse> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 600),
+      vsync: this,
+    );
+    _animation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    Future.delayed(Duration(milliseconds: widget.delay), () {
+      if (mounted) _controller.repeat(reverse: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (_, child) => Container(
+        width: 6,
+        height: 6,
+        decoration: BoxDecoration(
+          color: AppTheme.violet.withValues(alpha: _animation.value),
+          shape: BoxShape.circle,
+        ),
+      ),
     );
   }
 }

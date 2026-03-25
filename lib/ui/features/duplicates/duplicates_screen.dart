@@ -32,7 +32,7 @@ class DuplicatesScreen extends ConsumerWidget {
                             '${lib.duplicateCount} extra files'
                         : 'Scan your library in My Library first',
                     style: const TextStyle(
-                        color: Color(0xFF9099B8), fontSize: 13),
+                        color: AppTheme.textSecondary, fontSize: 13),
                   ),
                 ],
               ),
@@ -70,7 +70,7 @@ class DuplicatesScreen extends ConsumerWidget {
             Expanded(
               child: ListView.separated(
                 itemCount: lib.duplicateGroups.length,
-                separatorBuilder: (_, _x) =>
+                separatorBuilder: (context, index) =>
                     const SizedBox(height: 12),
                 itemBuilder: (ctx, i) => _DuplicateGroupCard(
                   group: lib.duplicateGroups[i],
@@ -115,13 +115,13 @@ class _NeedScanState extends StatelessWidget {
         const SizedBox(height: 24),
         const Text('Scan library first',
             style: TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 18)),
         const SizedBox(height: 8),
         const Text('Go to My Library and select a music folder.',
             style:
-                TextStyle(color: Color(0xFF9099B8), fontSize: 13)),
+                TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
       ]),
     );
   }
@@ -148,13 +148,13 @@ class _NoDuplicatesState extends StatelessWidget {
         const SizedBox(height: 24),
         const Text('No duplicates found',
             style: TextStyle(
-                color: Colors.white,
+                color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w600,
                 fontSize: 18)),
         const SizedBox(height: 8),
         const Text('Your library is clean.',
             style:
-                TextStyle(color: Color(0xFF9099B8), fontSize: 13)),
+                TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
       ]),
     );
   }
@@ -196,7 +196,7 @@ class _DuplicateGroupCard extends StatelessWidget {
               const SizedBox(width: 8),
               Text('${group.tracks.length} copies',
                   style: const TextStyle(
-                      color: Color(0xFF9099B8), fontSize: 12)),
+                      color: AppTheme.textSecondary, fontSize: 12)),
             ]),
           ),
           const Divider(color: AppTheme.edge, height: 1),
@@ -242,20 +242,20 @@ class _DupeTrackRow extends StatelessWidget {
             children: [
               Text(track.title,
                   style: const TextStyle(
-                      color: Colors.white,
+                      color: AppTheme.textPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w500),
                   overflow: TextOverflow.ellipsis),
               Text(track.filePath,
                   style: const TextStyle(
-                      color: Color(0xFF9099B8), fontSize: 10),
+                      color: AppTheme.textSecondary, fontSize: 10),
                   overflow: TextOverflow.ellipsis),
             ],
           ),
         ),
         Text(track.fileSizeFormatted,
             style: const TextStyle(
-                color: Color(0xFF9099B8), fontSize: 11)),
+                color: AppTheme.textSecondary, fontSize: 11)),
         const SizedBox(width: 12),
         TextButton(
           onPressed: onKeep,

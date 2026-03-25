@@ -4,16 +4,34 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../models/library_track.dart';
 
+/// Incremental scan cache entry — stores file identity so we can skip
+/// re-hashing files that haven't changed between scans.
+class _ScanCacheEntry {
+  const _ScanCacheEntry({
+    required this.mtime,
+    required this.size,
+    required this.track,
+  });
+  final DateTime mtime;
+  final int size;
+  final LibraryTrack track;
+}
+
 class LibraryScannerService {
   static const _uuid = Uuid();
   static const _supportedExtensions = {
-    '.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.aiff'
+    '.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.aiff',
   };
 
   static const _camelotKeys = [
     '1A','2A','3A','4A','5A','6A','7A','8A','9A','10A','11A','12A',
     '1B','2B','3B','4B','5B','6B','7B','8B','9B','10B','11B','12B',
   ];
+
+  /// In-memory incremental cache keyed by absolute file path.
+  /// Survives for the lifetime of the service instance (i.e. the app session).
+  /// Tracks that haven't changed (same mtime + size) skip MD5 computation.
+  final Map<String, _ScanCacheEntry> _scanCache = {};
 
   Future<List<LibraryTrack>> scanDirectory(
     String dirPath, {
@@ -45,11 +63,22 @@ class LibraryScannerService {
 
   Future<LibraryTrack?> _processFile(File file) async {
     final stat = await file.stat();
+
+    // ── Incremental cache check ───────────────────────────────────────────
+    // If this file's mtime and size match what we saw last time, reuse the
+    // cached LibraryTrack and skip expensive MD5 hashing + mdls calls.
+    final cached = _scanCache[file.path];
+    if (cached != null &&
+        cached.mtime == stat.modified &&
+        cached.size == stat.size) {
+      return cached.track;
+    }
+
     final ext = p.extension(file.path).toLowerCase();
     final fileName = p.basenameWithoutExtension(file.path);
-
     final meta = await _getMdlsMetadata(file.path);
 
+    // MD5 only for new/changed files
     final bytes = await file.readAsBytes();
     final hash = md5.convert(bytes).toString();
 
@@ -70,7 +99,7 @@ class LibraryScannerService {
         : 44100;
     final year = meta['year'] != null ? int.tryParse(meta['year']!) : null;
 
-    return LibraryTrack(
+    final track = LibraryTrack(
       id: _uuid.v4(),
       filePath: file.path,
       fileName: p.basename(file.path),
@@ -88,6 +117,15 @@ class LibraryScannerService {
       sampleRate: sampleRate,
       year: year,
     );
+
+    // Store in incremental cache for future scans
+    _scanCache[file.path] = _ScanCacheEntry(
+      mtime: stat.modified,
+      size: stat.size,
+      track: track,
+    );
+
+    return track;
   }
 
   Future<Map<String, String?>> _getMdlsMetadata(String path) async {
@@ -109,7 +147,9 @@ class LibraryScannerService {
       if (result.exitCode == 0) {
         final parts = (result.stdout as String).split('\n');
         String? clean(String? s) {
-          if (s == null || s.trim() == '(null)' || s.trim().isEmpty) return null;
+          if (s == null || s.trim() == '(null)' || s.trim().isEmpty) {
+            return null;
+          }
           return s.trim().replaceAll(RegExp(r'^["\(]|["\)]$'), '').trim();
         }
         return {
@@ -148,16 +188,23 @@ class LibraryScannerService {
   }
 
   String _simulateKey(String hash) {
-    final idx = hash.codeUnits.take(4).fold(0, (a, b) => a + b) % _camelotKeys.length;
+    final idx =
+        hash.codeUnits.take(4).fold(0, (a, b) => a + b) % _camelotKeys.length;
     return _camelotKeys[idx];
   }
 
   String _guessGenre(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('afrobeat') || lower.contains('burna') || lower.contains('wizkid')) return 'Afrobeats';
-    if (lower.contains('amapiano') || lower.contains('kabza')) return 'Amapiano';
-    if (lower.contains('house')) return 'House';
-    if (lower.contains('rnb') || lower.contains('r&b')) return 'R&B';
+    if (lower.contains('afrobeat') ||
+        lower.contains('burna') ||
+        lower.contains('wizkid')) {
+      return 'Afrobeats';
+    }
+    if (lower.contains('amapiano') || lower.contains('kabza')) {
+      return 'Amapiano';
+    }
+    if (lower.contains('house')) { return 'House'; }
+    if (lower.contains('rnb') || lower.contains('r&b')) { return 'R&B'; }
     return 'Unknown';
   }
 }

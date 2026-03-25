@@ -69,11 +69,11 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                       child: TextField(
                         controller: _crateNameController,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 12),
+                            color: AppTheme.textPrimary, fontSize: 12),
                         decoration: InputDecoration(
                           hintText: 'New crate name…',
                           hintStyle: const TextStyle(
-                              color: Color(0xFF9099B8), fontSize: 12),
+                              color: AppTheme.textSecondary, fontSize: 12),
                           filled: true,
                           fillColor: AppTheme.panelRaised,
                           border: OutlineInputBorder(
@@ -108,7 +108,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: const Icon(Icons.add,
-                            color: Colors.white, size: 16),
+                            color: AppTheme.textPrimary, size: 16),
                       ),
                     ),
                   ]),
@@ -121,7 +121,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                   ? const Center(
                       child: Text('No crates yet',
                           style: TextStyle(
-                              color: Color(0xFF9099B8), fontSize: 12)))
+                              color: AppTheme.textSecondary, fontSize: 12)))
                   : ListView.builder(
                       itemCount: crateState.crateNames.length,
                       itemBuilder: (ctx, i) {
@@ -154,12 +154,12 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                               Expanded(
                                   child: Text(name,
                                       style: const TextStyle(
-                                          color: Colors.white,
+                                          color: AppTheme.textPrimary,
                                           fontSize: 13),
                                       overflow: TextOverflow.ellipsis)),
                               Text('$count',
                                   style: const TextStyle(
-                                      color: Color(0xFF9099B8),
+                                      color: AppTheme.textSecondary,
                                       fontSize: 11)),
                               const SizedBox(width: 6),
                               GestureDetector(
@@ -172,7 +172,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                   }
                                 },
                                 child: const Icon(Icons.close,
-                                    color: Color(0xFF9099B8), size: 14),
+                                    color: AppTheme.textSecondary, size: 14),
                               ),
                             ]),
                           ),
@@ -190,7 +190,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
             ? const Center(
                 child: Text('Select or create a crate',
                     style: TextStyle(
-                        color: Color(0xFF9099B8), fontSize: 14)))
+                        color: AppTheme.textSecondary, fontSize: 14)))
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -206,7 +206,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                     ?.copyWith(color: Colors.white)),
                             Text('${crateLibTracks.length} tracks',
                                 style: const TextStyle(
-                                    color: Color(0xFF9099B8),
+                                    color: AppTheme.textSecondary,
                                     fontSize: 12)),
                           ],
                         ),
@@ -287,7 +287,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                               child: Text('Crate Tracks',
                                   style: theme.textTheme.bodySmall
                                       ?.copyWith(
-                                          color: const Color(0xFF9099B8),
+                                          color: AppTheme.textSecondary,
                                           letterSpacing: 1,
                                           fontWeight: FontWeight.w700)),
                             ),
@@ -297,7 +297,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                       child: Text(
                                           'Add tracks from library →',
                                           style: TextStyle(
-                                              color: Color(0xFF9099B8),
+                                              color: AppTheme.textSecondary,
                                               fontSize: 12)))
                                   : ListView.builder(
                                       padding: const EdgeInsets.fromLTRB(
@@ -323,7 +323,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                               child: Text('${i + 1}',
                                                   style: const TextStyle(
                                                       color:
-                                                          Color(0xFF9099B8),
+                                                          AppTheme.textSecondary,
                                                       fontSize: 11,
                                                       fontWeight:
                                                           FontWeight.w700),
@@ -338,7 +338,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                                 children: [
                                                   Text(t.title,
                                                       style: const TextStyle(
-                                                          color: Colors.white,
+                                                          color: AppTheme.textPrimary,
                                                           fontSize: 12,
                                                           fontWeight:
                                                               FontWeight.w500),
@@ -347,7 +347,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                                   Text(t.artist,
                                                       style: const TextStyle(
                                                           color:
-                                                              Color(0xFF9099B8),
+                                                              AppTheme.textSecondary,
                                                           fontSize: 11),
                                                       overflow:
                                                           TextOverflow.ellipsis),
@@ -357,7 +357,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                             Text(
                                                 '${t.bpm.toStringAsFixed(0)} BPM',
                                                 style: const TextStyle(
-                                                    color: Color(0xFF9099B8),
+                                                    color: AppTheme.textSecondary,
                                                     fontSize: 10)),
                                             const SizedBox(width: 8),
                                             Text(t.key,
@@ -399,7 +399,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                               child: Text('Add from Library',
                                   style: theme.textTheme.bodySmall
                                       ?.copyWith(
-                                          color: const Color(0xFF9099B8),
+                                          color: AppTheme.textSecondary,
                                           letterSpacing: 1,
                                           fontWeight: FontWeight.w700)),
                             ),
@@ -408,7 +408,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                   ? const Center(
                                       child: Text('Scan library first',
                                           style: TextStyle(
-                                              color: Color(0xFF9099B8),
+                                              color: AppTheme.textSecondary,
                                               fontSize: 11)))
                                   : ListView.builder(
                                       padding: const EdgeInsets.fromLTRB(
@@ -459,7 +459,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                                     Text(t.artist,
                                                         style: const TextStyle(
                                                             color:
-                                                                Color(0xFF9099B8),
+                                                                AppTheme.textSecondary,
                                                             fontSize: 10),
                                                         overflow:
                                                             TextOverflow.ellipsis),
@@ -473,7 +473,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                                         .add_circle_outline_rounded,
                                                 color: inCrate
                                                     ? AppTheme.violet
-                                                    : const Color(0xFF9099B8),
+                                                    : AppTheme.textSecondary,
                                                 size: 12,
                                               ),
                                             ]),

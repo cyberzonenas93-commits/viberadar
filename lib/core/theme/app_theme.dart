@@ -1,24 +1,42 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
-  static const Color ink = Color(0xFF080914);
-  static const Color panel = Color(0xFF111425);
-  static const Color panelRaised = Color(0xFF171B31);
-  static const Color edge = Color(0xFF252B48);
-  static const Color cyan = Color(0xFF3AD7FF);
-  static const Color violet = Color(0xFF8F6CFF);
-  static const Color pink = Color(0xFFFF4DA6);
-  static const Color lime = Color(0xFF9AFFA1);
+  // Base palette
+  static const Color ink = Color(0xFF0A0D1A);
+  static const Color panel = Color(0xFF12162B);
+  static const Color panelRaised = Color(0xFF1A1F38);
+  static const Color surface = Color(0xFF1E2340);
+  static const Color edge = Color(0xFF2A3155);
+
+  // Accent palette
+  static const Color cyan = Color(0xFF00D4FF);
+  static const Color violet = Color(0xFF8B5CF6);
+  static const Color pink = Color(0xFFFF4D8A);
+  static const Color lime = Color(0xFF4ADE80);
+  static const Color amber = Color(0xFFFBBF24);
+  static const Color orange = Color(0xFFFB923C);
+
+  // Text colors
+  static const Color textPrimary = Color(0xFFEEF0F9);
+  static const Color textSecondary = Color(0xFF9CA3C4);
+  static const Color textTertiary = Color(0xFF636B8C);
+  static const Color sectionHeader = Color(0xFF6B74A0);
 
   static ThemeData darkTheme() {
-    final bodyTextTheme = ThemeData.dark(useMaterial3: true).textTheme;
+    final baseTextTheme = GoogleFonts.interTextTheme(
+      ThemeData.dark(useMaterial3: true).textTheme,
+    );
+
     final colorScheme = const ColorScheme.dark(
-      primary: cyan,
-      secondary: pink,
+      primary: violet,
+      secondary: cyan,
+      tertiary: pink,
       surface: panel,
       surfaceContainerHighest: panelRaised,
-      error: Color(0xFFFF7A7A),
-      onPrimary: ink,
+      error: Color(0xFFFF6B6B),
+      onPrimary: Colors.white,
+      onSurface: textPrimary,
     );
 
     return ThemeData(
@@ -26,60 +44,127 @@ class AppTheme {
       brightness: Brightness.dark,
       scaffoldBackgroundColor: ink,
       colorScheme: colorScheme,
-      textTheme: bodyTextTheme.copyWith(
-        displayLarge: bodyTextTheme.displayLarge?.copyWith(
-          fontWeight: FontWeight.w700,
-          letterSpacing: -1.4,
+      textTheme: baseTextTheme.copyWith(
+        displayLarge: baseTextTheme.displayLarge?.copyWith(
+          fontWeight: FontWeight.w800,
+          letterSpacing: -1.5,
+          color: textPrimary,
         ),
-        headlineMedium: bodyTextTheme.headlineMedium?.copyWith(
+        displayMedium: baseTextTheme.displayMedium?.copyWith(
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.6,
+          letterSpacing: -1.0,
+          color: textPrimary,
         ),
-        titleLarge: bodyTextTheme.titleLarge?.copyWith(
+        headlineLarge: baseTextTheme.headlineLarge?.copyWith(
           fontWeight: FontWeight.w700,
+          letterSpacing: -0.8,
+          color: textPrimary,
         ),
-        titleMedium: bodyTextTheme.titleMedium?.copyWith(
+        headlineMedium: baseTextTheme.headlineMedium?.copyWith(
+          fontWeight: FontWeight.w700,
+          letterSpacing: -0.5,
+          color: textPrimary,
+        ),
+        headlineSmall: baseTextTheme.headlineSmall?.copyWith(
           fontWeight: FontWeight.w600,
+          color: textPrimary,
         ),
-        bodyMedium: bodyTextTheme.bodyMedium?.copyWith(height: 1.35),
+        titleLarge: baseTextTheme.titleLarge?.copyWith(
+          fontWeight: FontWeight.w700,
+          color: textPrimary,
+        ),
+        titleMedium: baseTextTheme.titleMedium?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: textPrimary,
+        ),
+        titleSmall: baseTextTheme.titleSmall?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: textSecondary,
+        ),
+        bodyLarge: baseTextTheme.bodyLarge?.copyWith(
+          height: 1.5,
+          color: textPrimary,
+        ),
+        bodyMedium: baseTextTheme.bodyMedium?.copyWith(
+          height: 1.4,
+          color: textSecondary,
+        ),
+        bodySmall: baseTextTheme.bodySmall?.copyWith(
+          color: textTertiary,
+        ),
+        labelLarge: baseTextTheme.labelLarge?.copyWith(
+          fontWeight: FontWeight.w600,
+          color: textPrimary,
+        ),
+        labelMedium: baseTextTheme.labelMedium?.copyWith(
+          fontWeight: FontWeight.w500,
+          color: textSecondary,
+        ),
+        labelSmall: baseTextTheme.labelSmall?.copyWith(
+          fontWeight: FontWeight.w500,
+          letterSpacing: 0.5,
+          color: textTertiary,
+        ),
       ),
       cardTheme: CardThemeData(
         color: panel,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: edge),
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: edge.withValues(alpha: 0.6)),
         ),
       ),
-      dividerColor: edge,
+      dividerColor: edge.withValues(alpha: 0.5),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: panelRaised,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: edge),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: edge.withValues(alpha: 0.6)),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: edge),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: edge.withValues(alpha: 0.6)),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(18),
-          borderSide: const BorderSide(color: cyan),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: violet, width: 1.5),
         ),
+        hintStyle: const TextStyle(color: textTertiary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: panelRaised,
-        selectedColor: cyan.withValues(alpha: 0.2),
+        selectedColor: violet.withValues(alpha: 0.2),
         disabledColor: panelRaised.withValues(alpha: 0.75),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-        side: const BorderSide(color: edge),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        side: BorderSide(color: edge.withValues(alpha: 0.5)),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
-        labelStyle: bodyTextTheme.labelLarge!,
+        labelStyle: const TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
       ),
-      textSelectionTheme: const TextSelectionThemeData(cursorColor: cyan),
+      textSelectionTheme: const TextSelectionThemeData(cursorColor: violet),
       appBarTheme: const AppBarTheme(backgroundColor: Colors.transparent),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: violet,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: violet,
+          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        ),
+      ),
+      iconTheme: const IconThemeData(color: textSecondary),
+      scrollbarTheme: ScrollbarThemeData(
+        thumbColor: WidgetStatePropertyAll(edge.withValues(alpha: 0.5)),
+        radius: const Radius.circular(4),
+      ),
     );
   }
 }
