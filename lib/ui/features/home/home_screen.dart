@@ -26,10 +26,13 @@ class HomeScreen extends StatelessWidget {
       ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
     final risingTop = rising.take(8).toList();
 
-    // Regional hot
+    // Regional hot — boost genre relevance for African markets
     final region = userProfile.preferredRegion;
-    final regional = [...allTracks]..sort((a, b) =>
-        regionScoreForTrack(b, region).compareTo(regionScoreForTrack(a, region)));
+    final regional = [...allTracks]..sort((a, b) {
+      final scoreA = _regionalRelevance(a, region);
+      final scoreB = _regionalRelevance(b, region);
+      return scoreB.compareTo(scoreA);
+    });
     final regionalTop = regional.take(12).toList();
 
     return CustomScrollView(
@@ -124,7 +127,7 @@ class HomeScreen extends StatelessWidget {
                           icon: Icons.location_on_rounded,
                           accent: AppTheme.cyan,
                           label: 'Hot in ${formatRegionLabel(region)}',
-                          value: regionalTop.isNotEmpty ? '${(regionScoreForTrack(regionalTop[0], region) * 100).round()}' : '--',
+                          value: regionalTop.isNotEmpty ? '${(_regionalRelevance(regionalTop[0], region) * 100).round()}' : '--',
                           subtitle: regionalTop.isNotEmpty ? '${regionalTop[0].title} · ${regionalTop[0].artist}' : 'No data',
                         ),
                         const SizedBox(height: 10),
@@ -801,6 +804,36 @@ class _ArtPlaceholder extends StatelessWidget {
       child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: size * 0.35),
     );
   }
+}
+
+/// Smarter regional relevance: combines the raw region score with genre
+/// affinity for that market. E.g. Afrobeats/Highlife boosts GH/NG,
+/// Amapiano/Gqom boosts ZA, Drill/UK Garage boosts GB.
+double _regionalRelevance(Track track, String region) {
+  final rawScore = track.regionScores[region.toUpperCase()] ?? 0.0;
+  final genre = track.genre.toLowerCase();
+
+  double genreBoost = 0.0;
+  final r = region.toUpperCase();
+  if (r == 'GH' || r == 'NG') {
+    if (genre.contains('afrobeats') || genre.contains('afro')) genreBoost = 0.4;
+    if (genre.contains('dancehall')) genreBoost = 0.25;
+    if (genre.contains('hip-hop') || genre.contains('r&b')) genreBoost = 0.15;
+  } else if (r == 'ZA') {
+    if (genre.contains('amapiano')) genreBoost = 0.45;
+    if (genre.contains('gqom') || genre.contains('house')) genreBoost = 0.3;
+    if (genre.contains('afrobeats')) genreBoost = 0.2;
+  } else if (r == 'GB') {
+    if (genre.contains('drill') || genre.contains('garage')) genreBoost = 0.35;
+    if (genre.contains('house') || genre.contains('dance')) genreBoost = 0.2;
+    if (genre.contains('afrobeats')) genreBoost = 0.15;
+  } else if (r == 'US') {
+    if (genre.contains('hip-hop') || genre.contains('r&b')) genreBoost = 0.3;
+    if (genre.contains('latin')) genreBoost = 0.2;
+    if (genre.contains('house') || genre.contains('dance')) genreBoost = 0.15;
+  }
+
+  return (rawScore + genreBoost + track.trendScore * 0.3).clamp(0.0, 1.0);
 }
 
 String? _bestUrl(Track track) {
