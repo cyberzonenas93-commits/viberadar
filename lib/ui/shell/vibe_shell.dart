@@ -1,7 +1,11 @@
+import 'dart:convert';
+
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
+import '../../core/config/app_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/app_section.dart';
@@ -1432,6 +1436,13 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
   late final TextEditingController _emailController;
   late final TextEditingController _passwordController;
   late final TextEditingController _displayNameController;
+  late final TextEditingController _apiKeyController;
+  bool _apiKeyObscured = true;
+  String _selectedModel = AppConfig.defaultModel;
+  String? _testConnectionResult;
+  bool _testingConnection = false;
+
+  static const _models = ['gpt-4.1', 'gpt-4o', 'gpt-4o-mini'];
 
   @override
   void initState() {
@@ -1441,6 +1452,19 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
     _displayNameController = TextEditingController(
       text: widget.session.displayName,
     );
+    _apiKeyController = TextEditingController();
+    _loadApiSettings();
+  }
+
+  Future<void> _loadApiSettings() async {
+    final key = await AppConfig.getOpenAiKey();
+    final model = await AppConfig.getOpenAiModel();
+    if (mounted) {
+      setState(() {
+        _apiKeyController.text = key ?? '';
+        _selectedModel = _models.contains(model) ? model : AppConfig.defaultModel;
+      });
+    }
   }
 
   @override
@@ -1448,6 +1472,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
     _emailController.dispose();
     _passwordController.dispose();
     _displayNameController.dispose();
+    _apiKeyController.dispose();
     super.dispose();
   }
 
@@ -1571,6 +1596,146 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                           region: value,
                         );
                   },
+                ),
+              ),
+              const SizedBox(height: 14),
+              _settingsCard(
+                context,
+                title: 'API Keys',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: _apiKeyController,
+                      obscureText: _apiKeyObscured,
+                      decoration: InputDecoration(
+                        labelText: 'OpenAI API key',
+                        hintText: 'sk-proj-...',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _apiKeyObscured
+                                ? Icons.visibility_outlined
+                                : Icons.visibility_off_outlined,
+                          ),
+                          onPressed: () => setState(
+                            () => _apiKeyObscured = !_apiKeyObscured,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<String>(
+                      value: _selectedModel,
+                      decoration: const InputDecoration(labelText: 'Model'),
+                      items: _models
+                          .map(
+                            (m) => DropdownMenuItem(value: m, child: Text(m)),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _selectedModel = v);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: [
+                        FilledButton(
+                          onPressed: () async {
+                            await AppConfig.setOpenAiKey(
+                              _apiKeyController.text.trim(),
+                            );
+                            await AppConfig.setOpenAiModel(_selectedModel);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('API settings saved.'),
+                                ),
+                              );
+                            }
+                          },
+                          child: const Text('Save'),
+                        ),
+                        FilledButton.tonal(
+                          onPressed: _testingConnection
+                              ? null
+                              : () async {
+                                  setState(() {
+                                    _testingConnection = true;
+                                    _testConnectionResult = null;
+                                  });
+                                  final key =
+                                      _apiKeyController.text.trim().isNotEmpty
+                                      ? _apiKeyController.text.trim()
+                                      : await AppConfig.getOpenAiKey();
+                                  if (key == null || key.isEmpty) {
+                                    setState(() {
+                                      _testingConnection = false;
+                                      _testConnectionResult =
+                                          'No API key set. Enter and save your key first.';
+                                    });
+                                    return;
+                                  }
+                                  try {
+                                    final response = await http.post(
+                                      Uri.parse(
+                                        'https://api.openai.com/v1/chat/completions',
+                                      ),
+                                      headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': 'Bearer $key',
+                                      },
+                                      body: jsonEncode({
+                                        'model': _selectedModel,
+                                        'messages': [
+                                          {
+                                            'role': 'user',
+                                            'content': 'Hi',
+                                          },
+                                        ],
+                                        'max_tokens': 5,
+                                      }),
+                                    ).timeout(const Duration(seconds: 15));
+                                    setState(() {
+                                      _testingConnection = false;
+                                      _testConnectionResult =
+                                          response.statusCode == 200
+                                          ? 'Connection successful!'
+                                          : 'Error ${response.statusCode}. Check your API key.';
+                                    });
+                                  } catch (e) {
+                                    setState(() {
+                                      _testingConnection = false;
+                                      _testConnectionResult =
+                                          'Connection failed: $e';
+                                    });
+                                  }
+                                },
+                          child: _testingConnection
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Text('Test connection'),
+                        ),
+                      ],
+                    ),
+                    if (_testConnectionResult != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _testConnectionResult!,
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: _testConnectionResult!.contains('successful')
+                              ? AppTheme.cyan
+                              : Colors.redAccent,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ),
               const SizedBox(height: 14),

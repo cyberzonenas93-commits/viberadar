@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/config/firebase_runtime_config.dart';
+import '../core/config/settings_initializer.dart';
 import '../data/repositories/session_repository.dart';
 import '../data/repositories/track_repository.dart';
 import '../data/repositories/user_repository.dart';
@@ -14,6 +15,7 @@ import '../providers/repositories.dart';
 
 class AppBootstrap {
   static Future<AppBootstrapResult> initialize() async {
+    await SettingsInitializer.initialize();
     final config = FirebaseRuntimeConfig.fromEnvironment();
 
     try {
