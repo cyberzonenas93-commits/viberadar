@@ -1,6 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/track.dart';
+import '../../../providers/app_state.dart';
+import '../../../providers/library_provider.dart';
 import '../../../services/ai_copilot_service.dart';
 
 final _aiServiceProvider =
@@ -30,7 +34,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _isTyping = false;
   bool _showSettings = false;
   String? _apiKey;
-  String _model = 'gpt-4.1';
+  String _model = 'gpt-5.4';
 
   static const _suggestions = [
     'What\'s trending in West Africa right now?',
@@ -256,10 +260,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       underline: const SizedBox(),
                       isExpanded: true,
                       items: [
-                        'gpt-4.1',
+                        'gpt-5.4',
                         'gpt-4o',
                         'gpt-4o-mini',
-                        'gpt-4.1-mini',
+                        'gpt-5.4-mini',
                       ]
                           .map((m) => DropdownMenuItem(
                               value: m, child: Text(m)))
@@ -434,6 +438,54 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     );
   }
 
+  /// Build track context from current radar data for the AI.
+  List<Map<String, String>> _getTrackContext() {
+    final tracksAsync = ref.read(trackStreamProvider);
+    final allTracks = tracksAsync.value ?? <Track>[];
+    final sorted = [...allTracks]..sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    return sorted.take(80).map((t) => {
+      'title': t.title,
+      'artist': t.artist,
+      'bpm': t.bpm.toString(),
+      'key': t.keySignature,
+      'genre': t.genre,
+    }).toList();
+  }
+
+  /// Parse crate blocks from AI response and save them.
+  void _parseCrateFromResponse(String response) {
+    final crateRegex = RegExp(r'```crate\s*\n([\s\S]*?)\n```');
+    final match = crateRegex.firstMatch(response);
+    if (match == null) return;
+
+    try {
+      final jsonStr = match.group(1)!;
+      final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+      final crateName = data['name'] as String? ?? 'AI Crate';
+      final tracks = data['tracks'] as List? ?? [];
+
+      // Create the crate
+      ref.read(crateProvider.notifier).createCrate(crateName);
+
+      // Show snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Created crate "$crateName" with ${tracks.length} tracks'),
+            backgroundColor: AppTheme.violet,
+            action: SnackBarAction(
+              label: 'View',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // JSON parse failed — that's OK, just show the text
+    }
+  }
+
   Future<void> _send(String text) async {
     if (text.trim().isEmpty || _isTyping) return;
     setState(() {
@@ -444,10 +496,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     _scrollToBottom();
 
     try {
-      final response =
-          await ref.read(_aiServiceProvider).chat(_history, text);
+      final trackContext = _getTrackContext();
+      final response = await ref.read(_aiServiceProvider).chat(
+        _history,
+        text,
+        trackContext: trackContext,
+      );
       _history.add({'role': 'user', 'content': text});
       _history.add({'role': 'assistant', 'content': response});
+
+      // Check if response contains a crate block and save it
+      _parseCrateFromResponse(response);
+
       if (mounted) {
         setState(() {
           _isTyping = false;

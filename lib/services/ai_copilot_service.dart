@@ -8,15 +8,24 @@ class AiCopilotService {
   static const _prefKeyModel = 'openai_model';
   static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
-  static const _systemPrompt =
+  static const _baseSystemPrompt =
       'You are VibeRadar AI Copilot — an expert DJ intelligence assistant '
-      'specializing in Afrobeats, Amapiano, R&B, Hip-Hop, and House music. '
-      'You help DJs with: identifying trending tracks and artists, building '
-      'setlists and crate recommendations, harmonic mixing advice using '
-      'Camelot wheel notation, regional music scene intelligence (Nigeria, '
-      'South Africa, UK, US), BPM and energy flow for DJ sets, and artist '
-      'deep-dives. Be concise, knowledgeable, and speak in DJ/music-industry '
-      'language.';
+      'specializing in Afrobeats, Amapiano, R&B, Hip-Hop, and House music.\n\n'
+      'CRITICAL: When a DJ asks you to build a set, crate, or playlist, you MUST '
+      'respond with a structured JSON block that the app can parse into a real crate. '
+      'Format your crate recommendations as:\n'
+      '```crate\n'
+      '{"name":"Crate Name","tracks":[\n'
+      '  {"title":"Song Title","artist":"Artist Name","bpm":120,"key":"7A"},\n'
+      '  ...\n'
+      ']}\n'
+      '```\n\n'
+      'Always include BPM and Camelot key for each track. Order tracks for optimal '
+      'energy flow and harmonic mixing. Add a brief explanation after the crate block.\n\n'
+      'You also help with: harmonic mixing advice (Camelot wheel), regional scene '
+      'intelligence (Ghana, Nigeria, South Africa, UK, US), BPM/energy flow, and '
+      'artist deep-dives. Be concise, knowledgeable, use DJ/music-industry language.\n\n'
+      'AVAILABLE TRACKS IN RADAR (use these when possible):\n';
 
   /// Returns the effective API key: user-override from SharedPreferences first,
   /// then falls back to the .env file value.
@@ -39,7 +48,7 @@ class AiCopilotService {
     final prefs = await SharedPreferences.getInstance();
     final userModel = prefs.getString(_prefKeyModel);
     if (userModel != null && userModel.trim().isNotEmpty) return userModel;
-    return dotenv.env['OPENAI_MODEL'] ?? 'gpt-4.1';
+    return dotenv.env['OPENAI_MODEL'] ?? 'gpt-5.4';
   }
 
   Future<void> setModel(String model) async {
@@ -47,10 +56,25 @@ class AiCopilotService {
     await prefs.setString(_prefKeyModel, model);
   }
 
+  /// Build the system prompt with available track context.
+  String _buildSystemPrompt(List<Map<String, String>>? trackContext) {
+    final buffer = StringBuffer(_baseSystemPrompt);
+    if (trackContext != null && trackContext.isNotEmpty) {
+      // Include top 80 tracks as context for crate building
+      for (final t in trackContext.take(80)) {
+        buffer.write('${t["title"]} - ${t["artist"]} | ${t["bpm"]} BPM | ${t["key"]} | ${t["genre"]}\n');
+      }
+    } else {
+      buffer.write('(No tracks loaded yet)\n');
+    }
+    return buffer.toString();
+  }
+
   Future<String> chat(
     List<Map<String, String>> history,
-    String userMessage,
-  ) async {
+    String userMessage, {
+    List<Map<String, String>>? trackContext,
+  }) async {
     final apiKey = await getApiKey();
     if (apiKey == null || apiKey.trim().isEmpty) {
       return _simulateResponse(userMessage);
@@ -58,7 +82,7 @@ class AiCopilotService {
 
     final model = await getModel();
     final messages = [
-      {'role': 'system', 'content': _systemPrompt},
+      {'role': 'system', 'content': _buildSystemPrompt(trackContext)},
       ...history,
       {'role': 'user', 'content': userMessage},
     ];
