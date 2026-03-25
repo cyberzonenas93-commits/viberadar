@@ -61,21 +61,32 @@ export function mergeSignalsIntoTracks(
     );
     current.platformLinks[signal.source] = signal.platformUrl;
     current.signals.push(signal);
+    // Store raw region scores — genre affinity is applied AFTER all signals
+    // are merged, so we have the final genre for each track.
     if (signal.region && signal.region !== "GLOBAL") {
       const rawScore = (signal.engagement + signal.growthRate + signal.recency) / 3;
-      // Apply genre-region affinity: only give high scores when genre
-      // actually matches the region's music scene.
-      const affinity = genreRegionAffinity(current.genre, signal.region);
-      const adjustedScore = rawScore * affinity;
-      if (adjustedScore > 0.05) {
-        current.regionScores[signal.region] = Math.max(
-          current.regionScores[signal.region] ?? 0,
-          adjustedScore,
-        );
-      }
+      current.regionScores[signal.region] = Math.max(
+        current.regionScores[signal.region] ?? 0,
+        rawScore,
+      );
     }
 
     merged.set(key, current);
+  }
+
+  // Apply genre-region affinity NOW that we know each track's final genre.
+  // This prevents Pop/Country/Classical from getting high scores in GH/NG/ZA.
+  for (const entry of merged.values()) {
+    const finalGenre = entry.genre || "Open Format";
+    const adjusted: Record<string, number> = {};
+    for (const [region, rawScore] of Object.entries(entry.regionScores)) {
+      const affinity = genreRegionAffinity(finalGenre, region);
+      const score = rawScore * affinity;
+      if (score > 0.05) {
+        adjusted[region] = score;
+      }
+    }
+    entry.regionScores = adjusted;
   }
 
   const aggregateMetrics = Array.from(merged.values()).map((entry) => ({
@@ -371,7 +382,7 @@ function genreRegionAffinity(genre: string, region: string): number {
     if (g.includes(genreKey) || genreKey.includes(g)) return score;
   }
 
-  // Genre doesn't match this region — near-zero score
+  // Genre doesn't match this region — near-zero score (v2)
   return 0.02;
 }
 
