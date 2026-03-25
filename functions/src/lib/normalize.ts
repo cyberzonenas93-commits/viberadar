@@ -30,7 +30,13 @@ export function mergeSignalsIntoTracks(
 ): UnifiedTrackRecord[] {
   const merged = new Map<string, MergeAccumulator>();
 
-  for (const signal of signals) {
+  // Server-side blocklist — final safety net to prevent K-pop and other
+  // non-DJ-relevant content from ever reaching Firestore.
+  const filteredSignals = signals.filter(
+    (s) => !isBlockedArtist(`${s.title} ${s.artist}`),
+  );
+
+  for (const signal of filteredSignals) {
     const key = `${canonicalize(signal.title)}::${canonicalize(signal.artist)}`;
     const current = merged.get(key) ?? {
       title: signal.title,
@@ -310,4 +316,19 @@ function average(values: number[]): number {
     return 0;
   }
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+const BLOCKED_PATTERNS = [
+  /\bbts\b/i, /\bjungkook\b/i, /\bblackpink\b/i, /\btwice\b/i,
+  /\bstray\s*kids\b/i, /\bnewjeans\b/i, /\baespa\b/i, /\benhypen\b/i,
+  /\btxt\b/i, /\bsevente+n\b/i, /\bnct\b/i, /\bzerobaseone\b/i,
+  /\bhybe\s*labels\b/i, /\bitzy\b/i, /\bive\b/i, /\ble\s*sserafim\b/i,
+  /\b(k-?pop|kpop|j-?pop|jpop|c-?pop|cpop|anime|bollywood)\b/i,
+  /\btaylor\s*swift\b/i, /\bed\s*sheeran\b/i, /\bcoldplay\b/i,
+  /\bimagine\s*dragons\b/i, /\bone\s*direction\b/i,
+  /\b(country|folk|bluegrass|gospel|christian|classical|metal|punk|emo)\b/i,
+];
+
+function isBlockedArtist(text: string): boolean {
+  return BLOCKED_PATTERNS.some((pattern) => pattern.test(text));
 }
