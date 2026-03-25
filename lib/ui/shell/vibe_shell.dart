@@ -25,6 +25,7 @@ import '../features/library/library_screen.dart';
 import '../features/duplicates/duplicates_screen.dart';
 import '../features/exports/exports_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/trending/trending_screen.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
   const VibeShell({super.key, required this.statusMessage});
@@ -172,8 +173,6 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     required List<String> vibes,
     required List<String> regions,
   }) {
-    final trackRepository = ref.read(trackRepositoryProvider);
-
     switch (workspace.section) {
       case AppSection.home:
         return HomeScreen(
@@ -181,43 +180,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
           userProfile: userProfile,
         );
       case AppSection.trending:
-        return _WorkbenchView(
-          key: ValueKey(workspace.section),
-          title: 'Trending tracks',
-          subtitle: 'Sort, multi-select, and filter the freshest records without leaving the table.',
-          showDashboard: false,
-          allTracks: allTracks,
-          visibleTracks: visibleTracks,
-          filters: workspace.filters,
-          userProfile: userProfile,
-          genres: genres,
-          vibes: vibes,
-          regions: regions,
-          searchController: _searchController,
-          searchFocusNode: _searchFocusNode,
-          filterFocusNode: _filterFocusNode,
-          selectedTrackIds: workspace.selectedTrackIds,
-          primaryTrackId: workspace.primaryTrackId,
-          activeSortColumn: workspace.sortColumn,
-          sortAscending: workspace.sortAscending,
-          isLoading: tracksAsync.isLoading,
-          onSearchChanged: (value) => ref
-              .read(workspaceControllerProvider.notifier)
-              .setSearchQuery(value),
-          onFiltersChanged: (filters) => ref
-              .read(workspaceControllerProvider.notifier)
-              .updateFilters(filters),
-          onRefresh: trackRepository.refresh,
-          onSort: (column, ascending) => ref
-              .read(workspaceControllerProvider.notifier)
-              .sortBy(column, ascending),
-          onToggleSelection: (trackId) => ref
-              .read(workspaceControllerProvider.notifier)
-              .toggleSelection(trackId),
-          onActivateTrack: (trackId) => ref
-              .read(workspaceControllerProvider.notifier)
-              .activateTrack(trackId),
-        );
+        return const TrendingScreen();
       case AppSection.regions:
         return _RegionsView(
           tracks: allTracks,

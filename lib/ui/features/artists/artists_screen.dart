@@ -48,6 +48,8 @@ class ArtistsScreen extends ConsumerStatefulWidget {
 
 class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
   String _search = '';
+  String _filterGenre = 'All';
+  String _filterRegion = 'All';
   _ArtistInfo? _openedArtist;
 
   @override
@@ -87,13 +89,28 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
       );
     }).toList();
 
-    artists.sort((a, b) => b.avgTrendScore.compareTo(a.avgTrendScore));
+    // Default: alphabetical order
+    artists.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
+    // Get unique genres/regions for filter dropdowns
+    final genreSet = {for (final a in artists) a.topGenre}.toList()..sort();
+    final regionSet = {for (final a in artists) a.topRegion}.toList()..sort();
+    final allGenres = ['All', ...genreSet];
+    final allRegions = ['All', ...regionSet];
+
+    // Apply filters
+    if (_filterGenre != 'All') {
+      artists = artists.where((a) => a.topGenre == _filterGenre).toList();
+    }
+    if (_filterRegion != 'All') {
+      artists = artists.where((a) => a.topRegion == _filterRegion).toList();
+    }
     if (_search.isNotEmpty) {
       final q = _search.toLowerCase();
       artists = artists.where((a) =>
         a.name.toLowerCase().contains(q) ||
-        a.topGenre.toLowerCase().contains(q)
+        a.topGenre.toLowerCase().contains(q) ||
+        a.topRegion.toLowerCase().contains(q)
       ).toList();
     }
 
@@ -109,7 +126,13 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
       artists: artists,
       allTracks: allTracks,
       search: _search,
+      filterGenre: _filterGenre,
+      filterRegion: _filterRegion,
+      allGenres: allGenres,
+      allRegions: allRegions,
       onSearchChanged: (v) => setState(() => _search = v),
+      onGenreChanged: (v) => setState(() => _filterGenre = v),
+      onRegionChanged: (v) => setState(() => _filterRegion = v),
       onArtistTapped: (artist) => setState(() => _openedArtist = artist),
     );
   }
@@ -123,14 +146,26 @@ class _ArtistGridScreen extends StatelessWidget {
   final List<_ArtistInfo> artists;
   final List<Track> allTracks;
   final String search;
+  final String filterGenre;
+  final String filterRegion;
+  final List<String> allGenres;
+  final List<String> allRegions;
   final ValueChanged<String> onSearchChanged;
+  final ValueChanged<String> onGenreChanged;
+  final ValueChanged<String> onRegionChanged;
   final ValueChanged<_ArtistInfo> onArtistTapped;
 
   const _ArtistGridScreen({
     required this.artists,
     required this.allTracks,
     required this.search,
+    required this.filterGenre,
+    required this.filterRegion,
+    required this.allGenres,
+    required this.allRegions,
     required this.onSearchChanged,
+    required this.onGenreChanged,
+    required this.onRegionChanged,
     required this.onArtistTapped,
   });
 
@@ -162,8 +197,12 @@ class _ArtistGridScreen extends StatelessWidget {
                 ],
               ),
               const Spacer(),
+              _FilterDropdown(label: 'Genre', value: filterGenre, options: allGenres, onChanged: onGenreChanged),
+              const SizedBox(width: 8),
+              _FilterDropdown(label: 'Region', value: filterRegion, options: allRegions, onChanged: onRegionChanged),
+              const SizedBox(width: 12),
               SizedBox(
-                width: 240,
+                width: 200,
                 child: TextField(
                   onChanged: onSearchChanged,
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
@@ -1053,6 +1092,42 @@ class _AddToCrateButton extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared widgets
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _FilterDropdown extends StatelessWidget {
+  final String label;
+  final String value;
+  final List<String> options;
+  final ValueChanged<String> onChanged;
+  const _FilterDropdown({required this.label, required this.value, required this.options, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.panelRaised,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('$label: ', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: options.contains(value) ? value : options.first,
+              isDense: true,
+              dropdownColor: AppTheme.panelRaised,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+              items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
+              onChanged: (v) { if (v != null) onChanged(v); },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _InfoChip extends StatelessWidget {
   final String text;
