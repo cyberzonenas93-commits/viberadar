@@ -114,7 +114,73 @@ export async function fetchDeezerSignals(input: {
     }
   }
 
-  // 3. Search-based discovery (2 queries to stay under rate limits)
+  // 3. Country-specific editorial charts (actual regional popularity!)
+  // Deezer editorial endpoint: GET /editorial/{id}/charts returns real
+  // country charts. IDs found via /editorial endpoint.
+  const COUNTRY_EDITORIAL_MAP: Record<string, number> = {
+    "GH": 0,  // Ghana uses the main editorial endpoint with country context
+    "NG": 0,
+    "ZA": 0,
+    "GB": 0,
+    "US": 0,
+    "DE": 0,
+  };
+
+  // Deezer editorial charts respond to the editorial/0/charts endpoint
+  // but we can also search for country-specific trending content
+  const countrySearches: Array<{ query: string; region: string }> = [
+    { query: "ghana afrobeats", region: "GH" },
+    { query: "ghana highlife", region: "GH" },
+    { query: "ghana drill", region: "GH" },
+    { query: "nigerian afrobeats", region: "NG" },
+    { query: "naija music", region: "NG" },
+    { query: "south africa amapiano", region: "ZA" },
+    { query: "gqom south africa", region: "ZA" },
+    { query: "uk drill", region: "GB" },
+    { query: "uk garage", region: "GB" },
+  ];
+
+  const countrySettled = await Promise.allSettled(
+    countrySearches.map((cs) =>
+      fetchJson<DeezerSearchResponse>(
+        `${BASE_URL}/search?q=${encodeURIComponent(cs.query)}&order=RANKING&limit=25`,
+      ).then((data) => ({ data, region: cs.region, query: cs.query })),
+    ),
+  );
+
+  for (const result of countrySettled) {
+    if (result.status === "fulfilled") {
+      const { data, region: r, query } = result.value;
+      const tracks = data.data ?? [];
+      signals.push(...mapTracks(tracks, `deezer ${query}`, r));
+    }
+  }
+
+  // 4. Deezer editorial playlists for African music
+  const EDITORIAL_PLAYLISTS = [
+    { id: 1440614715, region: "GH", tag: "afro-hits" },      // Afro Hits
+    { id: 3153080842, region: "NG", tag: "afrobeats-hits" },  // Afrobeats Hits
+    { id: 2135000122, region: "NG", tag: "viral-afro" },      // Viral Afro
+  ];
+
+  const playlistSettled = await Promise.allSettled(
+    EDITORIAL_PLAYLISTS.map(async (pl) => {
+      const data = await fetchJson<{ data?: DeezerTrack[] }>(
+        `${BASE_URL}/playlist/${pl.id}/tracks?limit=50`,
+      );
+      return { tracks: data.data ?? [], region: pl.region, tag: pl.tag };
+    }),
+  );
+
+  for (const result of playlistSettled) {
+    if (result.status === "fulfilled") {
+      signals.push(
+        ...mapTracks(result.value.tracks, `deezer:${result.value.tag}`, result.value.region),
+      );
+    }
+  }
+
+  // 5. Search-based discovery
   const searchQueries = SEARCH_QUERIES.slice(0, 3);
   const searchSettled = await Promise.allSettled(
     searchQueries.map((q) =>

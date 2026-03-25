@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/app_section.dart';
+import '../widgets/track_action_menu.dart';
 import '../../models/crate.dart';
 import '../../models/session_state.dart';
 import '../../models/track.dart';
@@ -1396,11 +1397,13 @@ class _ShellTrackCard extends StatefulWidget {
   final int rank;
   final int score;
   final VoidCallback? onTap;
+  final WidgetRef? ref;
   const _ShellTrackCard({
     required this.track,
     required this.rank,
     required this.score,
     this.onTap,
+    this.ref,
   });
 
   @override
@@ -1427,7 +1430,15 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: widget.onTap ?? () => _openShellTrack(t),
+        onTapDown: (details) {
+          if (widget.onTap != null) {
+            widget.onTap!();
+          } else if (widget.ref != null) {
+            showTrackActionMenu(context, widget.ref!, t, position: details.globalPosition);
+          } else {
+            _openShellTrack(t);
+          }
+        },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(

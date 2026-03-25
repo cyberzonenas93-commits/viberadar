@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../widgets/track_action_menu.dart';
 
 class TrendingScreen extends ConsumerStatefulWidget {
   const TrendingScreen({super.key});
@@ -102,7 +103,7 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
                     mainAxisSpacing: 12,
                   ),
                   itemCount: filtered.length,
-                  itemBuilder: (context, i) => _TrackCard(track: filtered[i], rank: i + 1),
+                  itemBuilder: (context, i) => _TrackCard(track: filtered[i], rank: i + 1, ref: ref),
                 ),
         ),
       ],
@@ -113,7 +114,8 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
 class _TrackCard extends StatefulWidget {
   final Track track;
   final int rank;
-  const _TrackCard({required this.track, required this.rank});
+  final WidgetRef ref;
+  const _TrackCard({required this.track, required this.rank, required this.ref});
 
   @override
   State<_TrackCard> createState() => _TrackCardState();
@@ -134,7 +136,7 @@ class _TrackCardState extends State<_TrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(

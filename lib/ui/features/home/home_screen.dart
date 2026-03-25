@@ -1,13 +1,15 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
 import '../../../models/user_profile.dart';
+import '../../widgets/track_action_menu.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({
     super.key,
     required this.allTracks,
@@ -18,7 +20,7 @@ class HomeScreen extends StatelessWidget {
   final UserProfile userProfile;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final sorted = [...allTracks]..sort((a, b) => b.trendScore.compareTo(a.trendScore));
     final top = sorted.take(50).toList();
@@ -115,7 +117,7 @@ class HomeScreen extends StatelessWidget {
                   // Hero card
                   Expanded(
                     flex: 5,
-                    child: _HeroTrackCard(track: top[0]),
+                    child: _HeroTrackCard(track: top[0], ref: ref),
                   ),
                   const SizedBox(width: 14),
                   // 3 stat cards stacked
@@ -194,7 +196,7 @@ class HomeScreen extends StatelessWidget {
               (context, i) {
                 final trackIndex = i + 1; // skip hero
                 if (trackIndex >= top.length) return null;
-                return _TrackGridCard(track: top[trackIndex], rank: trackIndex + 1);
+                return _TrackGridCard(track: top[trackIndex], rank: trackIndex + 1, ref: ref);
               },
               childCount: (top.length - 1).clamp(0, 24),
             ),
@@ -233,7 +235,7 @@ class HomeScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
                 itemCount: risingTop.length,
                 separatorBuilder: (_, i) => const SizedBox(width: 12),
-                itemBuilder: (context, i) => _RisingCard(track: risingTop[i]),
+                itemBuilder: (context, i) => _RisingCard(track: risingTop[i], ref: ref),
               ),
             ),
           ),
@@ -265,7 +267,7 @@ class HomeScreen extends StatelessWidget {
                 mainAxisSpacing: 12,
               ),
               delegate: SliverChildBuilderDelegate(
-                (context, i) => _TrackGridCard(track: regionalTop[i], rank: i + 1),
+                (context, i) => _TrackGridCard(track: regionalTop[i], rank: i + 1, ref: ref),
                 childCount: regionalTop.length,
               ),
             ),
@@ -295,7 +297,8 @@ class HomeScreen extends StatelessWidget {
 
 class _HeroTrackCard extends StatefulWidget {
   final Track track;
-  const _HeroTrackCard({required this.track});
+  final WidgetRef ref;
+  const _HeroTrackCard({required this.track, required this.ref});
 
   @override
   State<_HeroTrackCard> createState() => _HeroTrackCardState();
@@ -314,7 +317,7 @@ class _HeroTrackCardState extends State<_HeroTrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: 240,
@@ -539,7 +542,8 @@ class _StatCard extends StatelessWidget {
 class _TrackGridCard extends StatefulWidget {
   final Track track;
   final int rank;
-  const _TrackGridCard({required this.track, required this.rank});
+  final WidgetRef ref;
+  const _TrackGridCard({required this.track, required this.rank, required this.ref});
 
   @override
   State<_TrackGridCard> createState() => _TrackGridCardState();
@@ -558,7 +562,7 @@ class _TrackGridCardState extends State<_TrackGridCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
@@ -668,7 +672,8 @@ class _TrackGridCardState extends State<_TrackGridCard> {
 
 class _RisingCard extends StatefulWidget {
   final Track track;
-  const _RisingCard({required this.track});
+  final WidgetRef ref;
+  const _RisingCard({required this.track, required this.ref});
 
   @override
   State<_RisingCard> createState() => _RisingCardState();
@@ -685,7 +690,7 @@ class _RisingCardState extends State<_RisingCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: 260,

@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../widgets/track_action_menu.dart';
 
 class GreatestOfScreen extends ConsumerStatefulWidget {
   const GreatestOfScreen({super.key});
@@ -103,7 +104,7 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                       SliverToBoxAdapter(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
-                          child: _PodiumSection(tracks: topTracks.take(3).toList()),
+                          child: _PodiumSection(tracks: topTracks.take(3).toList(), ref: ref),
                         ),
                       ),
                     // Grid of remaining tracks
@@ -124,6 +125,7 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                             return _TrackCard(
                               track: topTracks[trackIndex],
                               rank: rank,
+                              ref: ref,
                             );
                           },
                           childCount: topTracks.length >= 3
@@ -146,7 +148,8 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
 
 class _PodiumSection extends StatelessWidget {
   final List<Track> tracks;
-  const _PodiumSection({required this.tracks});
+  final WidgetRef ref;
+  const _PodiumSection({required this.tracks, required this.ref});
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +159,7 @@ class _PodiumSection extends StatelessWidget {
         // #1 — Hero card (large)
         Expanded(
           flex: 5,
-          child: _HeroCard(track: tracks[0], rank: 1),
+          child: _HeroCard(track: tracks[0], rank: 1, ref: ref),
         ),
         const SizedBox(width: 12),
         // #2 and #3 stacked
@@ -164,9 +167,9 @@ class _PodiumSection extends StatelessWidget {
           flex: 3,
           child: Column(
             children: [
-              _RunnerUpCard(track: tracks[1], rank: 2),
+              _RunnerUpCard(track: tracks[1], rank: 2, ref: ref),
               const SizedBox(height: 12),
-              _RunnerUpCard(track: tracks[2], rank: 3),
+              _RunnerUpCard(track: tracks[2], rank: 3, ref: ref),
             ],
           ),
         ),
@@ -178,7 +181,8 @@ class _PodiumSection extends StatelessWidget {
 class _HeroCard extends StatefulWidget {
   final Track track;
   final int rank;
-  const _HeroCard({required this.track, required this.rank});
+  final WidgetRef ref;
+  const _HeroCard({required this.track, required this.rank, required this.ref});
 
   @override
   State<_HeroCard> createState() => _HeroCardState();
@@ -196,7 +200,7 @@ class _HeroCardState extends State<_HeroCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: 260,
@@ -354,7 +358,7 @@ class _HeroCardState extends State<_HeroCard> {
                   left: 24 + 180 - 20,
                   bottom: 24,
                   child: GestureDetector(
-                    onTap: () => _openTrack(t),
+                    onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
                     child: Container(
                       width: 40,
                       height: 40,
@@ -383,7 +387,8 @@ class _HeroCardState extends State<_HeroCard> {
 class _RunnerUpCard extends StatefulWidget {
   final Track track;
   final int rank;
-  const _RunnerUpCard({required this.track, required this.rank});
+  final WidgetRef ref;
+  const _RunnerUpCard({required this.track, required this.rank, required this.ref});
 
   @override
   State<_RunnerUpCard> createState() => _RunnerUpCardState();
@@ -404,7 +409,7 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: 124,
@@ -499,7 +504,8 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
 class _TrackCard extends StatefulWidget {
   final Track track;
   final int rank;
-  const _TrackCard({required this.track, required this.rank});
+  final WidgetRef ref;
+  const _TrackCard({required this.track, required this.rank, required this.ref});
 
   @override
   State<_TrackCard> createState() => _TrackCardState();
@@ -518,7 +524,7 @@ class _TrackCardState extends State<_TrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _openTrack(t),
+        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
