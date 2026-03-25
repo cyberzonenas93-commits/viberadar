@@ -18,6 +18,7 @@ import '../widgets/filter_bar.dart';
 import '../widgets/sidebar_nav.dart';
 import '../features/greatest_of/greatest_of_screen.dart';
 import '../widgets/track_detail_panel.dart';
+import '../features/ai_copilot/ai_copilot_screen.dart';
 import '../features/artists/artists_screen.dart';
 import '../widgets/track_table.dart';
 
@@ -260,12 +261,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       case AppSection.greatestOf:
         return const GreatestOfScreen();
       case AppSection.aiCopilot:
-        return const _PlaceholderView(
-          icon: Icons.auto_awesome_rounded,
-          title: 'AI Copilot',
-          description: 'Ask anything — set recommendations, harmonic mixing, regional intel.',
-          featureFlag: 'Phase 5',
-        );
+        return const AiCopilotScreen();
       case AppSection.library:
         return const _PlaceholderView(
           icon: Icons.folder_rounded,
