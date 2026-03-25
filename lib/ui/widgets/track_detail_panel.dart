@@ -161,6 +161,23 @@ class TrackDetailPanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
+                if (_bestPlatformUrl(track.platformLinks) != null)
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => _openLink(
+                        _bestPlatformUrl(track.platformLinks)!,
+                      ),
+                      icon: const Icon(Icons.play_circle_filled_rounded),
+                      label: Text(
+                        'Listen on ${_bestPlatformLabel(track.platformLinks)}',
+                      ),
+                      style: FilledButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 12),
                 if (track.isRisingFast)
                   Container(
                     padding: const EdgeInsets.symmetric(
@@ -406,6 +423,31 @@ class TrackDetailPanel extends StatelessWidget {
     if (uri != null) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
+  }
+
+  static String? _bestPlatformUrl(Map<String, String> links) {
+    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
+    for (final key in priority) {
+      final url = links[key];
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return links.values.firstOrNull;
+  }
+
+  static String _bestPlatformLabel(Map<String, String> links) {
+    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
+    const labels = {
+      'spotify': 'Spotify',
+      'apple': 'Apple Music',
+      'youtube': 'YouTube',
+      'soundcloud': 'SoundCloud',
+      'audius': 'Audius',
+      'beatport': 'Beatport',
+    };
+    for (final key in priority) {
+      if (links.containsKey(key)) return labels[key] ?? key;
+    }
+    return 'Browser';
   }
 }
 

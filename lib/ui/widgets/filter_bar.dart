@@ -33,9 +33,7 @@ class FilterBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Focus(
-      focusNode: filterFocusNode,
-      child: Container(
+    return Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: AppTheme.panel,
@@ -126,8 +124,8 @@ class FilterBar extends StatelessWidget {
                   child: _SliderField(
                     label: 'BPM range',
                     value: filters.bpmRange,
-                    min: 80,
-                    max: 160,
+                    min: 60,
+                    max: 200,
                     formatValue: (value) => value.round().toString(),
                     onChanged: (value) =>
                         onFiltersChanged(filters.copyWith(bpmRange: value)),
@@ -149,10 +147,11 @@ class FilterBar extends StatelessWidget {
             ),
           ],
         ),
-      ),
     );
   }
 }
+
+
 
 class _SelectField extends StatelessWidget {
   const _SelectField({
@@ -170,7 +169,7 @@ class _SelectField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DropdownButtonFormField<String>(
-      initialValue: values.contains(value) ? value : values.firstOrNull,
+      value: values.contains(value) ? value : values.firstOrNull,
       decoration: InputDecoration(labelText: label),
       items: values
           .map((item) => DropdownMenuItem(value: item, child: Text(item)))

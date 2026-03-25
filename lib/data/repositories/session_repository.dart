@@ -18,8 +18,6 @@ abstract class SessionRepository {
     required String displayName,
   });
 
-  Future<void> signInWithGoogle();
-
   Future<void> signOut();
 }
 
@@ -42,9 +40,6 @@ class DemoSessionRepository implements SessionRepository {
   }) async {}
 
   @override
-  Future<void> signInWithGoogle() async {}
-
-  @override
   Future<void> signOut() async {}
 }
 
@@ -53,20 +48,22 @@ class FirebaseSessionRepository implements SessionRepository {
     required FirebaseAuth auth,
     required GoogleSignIn googleSignIn,
     required FirebaseRuntimeConfig config,
-  }) : _auth = auth,
-       _googleSignIn = googleSignIn,
-       _config = config;
+  }) : _auth = auth;
 
   final FirebaseAuth _auth;
-  final GoogleSignIn _googleSignIn;
-  final FirebaseRuntimeConfig _config;
-  bool _googleInitialized = false;
 
   @override
   Stream<SessionState> sessionChanges() {
     return _auth.authStateChanges().map((user) {
       if (user == null) {
-        return const SessionState.demo();
+        return const SessionState(
+          userId: '',
+          displayName: '',
+          email: '',
+          providerLabel: '',
+          isAuthenticated: false,
+          isDemo: false,
+        );
       }
 
       return SessionState(
@@ -92,7 +89,13 @@ class FirebaseSessionRepository implements SessionRepository {
       email: email,
       password: password,
     );
-    await credential.user?.updateDisplayName(displayName);
+    // updateDisplayName is best-effort — a failure here must not block sign-up
+    // since the account is already created and the user is already signed in.
+    try {
+      await credential.user?.updateDisplayName(displayName);
+    } catch (_) {
+      // Silently ignored; the display name can be updated later.
+    }
   }
 
   @override
@@ -104,35 +107,7 @@ class FirebaseSessionRepository implements SessionRepository {
   }
 
   @override
-  Future<void> signInWithGoogle() async {
-    await _ensureGoogleInitialized();
-    final account = await _googleSignIn.authenticate();
-    final idToken = account.authentication.idToken;
-    if (idToken == null || idToken.isEmpty) {
-      throw StateError('Google sign-in succeeded without an ID token.');
-    }
-
-    final credential = GoogleAuthProvider.credential(idToken: idToken);
-    await _auth.signInWithCredential(credential);
-  }
-
-  @override
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
     await _auth.signOut();
-  }
-
-  Future<void> _ensureGoogleInitialized() async {
-    if (_googleInitialized) {
-      return;
-    }
-
-    await _googleSignIn.initialize(
-      clientId: _config.googleClientId.isEmpty ? null : _config.googleClientId,
-      serverClientId: _config.googleServerClientId.isEmpty
-          ? null
-          : _config.googleServerClientId,
-    );
-    _googleInitialized = true;
   }
 }

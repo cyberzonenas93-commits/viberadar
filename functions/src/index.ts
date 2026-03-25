@@ -48,6 +48,8 @@ export const ingestTrackSignals = onSchedule(
     timeZone: "Etc/UTC",
     region: "us-central1",
     secrets: functionSecrets,
+    timeoutSeconds: 300,
+    memory: "512MiB",
   },
   async () => {
     const summary = await runIngestion();
@@ -59,6 +61,8 @@ export const manualIngestTrackSignals = onRequest(
   {
     region: "us-central1",
     secrets: functionSecrets,
+    timeoutSeconds: 300,
+    memory: "512MiB",
   },
   async (request, response) => {
     const authHeader = request.headers.authorization ?? "";
@@ -111,7 +115,13 @@ async function runIngestion(): Promise<IngestionSummary> {
     }
   }
 
-  for (const region of regions) {
+  for (let ri = 0; ri < regions.length; ri++) {
+    const region = regions[ri];
+    // Small delay between regions to avoid Spotify rate limits
+    if (ri > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+    const sourceNames = ["spotify", "youtube", "apple", "soundcloud", "beatport"];
     const settled = await Promise.allSettled([
       withRetry(() =>
         fetchSpotifySignals({
@@ -150,13 +160,19 @@ async function runIngestion(): Promise<IngestionSummary> {
       ),
     ]);
 
-    for (const result of settled) {
+    const regionCounts: Record<string, number> = {};
+    for (let i = 0; i < settled.length; i++) {
+      const result = settled[i];
+      const name = sourceNames[i] ?? `source-${i}`;
       if (result.status === "fulfilled") {
+        regionCounts[name] = result.value.length;
         collectedSignals.push(...result.value);
       } else {
-        logger.warn(`Source fetch failed for ${region}`, result.reason);
+        regionCounts[name] = -1;
+        logger.warn(`Source fetch failed for ${region}/${name}`, result.reason);
       }
     }
+    logger.info(`Region ${region} signals`, regionCounts);
   }
 
   const existingSnapshots = await loadExistingTrackState();
@@ -215,11 +231,15 @@ async function loadExistingTrackState(): Promise<
 }
 
 async function writeTracks(tracks: UnifiedTrackRecord[]): Promise<void> {
-  const batch = firestore.batch();
-  for (const track of tracks) {
-    batch.set(firestore.collection("tracks").doc(track.id), track, {
-      merge: true,
-    });
+  // Firestore batch limit is 500 operations
+  for (let i = 0; i < tracks.length; i += 499) {
+    const chunk = tracks.slice(i, i + 499);
+    const batch = firestore.batch();
+    for (const track of chunk) {
+      batch.set(firestore.collection("tracks").doc(track.id), track, {
+        merge: true,
+      });
+    }
+    await batch.commit();
   }
-  await batch.commit();
 }

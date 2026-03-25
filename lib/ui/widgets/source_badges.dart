@@ -16,35 +16,44 @@ class SourceBadges extends StatelessWidget {
       runSpacing: 6,
       children: ordered
           .map(
-            (source) => Container(
-              padding: EdgeInsets.symmetric(
-                horizontal: compact ? 6 : 8,
-                vertical: compact ? 4 : 5,
-              ),
-              decoration: BoxDecoration(
-                color: _colorForSource(source).withValues(alpha: 0.18),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: _colorForSource(source).withValues(alpha: 0.32),
+            (source) => Tooltip(
+              message: _labelForSource(source),
+              child: Container(
+                padding: EdgeInsets.symmetric(
+                  horizontal: compact ? 5 : 8,
+                  vertical: compact ? 4 : 5,
                 ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _iconForSource(source),
-                    size: compact ? 12 : 14,
-                    color: _colorForSource(source),
+                decoration: BoxDecoration(
+                  color: _colorForSource(source).withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: _colorForSource(source).withValues(alpha: 0.32),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _labelForSource(source),
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+                ),
+                child: compact
+                    ? Icon(
+                        _iconForSource(source),
+                        size: 12,
+                        color: _colorForSource(source),
+                      )
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _iconForSource(source),
+                            size: 14,
+                            color: _colorForSource(source),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _labelForSource(source),
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: Colors.white70,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ),
           )

@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -20,6 +22,12 @@ class AppBootstrap {
             ? config.toOptions()
             : DefaultFirebaseOptions.currentPlatform,
       );
+
+      if (Platform.isMacOS) {
+        await FirebaseAuth.instance.setSettings(
+          userAccessGroup: 'com.viberadar.viberadar',
+        );
+      }
 
       final trackRepository = FirestoreTrackRepository(
         FirebaseFirestore.instance,

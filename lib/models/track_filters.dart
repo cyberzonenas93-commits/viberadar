@@ -4,7 +4,7 @@ import 'track.dart';
 
 class TrackFilters {
   const TrackFilters({
-    this.bpmRange = const RangeValues(80, 160),
+    this.bpmRange = const RangeValues(60, 200),
     this.energyRange = const RangeValues(0.0, 1.0),
     this.genre = 'All',
     this.vibe = 'All',

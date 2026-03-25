@@ -38,7 +38,7 @@ export function mergeSignalsIntoTracks(
       artworkUrl: signal.artworkUrl ?? "",
       bpm: signal.bpm ?? null,
       key: signal.key ?? "--",
-      genre: signal.genre ?? inferGenreFromKeywords(signal.keywords),
+      genre: normalizeGenre(signal.genre ?? inferGenreFromKeywords(signal.keywords)),
       keywords: [...signal.keywords],
       platformLinks: {},
       signals: [],
@@ -49,7 +49,7 @@ export function mergeSignalsIntoTracks(
     current.bpm = current.bpm ?? signal.bpm ?? null;
     current.key = current.key === "--" ? (signal.key ?? "--") : current.key;
     current.genre =
-      current.genre || signal.genre || inferGenreFromKeywords(signal.keywords);
+      current.genre || normalizeGenre(signal.genre || inferGenreFromKeywords(signal.keywords));
     current.keywords = Array.from(
       new Set([...current.keywords, ...signal.keywords]),
     );
@@ -115,7 +115,11 @@ export function mergeSignalsIntoTracks(
       title: entry.title,
       artist: entry.artist,
       artwork_url: entry.artworkUrl,
-      bpm: entry.bpm,
+      bpm: entry.bpm ?? estimateBpmFromGenre(
+        (entry.genre && entry.genre !== "Open Format"
+          ? entry.genre
+          : previous?.genre) || "Open Format",
+      ),
       key: entry.key,
       genre:
         (entry.genre && entry.genre !== "Open Format"
@@ -169,9 +173,73 @@ function canonicalize(value: string): string {
     .trim();
 }
 
+function normalizeGenre(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  const map: Record<string, string> = {
+    "afrobeats": "Afrobeats",
+    "afrobeat": "Afrobeats",
+    "afro-beat": "Afrobeats",
+    "afro-pop": "Afrobeats",
+    "afro-fusion": "Afrobeats",
+    "afro-swing": "Afrobeats",
+    "african": "Afrobeats",
+    "amapiano": "Amapiano",
+    "house": "House",
+    "deep house": "House",
+    "tech house": "House",
+    "afro house": "House",
+    "progressive house": "House",
+    "future house": "House",
+    "electro house": "House",
+    "uk garage": "UK Garage",
+    "garage": "UK Garage",
+    "hip-hop": "Hip-Hop",
+    "hip-hop/rap": "Hip-Hop",
+    "rap": "Hip-Hop",
+    "trap": "Hip-Hop",
+    "r&b": "R&B",
+    "r&b/soul": "R&B",
+    "rnb": "R&B",
+    "soul": "R&B",
+    "drill": "Drill",
+    "uk drill": "Drill",
+    "grime": "Drill",
+    "latin": "Latin",
+    "reggaeton": "Latin",
+    "dancehall": "Dancehall",
+    "ragga": "Dancehall",
+    "dance": "Dance",
+    "edm": "Dance",
+    "electronic": "Dance",
+    "electro": "Dance",
+    "pop": "Pop",
+    "dance pop": "Pop",
+    "k-pop": "Pop",
+    "indie rock": "Pop",
+    "rock": "Pop",
+    "alternative": "Pop",
+    "country": "Pop",
+    "soca": "Soca",
+    "calypso": "Soca",
+    "gqom": "Gqom",
+    "baile funk": "Baile Funk",
+    "funk carioca": "Baile Funk",
+    "brazilian bass": "Baile Funk",
+    "dubstep": "Dance",
+    "drum & bass": "Dance",
+    "drum and bass": "Dance",
+    "trance": "Dance",
+    "future bass": "Dance",
+    "techno": "Dance",
+    "maskandi": "Afrobeats",
+    "worldwide": "Open Format",
+  };
+  return map[lower] ?? raw;
+}
+
 function inferGenreFromKeywords(keywords: string[]): string {
   const text = ` ${keywords.join(" ").toLowerCase()} `;
-  if (/\b(afrobeats?|afro[-\s]?pop|afro[-\s]?swing)\b/.test(text)) {
+  if (/\b(afrobeats?|afro[-\s]?pop|afro[-\s]?swing|afro[-\s]?fusion)\b/.test(text)) {
     return "Afrobeats";
   }
   if (/\bamapiano\b/.test(text)) {
@@ -180,7 +248,13 @@ function inferGenreFromKeywords(keywords: string[]): string {
   if (/\b(deep\s?house|tech\s?house|house\s?music|afro[-\s]?house)\b/.test(text) || /\bhouse\b/.test(text)) {
     return "House";
   }
-  if (/\b(edm|dance[-\s]?hall|dancehall|dance\s?music|electronic)\b/.test(text)) {
+  if (/\b(uk\s?garage|garage)\b/.test(text)) {
+    return "UK Garage";
+  }
+  if (/\b(dancehall|ragga)\b/.test(text)) {
+    return "Dancehall";
+  }
+  if (/\b(edm|dance\s?(music|pop)|electronic|club\s?bangers?)\b/.test(text)) {
     return "Dance";
   }
   if (/\b(hip[-\s]?hop|rap|trap)\b/.test(text)) {
@@ -195,7 +269,40 @@ function inferGenreFromKeywords(keywords: string[]): string {
   if (/\b(drill|grime|uk\s?drill)\b/.test(text)) {
     return "Drill";
   }
+  if (/\b(soca|calypso)\b/.test(text)) {
+    return "Soca";
+  }
+  if (/\bgqom\b/.test(text)) {
+    return "Gqom";
+  }
+  if (/\b(baile\s?funk|funk\s?carioca|brazilian\s?bass)\b/.test(text)) {
+    return "Baile Funk";
+  }
   return "Open Format";
+}
+
+function estimateBpmFromGenre(genre: string): number {
+  // Typical BPM ranges for DJ genres, returns midpoint with slight randomization
+  const bpmMap: Record<string, [number, number]> = {
+    "Afrobeats": [95, 115],
+    "Amapiano": [110, 120],
+    "House": [120, 130],
+    "Dance": [120, 135],
+    "Dancehall": [90, 110],
+    "Hip-Hop": [80, 100],
+    "R&B": [70, 95],
+    "Latin": [90, 110],
+    "Drill": [138, 148],
+    "UK Garage": [130, 140],
+    "Soca": [130, 145],
+    "Gqom": [115, 125],
+    "Baile Funk": [130, 150],
+    "Pop": [100, 130],
+    "Open Format": [110, 130],
+  };
+  const range = bpmMap[genre] ?? [110, 130];
+  // Deterministic-ish spread within the range
+  return Math.round(range[0] + Math.random() * (range[1] - range[0]));
 }
 
 function average(values: number[]): number {

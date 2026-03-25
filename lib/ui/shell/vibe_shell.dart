@@ -99,20 +99,17 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        child: _buildMainPanel(
-                          context: context,
-                          workspace: workspace,
-                          allTracks: allTracks,
-                          visibleTracks: visibleTracks,
-                          tracksAsync: tracksAsync,
-                          session: session,
-                          userProfile: userProfile,
-                          genres: genres,
-                          vibes: vibes,
-                          regions: regions,
-                        ),
+                      child: _buildMainPanel(
+                        context: context,
+                        workspace: workspace,
+                        allTracks: allTracks,
+                        visibleTracks: visibleTracks,
+                        tracksAsync: tracksAsync,
+                        session: session,
+                        userProfile: userProfile,
+                        genres: genres,
+                        vibes: vibes,
+                        regions: regions,
                       ),
                     ),
                     const SizedBox(width: 20),
@@ -256,6 +253,48 @@ class _VibeShellState extends ConsumerState<VibeShell> {
             trackId: trackId,
           ),
         );
+      case AppSection.artists:
+        return const _PlaceholderView(
+          icon: Icons.person_rounded,
+          title: 'Artists',
+          description: 'Browse trending artists across all genres and regions.',
+          featureFlag: 'Phase 3',
+        );
+      case AppSection.greatestOf:
+        return const _PlaceholderView(
+          icon: Icons.star_rounded,
+          title: 'Greatest Of',
+          description: 'Discover the most impactful tracks of any artist, ever.',
+          featureFlag: 'Phase 4',
+        );
+      case AppSection.aiCopilot:
+        return const _PlaceholderView(
+          icon: Icons.auto_awesome_rounded,
+          title: 'AI Copilot',
+          description: 'Ask anything — set recommendations, harmonic mixing, regional intel.',
+          featureFlag: 'Phase 5',
+        );
+      case AppSection.library:
+        return const _PlaceholderView(
+          icon: Icons.folder_rounded,
+          title: 'My Library',
+          description: 'Scan your local music folder to index tracks and extract metadata.',
+          featureFlag: 'Phase 6',
+        );
+      case AppSection.duplicates:
+        return const _PlaceholderView(
+          icon: Icons.content_copy_rounded,
+          title: 'Duplicates',
+          description: 'Automatically detect and resolve duplicate tracks in your library.',
+          featureFlag: 'Phase 7',
+        );
+      case AppSection.exports:
+        return const _PlaceholderView(
+          icon: Icons.upload_rounded,
+          title: 'Exports',
+          description: 'Export crates to Rekordbox, Serato, Traktor, or M3U formats.',
+          featureFlag: 'Phase 8',
+        );
       case AppSection.settings:
         return _SettingsView(
           session: session,
@@ -336,55 +375,48 @@ class _WorkbenchView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      key: ValueKey(title),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        color: Colors.white.withValues(alpha: 0.02),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _TitleBlock(title: title, subtitle: subtitle),
-          const SizedBox(height: 18),
-          if (showDashboard) ...[
-            DashboardCards(
-              tracks: allTracks,
-              preferredRegion: userProfile.preferredRegion,
-            ),
-            const SizedBox(height: 18),
-          ],
-          FilterBar(
-            searchController: searchController,
-            searchFocusNode: searchFocusNode,
-            filterFocusNode: filterFocusNode,
-            filters: filters,
-            genres: genres,
-            vibes: vibes,
-            regions: regions,
-            onSearchChanged: onSearchChanged,
-            onFiltersChanged: onFiltersChanged,
-            onRefresh: onRefresh,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _TitleBlock(title: title, subtitle: subtitle),
+        const SizedBox(height: 18),
+        if (showDashboard) ...[
+          DashboardCards(
+            tracks: allTracks,
+            preferredRegion: userProfile.preferredRegion,
           ),
           const SizedBox(height: 18),
-          Expanded(
-            child: isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : TrackTable(
-                    tracks: visibleTracks,
-                    selectedTrackIds: selectedTrackIds,
-                    primaryTrackId: primaryTrackId,
-                    activeRegion: filters.region,
-                    watchlist: userProfile.watchlist,
-                    sortColumn: activeSortColumn,
-                    sortAscending: sortAscending,
-                    onSort: onSort,
-                    onToggleSelection: onToggleSelection,
-                    onActivateTrack: onActivateTrack,
-                  ),
-          ),
         ],
-      ),
+        FilterBar(
+          searchController: searchController,
+          searchFocusNode: searchFocusNode,
+          filterFocusNode: filterFocusNode,
+          filters: filters,
+          genres: genres,
+          vibes: vibes,
+          regions: regions,
+          onSearchChanged: onSearchChanged,
+          onFiltersChanged: onFiltersChanged,
+          onRefresh: onRefresh,
+        ),
+        const SizedBox(height: 18),
+        Expanded(
+          child: isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : TrackTable(
+                  tracks: visibleTracks,
+                  selectedTrackIds: selectedTrackIds,
+                  primaryTrackId: primaryTrackId,
+                  activeRegion: filters.region,
+                  watchlist: userProfile.watchlist,
+                  sortColumn: activeSortColumn,
+                  sortAscending: sortAscending,
+                  onSort: onSort,
+                  onToggleSelection: onToggleSelection,
+                  onActivateTrack: onActivateTrack,
+                ),
+        ),
+      ],
     );
   }
 }
@@ -916,20 +948,23 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
   int _duration = 60;
   String _genre = 'All';
   String _vibe = 'All';
-  RangeValues _bpmRange = const RangeValues(100, 132);
+  RangeValues _bpmRange = const RangeValues(60, 200);
   List<Track> _generated = const [];
+  int _lastTrackCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _generated = _service.buildSet(
-      tracks: widget.allTracks,
-      durationMinutes: _duration,
-      genre: _genre,
-      vibe: _vibe,
-      minBpm: _bpmRange.start,
-      maxBpm: _bpmRange.end,
-    );
+    _regenerate();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SetBuilderView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Auto-regenerate when more tracks load in
+    if (widget.allTracks.length != _lastTrackCount && _generated.isEmpty) {
+      _regenerate();
+    }
   }
 
   @override
@@ -969,7 +1004,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                           children: [
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: widget.genres.contains(_genre)
+                                value: widget.genres.contains(_genre)
                                     ? _genre
                                     : widget.genres.firstOrNull,
                                 decoration: const InputDecoration(
@@ -990,7 +1025,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: DropdownButtonFormField<String>(
-                                initialValue: widget.vibes.contains(_vibe)
+                                value: widget.vibes.contains(_vibe)
                                     ? _vibe
                                     : widget.vibes.firstOrNull,
                                 decoration: const InputDecoration(
@@ -1025,8 +1060,8 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                           'BPM lane: ${_bpmRange.start.round()} - ${_bpmRange.end.round()}',
                         ),
                         RangeSlider(
-                          min: 80,
-                          max: 160,
+                          min: 60,
+                          max: 200,
                           divisions: 20,
                           values: _bpmRange,
                           onChanged: (value) =>
@@ -1166,6 +1201,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
 
   void _regenerate() {
     setState(() {
+      _lastTrackCount = widget.allTracks.length;
       _generated = _service.buildSet(
         tracks: widget.allTracks,
         durationMinutes: _duration,
@@ -1482,15 +1518,6 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                         ),
                         FilledButton.tonalIcon(
                           onPressed: () => _runAuthAction(
-                            () => ref
-                                .read(sessionRepositoryProvider)
-                                .signInWithGoogle(),
-                          ),
-                          icon: const Icon(Icons.login_rounded),
-                          label: const Text('Google Login'),
-                        ),
-                        FilledButton.tonalIcon(
-                          onPressed: () => _runAuthAction(
                             () => ref.read(sessionRepositoryProvider).signOut(),
                           ),
                           icon: const Icon(Icons.logout_rounded),
@@ -1515,7 +1542,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                 context,
                 title: 'DJ defaults',
                 child: DropdownButtonFormField<String>(
-                  initialValue:
+                  value:
                       widget.regions.contains(
                         widget.userProfile.preferredRegion,
                       )
@@ -1634,3 +1661,64 @@ class _TitleBlock extends StatelessWidget {
   }
 }
 
+
+class _PlaceholderView extends StatelessWidget {
+  const _PlaceholderView({
+    required this.icon,
+    required this.title,
+    required this.description,
+    required this.featureFlag,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final String featureFlag;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            width: 88,
+            height: 88,
+            decoration: BoxDecoration(
+              color: AppTheme.violet.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(color: AppTheme.violet.withOpacity(0.3)),
+            ),
+            child: Icon(icon, size: 42, color: AppTheme.violet),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            title,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: 360,
+            child: Text(
+              description,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF9099B8), fontSize: 14, height: 1.5),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: AppTheme.edge,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              'Coming in $featureFlag',
+              style: const TextStyle(color: AppTheme.cyan, fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

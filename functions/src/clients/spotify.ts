@@ -1,16 +1,26 @@
 import type { SourceTrackSignal } from "../types";
 
 const SEARCH_QUERIES = [
-  "viral hits",
-  "afrobeats",
-  "dancefloor",
-  "amapiano",
-  "latin reggaeton",
-  "hip hop trending",
+  "afrobeats new",
+  "amapiano hits",
+  "house music new",
+  "tech house",
+  "deep house",
+  "afro house",
+  "dancehall new",
+  "reggaeton new",
+  "latin club",
+  "hip hop club",
+  "drill new",
   "r&b new",
-  "house music",
-  "drill",
-  "dancehall",
+  "dance pop new",
+  "edm new",
+  "uk garage",
+  "soca new",
+  "afro swing",
+  "gqom",
+  "baile funk",
+  "club bangers",
 ];
 
 export async function fetchSpotifySignals(input: {
@@ -42,7 +52,7 @@ export async function fetchSpotifySignals(input: {
   await Promise.all(
     SEARCH_QUERIES.map(async (query) => {
       const response = await fetch(
-        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&market=${region}&limit=12`,
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(query)}&type=track&market=${region}&limit=50`,
         {
           headers: {
             Authorization: `Bearer ${tokenPayload.access_token}`,
@@ -89,60 +99,9 @@ export async function fetchSpotifySignals(input: {
     })
   );
 
-  // Enrich with audio features (BPM, key) in batches of 100
-  const trackIds = aggregate.map((s) => s.sourceId);
-  const featureMap = new Map<string, { bpm: number; key: string }>();
-
-  for (let i = 0; i < trackIds.length; i += 100) {
-    const batch = trackIds.slice(i, i + 100);
-    const featResponse = await fetch(
-      `https://api.spotify.com/v1/audio-features?ids=${batch.join(",")}`,
-      {
-        headers: {
-          Authorization: `Bearer ${tokenPayload.access_token}`,
-        },
-      },
-    );
-
-    if (featResponse.ok) {
-      const featPayload = (await featResponse.json()) as {
-        audio_features?: Array<{
-          id: string;
-          tempo?: number;
-          key?: number;
-          mode?: number;
-        } | null>;
-      };
-
-      for (const feat of featPayload.audio_features ?? []) {
-        if (!feat) continue;
-        featureMap.set(feat.id, {
-          bpm: feat.tempo ? Math.round(feat.tempo) : 0,
-          key: pitchToKey(feat.key, feat.mode),
-        });
-      }
-    }
-  }
-
-  for (const signal of aggregate) {
-    const features = featureMap.get(signal.sourceId);
-    if (features) {
-      signal.bpm = features.bpm || signal.bpm;
-      signal.key = features.key || signal.key;
-    }
-  }
-
   return aggregate;
 }
 
-const PITCH_CLASSES = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
-
-function pitchToKey(pitch?: number, mode?: number): string {
-  if (pitch == null || pitch < 0 || pitch > 11) return "";
-  const note = PITCH_CLASSES[pitch];
-  const suffix = mode === 1 ? "" : "m";
-  return `${note}${suffix}`;
-}
 
 function recencyScore(date?: string): number {
   if (!date) {

@@ -76,13 +76,13 @@ class MockUserRepository implements UserRepository {
   Stream<UserProfile> watchUser({
     required String userId,
     required String fallbackName,
-  }) {
+  }) async* {
     final controller = _controllers.putIfAbsent(
       userId,
       () => StreamController<UserProfile>.broadcast(),
     );
-    controller.add(_getOrCreate(userId, fallbackName));
-    return controller.stream;
+    yield _getOrCreate(userId, fallbackName);
+    yield* controller.stream;
   }
 
   UserProfile _getOrCreate(String userId, String fallbackName) {

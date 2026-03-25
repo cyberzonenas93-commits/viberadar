@@ -24,35 +24,13 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static const _apiKey = String.fromEnvironment('FIREBASE_API_KEY');
-  static const _appId = String.fromEnvironment('FIREBASE_APP_ID');
-  static const _messagingSenderId =
-      String.fromEnvironment('FIREBASE_MESSAGING_SENDER_ID');
-  static const _projectId = String.fromEnvironment('FIREBASE_PROJECT_ID');
-  static const _storageBucket =
-      String.fromEnvironment('FIREBASE_STORAGE_BUCKET');
-  static const _iosBundleId = String.fromEnvironment('FIREBASE_IOS_BUNDLE_ID');
-
-  static FirebaseOptions get macos {
-    if (_apiKey.isEmpty ||
-        _appId.isEmpty ||
-        _messagingSenderId.isEmpty ||
-        _projectId.isEmpty) {
-      throw StateError(
-        'Firebase is not configured. Pass --dart-define values for '
-        'FIREBASE_API_KEY, FIREBASE_APP_ID, FIREBASE_MESSAGING_SENDER_ID, '
-        'and FIREBASE_PROJECT_ID. '
-        'See .env.example for the full list.',
-      );
-    }
-
-    return FirebaseOptions(
-      apiKey: _apiKey,
-      appId: _appId,
-      messagingSenderId: _messagingSenderId,
-      projectId: _projectId,
-      storageBucket: _storageBucket.isEmpty ? null : _storageBucket,
-      iosBundleId: _iosBundleId.isEmpty ? null : _iosBundleId,
-    );
-  }
+  static const macos = FirebaseOptions(
+    apiKey: 'AIzaSyCDZ2kVmhIQenh-YsI_sWXIYDPmWmMFmRE',
+    appId: '1:927344201419:ios:4633e386e641834453d54e',
+    messagingSenderId: '927344201419',
+    projectId: 'viberadar-462b8',
+    storageBucket: 'viberadar-462b8.firebasestorage.app',
+    iosBundleId: 'com.viberadar.viberadar',
+    iosClientId: '927344201419-7daqi4nk04m84f3de0677eti4lmo15ll.apps.googleusercontent.com',
+  );
 }

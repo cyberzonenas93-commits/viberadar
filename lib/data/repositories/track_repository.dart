@@ -12,9 +12,7 @@ abstract class TrackRepository {
 }
 
 class MockTrackRepository implements TrackRepository {
-  MockTrackRepository() : _tracks = buildMockTracks() {
-    _controller.add(_tracks);
-  }
+  MockTrackRepository() : _tracks = buildMockTracks();
 
   final StreamController<List<Track>> _controller =
       StreamController<List<Track>>.broadcast();
@@ -28,46 +26,60 @@ class MockTrackRepository implements TrackRepository {
   }
 
   @override
-  Stream<List<Track>> watchTracks() => _controller.stream;
+  Stream<List<Track>> watchTracks() async* {
+    yield _tracks;
+    yield* _controller.stream;
+  }
 }
 
 class FirestoreTrackRepository implements TrackRepository {
   FirestoreTrackRepository(this._firestore);
 
   final FirebaseFirestore _firestore;
-  static const _pageSize = 500;
+  static const _batchSize = 1000;
 
   @override
   Future<void> refresh() async {}
 
   @override
-  Stream<List<Track>> watchTracks() {
-    return _firestore
+  Stream<List<Track>> watchTracks() async* {
+    // Load first batch immediately via snapshot listener for real-time updates
+    final firstBatch = await _firestore
         .collection('tracks')
         .orderBy('trend_score', descending: true)
-        .limit(_pageSize)
-        .snapshots()
-        .map((snapshot) {
-          if (snapshot.docs.isEmpty) {
-            return buildMockTracks();
-          }
-
-          return snapshot.docs
-              .map((doc) => Track.fromMap(doc.data(), id: doc.id))
-              .toList();
-        });
-  }
-
-  Future<List<Track>> loadMore(Track lastTrack) async {
-    final snapshot = await _firestore
-        .collection('tracks')
-        .orderBy('trend_score', descending: true)
-        .startAfter([lastTrack.trendScore])
-        .limit(_pageSize)
+        .limit(_batchSize)
         .get();
 
-    return snapshot.docs
+    if (firstBatch.docs.isEmpty) {
+      yield buildMockTracks();
+      return;
+    }
+
+    final allTracks = firstBatch.docs
         .map((doc) => Track.fromMap(doc.data(), id: doc.id))
         .toList();
+    yield allTracks;
+
+    // Load remaining batches
+    var lastDoc = firstBatch.docs.last;
+    while (true) {
+      final nextBatch = await _firestore
+          .collection('tracks')
+          .orderBy('trend_score', descending: true)
+          .startAfterDocument(lastDoc)
+          .limit(_batchSize)
+          .get();
+
+      if (nextBatch.docs.isEmpty) break;
+
+      allTracks.addAll(
+        nextBatch.docs
+            .map((doc) => Track.fromMap(doc.data(), id: doc.id)),
+      );
+      yield List.of(allTracks);
+
+      if (nextBatch.docs.length < _batchSize) break;
+      lastDoc = nextBatch.docs.last;
+    }
   }
 }

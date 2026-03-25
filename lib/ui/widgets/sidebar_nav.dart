@@ -17,220 +17,163 @@ class SidebarNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final items = <({AppSection section, IconData icon, String label})>[
-      (section: AppSection.home, icon: Icons.home_rounded, label: 'Home'),
-      (
-        section: AppSection.trending,
-        icon: Icons.local_fire_department_rounded,
-        label: 'Trending',
-      ),
-      (
-        section: AppSection.regions,
-        icon: Icons.public_rounded,
-        label: 'Regions',
-      ),
-      (
-        section: AppSection.genres,
-        icon: Icons.library_music_rounded,
-        label: 'Genres',
-      ),
-      (
-        section: AppSection.setBuilder,
-        icon: Icons.auto_awesome_motion_rounded,
-        label: 'Set Builder',
-      ),
-      (
-        section: AppSection.savedCrates,
-        icon: Icons.folder_copy_rounded,
-        label: 'Saved Crates',
-      ),
-      (
-        section: AppSection.watchlist,
-        icon: Icons.visibility_rounded,
-        label: 'Watchlist',
-      ),
-      (
-        section: AppSection.settings,
-        icon: Icons.settings_rounded,
-        label: 'Settings',
-      ),
-    ];
-
     return Container(
-      decoration: BoxDecoration(
+      width: 220,
+      decoration: const BoxDecoration(
         color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: AppTheme.edge),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF151830), Color(0xFF0E1222)],
-        ),
+        border: Border(right: BorderSide(color: AppTheme.edge)),
       ),
-      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-      child: LayoutBuilder(
-        builder: (context, constraints) => SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: IntrinsicHeight(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Logo
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+            child: Row(
+              children: [
+                const Icon(Icons.radio_button_checked, color: AppTheme.violet, size: 22),
+                const SizedBox(width: 10),
+                Text(
+                  'VIBE RADAR',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppTheme.violet,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(color: AppTheme.edge, indent: 20, endIndent: 20),
+          Expanded(
+            child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(
-                        colors: [AppTheme.violet, AppTheme.pink, AppTheme.cyan],
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.25),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: const Icon(
-                            Icons.tune_rounded,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'VibeRadar',
-                                style: theme.textTheme.titleLarge?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              Text(
-                                'DJ intelligence workstation',
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: Colors.white70,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Text(
-                    'Navigation',
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: Colors.white54,
-                      letterSpacing: 0.4,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  for (final item in items) ...[
-                    _SidebarButton(
-                      selected: item.section == selectedSection,
-                      icon: item.icon,
-                      label: item.label,
-                      onTap: () => onSelected(item.section),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  const SizedBox(height: 16),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.white.withValues(alpha: 0.03),
-                      border: Border.all(color: AppTheme.edge),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.bolt_rounded,
-                              color: AppTheme.cyan,
-                              size: 18,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Workspace Status',
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          statusMessage,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: Colors.white70,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  _SectionHeader('DISCOVER'),
+                  _NavItem(section: AppSection.home, icon: Icons.home_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.trending, icon: Icons.local_fire_department_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.artists, icon: Icons.person_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.regions, icon: Icons.public_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.genres, icon: Icons.library_music_rounded, selected: selectedSection, onSelected: onSelected),
+
+                  _SectionHeader('BUILD'),
+                  _NavItem(section: AppSection.greatestOf, icon: Icons.star_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.setBuilder, icon: Icons.queue_music_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.aiCopilot, icon: Icons.auto_awesome_rounded, selected: selectedSection, onSelected: onSelected),
+
+                  _SectionHeader('LIBRARY'),
+                  _NavItem(section: AppSection.library, icon: Icons.folder_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.duplicates, icon: Icons.content_copy_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.savedCrates, icon: Icons.folder_copy_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.watchlist, icon: Icons.visibility_rounded, selected: selectedSection, onSelected: onSelected),
+
+                  _SectionHeader('EXPORT'),
+                  _NavItem(section: AppSection.exports, icon: Icons.upload_rounded, selected: selectedSection, onSelected: onSelected),
+
+                  const SizedBox(height: 8),
                 ],
               ),
             ),
           ),
+          const Divider(color: AppTheme.edge, height: 1),
+          _NavItem(section: AppSection.settings, icon: Icons.settings_rounded, selected: selectedSection, onSelected: onSelected),
+          // Status bar
+          if (statusMessage.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Text(
+                statusMessage,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.cyan.withOpacity(0.7), fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String text;
+  const _SectionHeader(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: AppTheme.edge,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.5,
         ),
       ),
     );
   }
 }
 
-class _SidebarButton extends StatelessWidget {
-  const _SidebarButton({
-    required this.selected,
+class _NavItem extends StatefulWidget {
+  final AppSection section;
+  final IconData icon;
+  final AppSection selected;
+  final ValueChanged<AppSection> onSelected;
+
+  const _NavItem({
+    required this.section,
     required this.icon,
-    required this.label,
-    required this.onTap,
+    required this.selected,
+    required this.onSelected,
   });
 
-  final bool selected;
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+  @override
+  State<_NavItem> createState() => _NavItemState();
+}
+
+class _NavItemState extends State<_NavItem> {
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 160),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    final isActive = widget.selected == widget.section;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: () => widget.onSelected(widget.section),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            color: selected
-                ? AppTheme.cyan.withValues(alpha: 0.14)
-                : Colors.transparent,
-            border: Border.all(
-              color: selected
-                  ? AppTheme.cyan.withValues(alpha: 0.42)
-                  : Colors.transparent,
-            ),
+            color: isActive
+                ? AppTheme.violet.withOpacity(0.18)
+                : _hovered
+                    ? Colors.white.withOpacity(0.05)
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isActive
+                ? const Border(left: BorderSide(color: AppTheme.violet, width: 3))
+                : null,
           ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
           child: Row(
             children: [
-              Icon(icon, color: selected ? AppTheme.cyan : Colors.white70),
-              const SizedBox(width: 12),
+              Icon(
+                widget.icon,
+                size: 17,
+                color: isActive ? AppTheme.violet : AppTheme.edge,
+              ),
+              const SizedBox(width: 10),
               Text(
-                label,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: selected ? Colors.white : Colors.white70,
+                widget.section.label,
+                style: TextStyle(
+                  color: isActive ? AppTheme.violet : const Color(0xFF9099B8),
+                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                  fontSize: 13,
                 ),
               ),
             ],
