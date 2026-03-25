@@ -188,6 +188,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         return _RegionsView(
           tracks: allTracks,
           activeRegion: workspace.filters.region,
+          ref: ref,
           onSelectRegion: (region) => ref
               .read(workspaceControllerProvider.notifier)
               .updateFilters(workspace.filters.copyWith(region: region)),
@@ -206,6 +207,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       case AppSection.genres:
         return _GenresView(
           tracks: allTracks,
+          ref: ref,
           onSelectGenre: (genre) {
             ref
                 .read(workspaceControllerProvider.notifier)
@@ -390,6 +392,7 @@ class _RegionsView extends StatelessWidget {
   const _RegionsView({
     required this.tracks,
     required this.activeRegion,
+    required this.ref,
     required this.onSelectRegion,
     required this.onOpenRegionWorkbench,
     required this.onActivateTrack,
@@ -397,6 +400,7 @@ class _RegionsView extends StatelessWidget {
 
   final List<Track> tracks;
   final String activeRegion;
+  final WidgetRef ref;
   final ValueChanged<String> onSelectRegion;
   final ValueChanged<String> onOpenRegionWorkbench;
   final ValueChanged<String> onActivateTrack;
@@ -528,6 +532,7 @@ class _RegionsView extends StatelessWidget {
                       track: track,
                       rank: i + 1,
                       score: score,
+                      ref: ref,
                       onTap: () => onActivateTrack(track.id),
                     );
                   },
@@ -539,9 +544,10 @@ class _RegionsView extends StatelessWidget {
 }
 
 class _GenresView extends StatefulWidget {
-  const _GenresView({required this.tracks, required this.onSelectGenre});
+  const _GenresView({required this.tracks, required this.ref, required this.onSelectGenre});
 
   final List<Track> tracks;
+  final WidgetRef ref;
   final ValueChanged<String> onSelectGenre;
 
   @override
@@ -682,6 +688,7 @@ class _GenresViewState extends State<_GenresView> {
                       track: track,
                       rank: i + 1,
                       score: score,
+                      ref: widget.ref,
                       onTap: () => widget.onSelectGenre(track.genre),
                     );
                   },
@@ -871,6 +878,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                       track: track,
                       rank: i + 1,
                       score: score,
+                      ref: ref,
                     );
                   },
                 ),
