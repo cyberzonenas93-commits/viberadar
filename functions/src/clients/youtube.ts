@@ -36,7 +36,17 @@ export async function fetchYouTubeSignals(input: {
     }>;
   };
 
-  return (payload.items ?? []).map((item) => {
+  const IRRELEVANT = [
+    /\bbts\b/i, /\bjungkook\b/i, /\bblackpink\b/i, /\btwice\b/i,
+    /\bstray\s*kids\b/i, /\bnewjeans\b/i, /\baespa\b/i,
+    /\b(k-?pop|kpop|j-?pop|jpop|c-?pop|cpop|anime|bollywood)\b/i,
+    /\b(country|folk|bluegrass|gospel|christian|classical|metal|punk)\b/i,
+  ];
+
+  return (payload.items ?? []).filter((item) => {
+    const text = `${item.snippet?.title ?? ""} ${item.snippet?.channelTitle ?? ""} ${(item.snippet?.tags ?? []).join(" ")}`;
+    return !IRRELEVANT.some((p) => p.test(text));
+  }).map((item) => {
     const views = Number(item.statistics?.viewCount ?? 0);
     const likes = Number(item.statistics?.likeCount ?? 0);
     const comments = Number(item.statistics?.commentCount ?? 0);

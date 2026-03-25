@@ -7,6 +7,8 @@ export const APPLE_MUSIC_DEVELOPER_TOKEN = defineSecret("APPLE_MUSIC_DEVELOPER_T
 export const SOUNDCLOUD_CLIENT_ID = defineSecret("SOUNDCLOUD_CLIENT_ID");
 export const SOUNDCLOUD_OAUTH_TOKEN = defineSecret("SOUNDCLOUD_OAUTH_TOKEN");
 export const BEATPORT_API_TOKEN = defineSecret("BEATPORT_API_TOKEN");
+export const AUDIOMACK_CONSUMER_KEY = defineSecret("AUDIOMACK_CONSUMER_KEY");
+export const AUDIOMACK_CONSUMER_SECRET = defineSecret("AUDIOMACK_CONSUMER_SECRET");
 export const BEATPORT_API_BASE_URL = defineString("BEATPORT_API_BASE_URL", {
   default: "",
 });

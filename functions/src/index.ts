@@ -4,7 +4,9 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
+import { fetchAudiomackSignals } from "./clients/audiomack";
 import { fetchAudiusSignals } from "./clients/audius";
+import { fetchDeezerSignals } from "./clients/deezer";
 import { fetchBeatportSignals } from "./clients/beatport";
 import { enrichTracksWithMusicBrainz } from "./clients/musicbrainz";
 import { fetchSoundCloudSignals } from "./clients/soundcloud";
@@ -12,6 +14,8 @@ import { fetchSpotifySignals } from "./clients/spotify";
 import { fetchYouTubeSignals } from "./clients/youtube";
 import {
   APPLE_MUSIC_DEVELOPER_TOKEN,
+  AUDIOMACK_CONSUMER_KEY,
+  AUDIOMACK_CONSUMER_SECRET,
   BEATPORT_API_TOKEN,
   getBeatportApiBaseUrl,
   getConfiguredRegions,
@@ -40,6 +44,8 @@ const functionSecrets = [
   SOUNDCLOUD_CLIENT_ID,
   SOUNDCLOUD_OAUTH_TOKEN,
   BEATPORT_API_TOKEN,
+  AUDIOMACK_CONSUMER_KEY,
+  AUDIOMACK_CONSUMER_SECRET,
 ];
 
 export const ingestTrackSignals = onSchedule(
@@ -105,6 +111,12 @@ async function runIngestion(): Promise<IngestionSummary> {
   const collectedSignals: SourceTrackSignal[] = [];
   const globalSettled = await Promise.allSettled([
     withRetry(() => fetchAudiusSignals()),
+    withRetry(() =>
+      fetchAudiomackSignals({
+        consumerKey: normalizeSecretValue(AUDIOMACK_CONSUMER_KEY.value()),
+        consumerSecret: normalizeSecretValue(AUDIOMACK_CONSUMER_SECRET.value()),
+      }),
+    ),
   ]);
 
   for (const result of globalSettled) {
@@ -121,7 +133,7 @@ async function runIngestion(): Promise<IngestionSummary> {
     if (ri > 0) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    const sourceNames = ["spotify", "youtube", "apple", "soundcloud", "beatport"];
+    const sourceNames = ["spotify", "youtube", "apple", "soundcloud", "beatport", "deezer"];
     const settled = await Promise.allSettled([
       withRetry(() =>
         fetchSpotifySignals({
@@ -157,6 +169,9 @@ async function runIngestion(): Promise<IngestionSummary> {
           apiBaseUrl: getBeatportApiBaseUrl(),
           region,
         }),
+      ),
+      withRetry(() =>
+        fetchDeezerSignals({ region }),
       ),
     ]);
 
@@ -196,8 +211,10 @@ async function runIngestion(): Promise<IngestionSummary> {
       "youtube",
       "apple",
       "audius",
+      "audiomack",
       "soundcloud",
       "beatport",
+      "deezer",
     ],
   };
 }

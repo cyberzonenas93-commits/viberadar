@@ -24,9 +24,14 @@ class AppBootstrap {
       );
 
       if (Platform.isMacOS) {
-        await FirebaseAuth.instance.setSettings(
-          userAccessGroup: 'com.viberadar.viberadar',
-        );
+        try {
+          await FirebaseAuth.instance.setSettings(
+            userAccessGroup: 'com.viberadar.viberadar',
+          );
+        } catch (_) {
+          // Keychain access group may fail without provisioning profile;
+          // Firebase Auth still works, just without shared keychain.
+        }
       }
 
       final trackRepository = FirestoreTrackRepository(

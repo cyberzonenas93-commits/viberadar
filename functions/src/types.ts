@@ -5,7 +5,9 @@ export interface SourceTrackSignal {
     | "apple"
     | "soundcloud"
     | "beatport"
-    | "audius";
+    | "audius"
+    | "audiomack"
+    | "deezer";
   sourceId: string;
   title: string;
   artist: string;
