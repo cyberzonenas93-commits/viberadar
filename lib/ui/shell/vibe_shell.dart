@@ -24,6 +24,7 @@ import '../features/ai_copilot/ai_copilot_screen.dart';
 import '../features/library/library_screen.dart';
 import '../features/duplicates/duplicates_screen.dart';
 import '../features/exports/exports_screen.dart';
+import '../features/home/home_screen.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
   const VibeShell({super.key, required this.statusMessage});
@@ -102,10 +103,44 @@ class _VibeShellState extends ConsumerState<VibeShell> {
               ),
               const SizedBox(width: 20),
               Expanded(
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: _buildMainPanel(
+                child: _showDetailPanel(workspace.section)
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: _buildMainPanel(
+                              context: context,
+                              workspace: workspace,
+                              allTracks: allTracks,
+                              visibleTracks: visibleTracks,
+                              tracksAsync: tracksAsync,
+                              session: session,
+                              userProfile: userProfile,
+                              genres: genres,
+                              vibes: vibes,
+                              regions: regions,
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          SizedBox(
+                            width: workspace.detailExpanded ? 420 : 360,
+                            child: TrackDetailPanel(
+                              selectedTrack: selectedTrack,
+                              allTracks: allTracks,
+                              watchlist: userProfile.watchlist,
+                              expanded: workspace.detailExpanded,
+                              onToggleExpanded: () => ref
+                                  .read(workspaceControllerProvider.notifier)
+                                  .toggleDetailExpanded(),
+                              onToggleWatchlist: (trackId) => _toggleWatchlist(
+                                session: session,
+                                userProfile: userProfile,
+                                trackId: trackId,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : _buildMainPanel(
                         context: context,
                         workspace: workspace,
                         allTracks: allTracks,
@@ -117,27 +152,6 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                         vibes: vibes,
                         regions: regions,
                       ),
-                    ),
-                    const SizedBox(width: 20),
-                    SizedBox(
-                      width: workspace.detailExpanded ? 420 : 360,
-                      child: TrackDetailPanel(
-                        selectedTrack: selectedTrack,
-                        allTracks: allTracks,
-                        watchlist: userProfile.watchlist,
-                        expanded: workspace.detailExpanded,
-                        onToggleExpanded: () => ref
-                            .read(workspaceControllerProvider.notifier)
-                            .toggleDetailExpanded(),
-                        onToggleWatchlist: (trackId) => _toggleWatchlist(
-                          session: session,
-                          userProfile: userProfile,
-                          trackId: trackId,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
@@ -162,16 +176,16 @@ class _VibeShellState extends ConsumerState<VibeShell> {
 
     switch (workspace.section) {
       case AppSection.home:
+        return HomeScreen(
+          allTracks: allTracks,
+          userProfile: userProfile,
+        );
       case AppSection.trending:
         return _WorkbenchView(
           key: ValueKey(workspace.section),
-          title: workspace.section == AppSection.home
-              ? 'DJ intelligence cockpit'
-              : 'Trending tracks',
-          subtitle: workspace.section == AppSection.home
-              ? 'Monitor global movement, regional breakouts, and fast-rising records in one desktop view.'
-              : 'Sort, multi-select, and filter the freshest records without leaving the table.',
-          showDashboard: workspace.section == AppSection.home,
+          title: 'Trending tracks',
+          subtitle: 'Sort, multi-select, and filter the freshest records without leaving the table.',
+          showDashboard: false,
           allTracks: allTracks,
           visibleTracks: visibleTracks,
           filters: workspace.filters,
@@ -278,6 +292,15 @@ class _VibeShellState extends ConsumerState<VibeShell> {
           regions: regions.where((item) => item != 'Global').toList(),
         );
     }
+  }
+
+  /// Only show the right-side detail panel for table-based views.
+  bool _showDetailPanel(AppSection section) {
+    return section == AppSection.trending ||
+        section == AppSection.regions ||
+        section == AppSection.setBuilder ||
+        section == AppSection.savedCrates ||
+        section == AppSection.watchlist;
   }
 
   Future<void> _toggleWatchlist({
