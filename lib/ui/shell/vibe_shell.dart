@@ -17,6 +17,7 @@ import '../widgets/dashboard_cards.dart';
 import '../widgets/filter_bar.dart';
 import '../widgets/sidebar_nav.dart';
 import '../widgets/track_detail_panel.dart';
+import '../features/artists/artists_screen.dart';
 import '../widgets/track_table.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
@@ -254,12 +255,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
           ),
         );
       case AppSection.artists:
-        return const _PlaceholderView(
-          icon: Icons.person_rounded,
-          title: 'Artists',
-          description: 'Browse trending artists across all genres and regions.',
-          featureFlag: 'Phase 3',
-        );
+        return const ArtistsScreen();
       case AppSection.greatestOf:
         return const _PlaceholderView(
           icon: Icons.star_rounded,
