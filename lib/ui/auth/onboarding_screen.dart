@@ -120,6 +120,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     },
                   ),
                 ),
+                // Credit
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: Text(
+                    'Designed and Built by Angelo Nartey.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textTertiary,
+                      fontSize: 11,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                ),
                 // Indicators and button
                 Padding(
                   padding: const EdgeInsets.fromLTRB(32, 0, 32, 40),

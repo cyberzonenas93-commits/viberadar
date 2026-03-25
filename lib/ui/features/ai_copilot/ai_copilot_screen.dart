@@ -54,9 +54,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     final key = await svc.getApiKey();
     final model = await svc.getModel();
     if (mounted) {
+      const validModels = ['gpt-5.4', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'];
       setState(() {
         _apiKey = key;
-        _model = model;
+        _model = validModels.contains(model) ? model : 'gpt-5.4';
         if (key != null) _apiKeyController.text = key;
       });
     }
@@ -261,9 +262,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       isExpanded: true,
                       items: [
                         'gpt-5.4',
+                        'gpt-4.1',
                         'gpt-4o',
                         'gpt-4o-mini',
-                        'gpt-5.4-mini',
                       ]
                           .map((m) => DropdownMenuItem(
                               value: m, child: Text(m)))

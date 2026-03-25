@@ -12,6 +12,8 @@ abstract class SessionRepository {
     required String password,
   });
 
+  Future<void> signInWithGoogle();
+
   Future<void> createAccount({
     required String email,
     required String password,
@@ -40,6 +42,9 @@ class DemoSessionRepository implements SessionRepository {
   }) async {}
 
   @override
+  Future<void> signInWithGoogle() async {}
+
+  @override
   Future<void> signOut() async {}
 }
 
@@ -48,9 +53,11 @@ class FirebaseSessionRepository implements SessionRepository {
     required FirebaseAuth auth,
     required GoogleSignIn googleSignIn,
     required FirebaseRuntimeConfig config,
-  }) : _auth = auth;
+  })  : _auth = auth,
+        _googleSignIn = googleSignIn;
 
   final FirebaseAuth _auth;
+  final GoogleSignIn _googleSignIn;
 
   @override
   Stream<SessionState> sessionChanges() {
@@ -89,13 +96,9 @@ class FirebaseSessionRepository implements SessionRepository {
       email: email,
       password: password,
     );
-    // updateDisplayName is best-effort — a failure here must not block sign-up
-    // since the account is already created and the user is already signed in.
     try {
       await credential.user?.updateDisplayName(displayName);
-    } catch (_) {
-      // Silently ignored; the display name can be updated later.
-    }
+    } catch (_) {}
   }
 
   @override
@@ -107,7 +110,24 @@ class FirebaseSessionRepository implements SessionRepository {
   }
 
   @override
+  Future<void> signInWithGoogle() async {
+    // Google Sign-In v7 API
+    final googleUser = await _googleSignIn.authenticate();
+
+    final authorization = await _googleSignIn.authorizationClient
+        .authorizationForScopes(<String>['email']);
+    if (authorization == null) return;
+
+    final credential = GoogleAuthProvider.credential(
+      accessToken: authorization.accessToken,
+    );
+
+    await _auth.signInWithCredential(credential);
+  }
+
+  @override
   Future<void> signOut() async {
+    await _googleSignIn.signOut();
     await _auth.signOut();
   }
 }
