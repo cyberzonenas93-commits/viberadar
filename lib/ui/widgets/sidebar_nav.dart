@@ -85,7 +85,7 @@ class SidebarNav extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Text(
                 statusMessage,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.cyan.withOpacity(0.7), fontSize: 10),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppTheme.cyan.withValues(alpha: 0.7), fontSize: 10),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -150,9 +150,9 @@ class _NavItemState extends State<_NavItem> {
           margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
           decoration: BoxDecoration(
             color: isActive
-                ? AppTheme.violet.withOpacity(0.18)
+                ? AppTheme.violet.withValues(alpha: 0.18)
                 : _hovered
-                    ? Colors.white.withOpacity(0.05)
+                    ? Colors.white.withValues(alpha: 0.05)
                     : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: isActive

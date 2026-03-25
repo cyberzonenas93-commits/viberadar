@@ -42,10 +42,10 @@ class DuplicatesScreen extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppTheme.pink.withOpacity(0.1),
+                  color: AppTheme.pink.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                      color: AppTheme.pink.withOpacity(0.3)),
+                      color: AppTheme.pink.withValues(alpha: 0.3)),
                 ),
                 child: Row(children: [
                   const Icon(Icons.warning_amber_rounded,
@@ -70,7 +70,7 @@ class DuplicatesScreen extends ConsumerWidget {
             Expanded(
               child: ListView.separated(
                 itemCount: lib.duplicateGroups.length,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (_, _x) =>
                     const SizedBox(height: 12),
                 itemBuilder: (ctx, i) => _DuplicateGroupCard(
                   group: lib.duplicateGroups[i],
@@ -104,10 +104,10 @@ class _NeedScanState extends StatelessWidget {
           width: 96,
           height: 96,
           decoration: BoxDecoration(
-            color: AppTheme.cyan.withOpacity(0.08),
+            color: AppTheme.cyan.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(24),
             border:
-                Border.all(color: AppTheme.cyan.withOpacity(0.3)),
+                Border.all(color: AppTheme.cyan.withValues(alpha: 0.3)),
           ),
           child: const Icon(Icons.content_copy_rounded,
               size: 48, color: AppTheme.cyan),
@@ -137,10 +137,10 @@ class _NoDuplicatesState extends StatelessWidget {
           width: 96,
           height: 96,
           decoration: BoxDecoration(
-            color: AppTheme.lime.withOpacity(0.08),
+            color: AppTheme.lime.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(24),
             border:
-                Border.all(color: AppTheme.lime.withOpacity(0.3)),
+                Border.all(color: AppTheme.lime.withValues(alpha: 0.3)),
           ),
           child: const Icon(Icons.check_circle_outline_rounded,
               size: 48, color: AppTheme.lime),
@@ -184,7 +184,7 @@ class _DuplicateGroupCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(
                     horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: AppTheme.pink.withOpacity(0.15),
+                  color: AppTheme.pink.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: Text(group.reasonLabel,
@@ -224,7 +224,7 @@ class _DupeTrackRow extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: AppTheme.violet.withOpacity(0.15),
+            color: AppTheme.violet.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(

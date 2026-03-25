@@ -92,7 +92,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 2),
                       decoration: BoxDecoration(
-                        color: AppTheme.violet.withOpacity(0.15),
+                        color: AppTheme.violet.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(_model,
@@ -271,7 +271,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
               padding:
                   const EdgeInsets.symmetric(horizontal: 28),
               itemCount: _suggestions.length,
-              separatorBuilder: (_, __) =>
+              separatorBuilder: (_, _x) =>
                   const SizedBox(width: 8),
               itemBuilder: (ctx, i) => GestureDetector(
                 onTap: () => _send(_suggestions[i]),
@@ -414,7 +414,7 @@ class _ChatBubble extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: AppTheme.violet.withOpacity(0.2),
+                color: AppTheme.violet.withValues(alpha: 0.2),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.auto_awesome_rounded,
@@ -469,7 +469,7 @@ class _TypingIndicator extends StatelessWidget {
           width: 28,
           height: 28,
           decoration: BoxDecoration(
-            color: AppTheme.violet.withOpacity(0.2),
+            color: AppTheme.violet.withValues(alpha: 0.2),
             shape: BoxShape.circle,
           ),
           child: const Icon(Icons.auto_awesome_rounded,

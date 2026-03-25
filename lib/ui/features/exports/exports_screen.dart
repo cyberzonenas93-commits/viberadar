@@ -139,12 +139,12 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                 horizontal: 12, vertical: 10),
                             decoration: BoxDecoration(
                               color: selected
-                                  ? AppTheme.violet.withOpacity(0.15)
+                                  ? AppTheme.violet.withValues(alpha: 0.15)
                                   : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                   color: selected
-                                      ? AppTheme.violet.withOpacity(0.5)
+                                      ? AppTheme.violet.withValues(alpha: 0.5)
                                       : Colors.transparent),
                             ),
                             child: Row(children: [
@@ -253,10 +253,10 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
-                          color: AppTheme.lime.withOpacity(0.1),
+                          color: AppTheme.lime.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(
-                              color: AppTheme.lime.withOpacity(0.4)),
+                              color: AppTheme.lime.withValues(alpha: 0.4)),
                         ),
                         child: Row(children: [
                           const Icon(Icons.check_circle_rounded,
@@ -435,7 +435,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                             decoration: BoxDecoration(
                                               color: inCrate
                                                   ? AppTheme.violet
-                                                      .withOpacity(0.08)
+                                                      .withValues(alpha: 0.08)
                                                   : AppTheme.panelRaised,
                                               borderRadius:
                                                   BorderRadius.circular(6),
@@ -552,10 +552,10 @@ class _ExportBtn extends StatelessWidget {
         padding:
             const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: AppTheme.cyan.withOpacity(0.08),
+          color: AppTheme.cyan.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(8),
           border:
-              Border.all(color: AppTheme.cyan.withOpacity(0.3)),
+              Border.all(color: AppTheme.cyan.withValues(alpha: 0.3)),
         ),
         child: loading
             ? const SizedBox(

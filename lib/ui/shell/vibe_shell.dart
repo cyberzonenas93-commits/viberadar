@@ -18,6 +18,12 @@ import '../widgets/filter_bar.dart';
 import '../widgets/sidebar_nav.dart';
 import '../widgets/track_detail_panel.dart';
 import '../widgets/track_table.dart';
+import '../features/artists/artists_screen.dart';
+import '../features/greatest_of/greatest_of_screen.dart';
+import '../features/ai_copilot/ai_copilot_screen.dart';
+import '../features/library/library_screen.dart';
+import '../features/duplicates/duplicates_screen.dart';
+import '../features/exports/exports_screen.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
   const VibeShell({super.key, required this.statusMessage});
@@ -254,47 +260,17 @@ class _VibeShellState extends ConsumerState<VibeShell> {
           ),
         );
       case AppSection.artists:
-        return const _PlaceholderView(
-          icon: Icons.person_rounded,
-          title: 'Artists',
-          description: 'Browse trending artists across all genres and regions.',
-          featureFlag: 'Phase 3',
-        );
+        return const ArtistsScreen();
       case AppSection.greatestOf:
-        return const _PlaceholderView(
-          icon: Icons.star_rounded,
-          title: 'Greatest Of',
-          description: 'Discover the most impactful tracks of any artist, ever.',
-          featureFlag: 'Phase 4',
-        );
+        return const GreatestOfScreen();
       case AppSection.aiCopilot:
-        return const _PlaceholderView(
-          icon: Icons.auto_awesome_rounded,
-          title: 'AI Copilot',
-          description: 'Ask anything — set recommendations, harmonic mixing, regional intel.',
-          featureFlag: 'Phase 5',
-        );
+        return const AiCopilotScreen();
       case AppSection.library:
-        return const _PlaceholderView(
-          icon: Icons.folder_rounded,
-          title: 'My Library',
-          description: 'Scan your local music folder to index tracks and extract metadata.',
-          featureFlag: 'Phase 6',
-        );
+        return const LibraryScreen();
       case AppSection.duplicates:
-        return const _PlaceholderView(
-          icon: Icons.content_copy_rounded,
-          title: 'Duplicates',
-          description: 'Automatically detect and resolve duplicate tracks in your library.',
-          featureFlag: 'Phase 7',
-        );
+        return const DuplicatesScreen();
       case AppSection.exports:
-        return const _PlaceholderView(
-          icon: Icons.upload_rounded,
-          title: 'Exports',
-          description: 'Export crates to Rekordbox, Serato, Traktor, or M3U formats.',
-          featureFlag: 'Phase 8',
-        );
+        return const ExportsScreen();
       case AppSection.settings:
         return _SettingsView(
           session: session,
@@ -1661,64 +1637,3 @@ class _TitleBlock extends StatelessWidget {
   }
 }
 
-
-class _PlaceholderView extends StatelessWidget {
-  const _PlaceholderView({
-    required this.icon,
-    required this.title,
-    required this.description,
-    required this.featureFlag,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-  final String featureFlag;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 88,
-            height: 88,
-            decoration: BoxDecoration(
-              color: AppTheme.violet.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: AppTheme.violet.withOpacity(0.3)),
-            ),
-            child: Icon(icon, size: 42, color: AppTheme.violet),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            title,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: 360,
-            child: Text(
-              description,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF9099B8), fontSize: 14, height: 1.5),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-            decoration: BoxDecoration(
-              color: AppTheme.edge,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              'Coming in $featureFlag',
-              style: const TextStyle(color: AppTheme.cyan, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

@@ -66,8 +66,8 @@ class DuplicateDetectorService {
       a.length + 1,
       (i) => List.generate(b.length + 1, (j) => 0),
     );
-    for (var i = 0; i <= a.length; i++) dp[i][0] = i;
-    for (var j = 0; j <= b.length; j++) dp[0][j] = j;
+    for (var i = 0; i <= a.length; i++) { dp[i][0] = i; }
+    for (var j = 0; j <= b.length; j++) { dp[0][j] = j; }
     for (var i = 1; i <= a.length; i++) {
       for (var j = 1; j <= b.length; j++) {
         dp[i][j] = a[i - 1] == b[j - 1]

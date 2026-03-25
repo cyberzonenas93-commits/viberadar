@@ -173,10 +173,10 @@ class _EmptyState extends StatelessWidget {
           width: 96,
           height: 96,
           decoration: BoxDecoration(
-            color: AppTheme.violet.withOpacity(0.1),
+            color: AppTheme.violet.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(24),
             border:
-                Border.all(color: AppTheme.violet.withOpacity(0.3)),
+                Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
           ),
           child: const Icon(Icons.folder_rounded,
               size: 48, color: AppTheme.violet),
@@ -282,7 +282,7 @@ class _TrackRow extends StatelessWidget {
           padding:
               const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
           decoration: BoxDecoration(
-            color: AppTheme.violet.withOpacity(0.2),
+            color: AppTheme.violet.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
@@ -349,9 +349,9 @@ class _MetaChip extends StatelessWidget {
       padding:
           const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(label,
           style: TextStyle(

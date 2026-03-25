@@ -83,7 +83,7 @@ class _GreatestOfScreenState extends State<GreatestOfScreen> {
                   children: [
                     Container(
                       width: 36, height: 36,
-                      decoration: BoxDecoration(color: AppTheme.violet.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(color: AppTheme.violet.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
                       child: Center(child: Text('${i + 1}', style: const TextStyle(color: AppTheme.violet, fontWeight: FontWeight.w700))),
                     ),
                     const SizedBox(width: 16),

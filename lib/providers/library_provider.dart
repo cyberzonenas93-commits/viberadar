@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/library_track.dart';
 import '../services/library_scanner_service.dart';
 import '../services/duplicate_detector_service.dart';
+import '../services/library_persistence_service.dart';
 
 // ── Services ──────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,9 @@ final libraryScannerServiceProvider =
 final duplicateDetectorServiceProvider =
     Provider<DuplicateDetectorService>((_) => DuplicateDetectorService());
 
+final libraryPersistenceServiceProvider =
+    Provider<LibraryPersistenceService>((_) => LibraryPersistenceService());
+
 // ── Library State ─────────────────────────────────────────────────────────────
 
 class LibraryState {
@@ -18,6 +22,7 @@ class LibraryState {
     this.tracks = const [],
     this.duplicateGroups = const [],
     this.isScanning = false,
+    this.isLoading = false,
     this.scanProgress = 0,
     this.scanTotal = 0,
     this.scannedPath,
@@ -27,6 +32,7 @@ class LibraryState {
   final List<LibraryTrack> tracks;
   final List<DuplicateGroup> duplicateGroups;
   final bool isScanning;
+  final bool isLoading;
   final int scanProgress;
   final int scanTotal;
   final String? scannedPath;
@@ -40,6 +46,7 @@ class LibraryState {
     List<LibraryTrack>? tracks,
     List<DuplicateGroup>? duplicateGroups,
     bool? isScanning,
+    bool? isLoading,
     int? scanProgress,
     int? scanTotal,
     Object? scannedPath = _sentinel,
@@ -49,6 +56,7 @@ class LibraryState {
       tracks: tracks ?? this.tracks,
       duplicateGroups: duplicateGroups ?? this.duplicateGroups,
       isScanning: isScanning ?? this.isScanning,
+      isLoading: isLoading ?? this.isLoading,
       scanProgress: scanProgress ?? this.scanProgress,
       scanTotal: scanTotal ?? this.scanTotal,
       scannedPath: identical(scannedPath, _sentinel)
@@ -61,16 +69,37 @@ class LibraryState {
 
 const _sentinel = Object();
 
-// ── Library Notifier (Riverpod 3.x) ──────────────────────────────────────────
+// ── Library Notifier ──────────────────────────────────────────────────────────
 
 class LibraryNotifier extends Notifier<LibraryState> {
   @override
-  LibraryState build() => const LibraryState();
+  LibraryState build() {
+    // Auto-load persisted library on first access
+    _loadFromCache();
+    return const LibraryState(isLoading: true);
+  }
 
   LibraryScannerService get _scanner =>
       ref.read(libraryScannerServiceProvider);
   DuplicateDetectorService get _detector =>
       ref.read(duplicateDetectorServiceProvider);
+  LibraryPersistenceService get _persistence =>
+      ref.read(libraryPersistenceServiceProvider);
+
+  Future<void> _loadFromCache() async {
+    final cached = await _persistence.load();
+    if (cached != null && cached.tracks.isNotEmpty) {
+      final dupes = _detector.findDuplicates(cached.tracks);
+      state = state.copyWith(
+        tracks: cached.tracks,
+        duplicateGroups: dupes,
+        scannedPath: cached.scannedPath,
+        isLoading: false,
+      );
+    } else {
+      state = state.copyWith(isLoading: false);
+    }
+  }
 
   Future<void> scanDirectory(String path) async {
     state = state.copyWith(
@@ -99,6 +128,8 @@ class LibraryNotifier extends Notifier<LibraryState> {
         scanProgress: tracks.length,
         scanTotal: tracks.length,
       );
+      // Persist after scan
+      await _persistence.save(tracks, path);
     } catch (e) {
       state = state.copyWith(isScanning: false, error: e.toString());
     }
@@ -108,10 +139,12 @@ class LibraryNotifier extends Notifier<LibraryState> {
     final updated = state.tracks.where((t) => t.id != id).toList();
     final dupes = _detector.findDuplicates(updated);
     state = state.copyWith(tracks: updated, duplicateGroups: dupes);
+    _persistence.save(updated, state.scannedPath);
   }
 
-  void clearLibrary() {
+  Future<void> clearLibrary() async {
     state = const LibraryState();
+    await _persistence.clear();
   }
 }
 

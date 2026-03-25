@@ -71,7 +71,7 @@ class ArtistsScreen extends StatelessWidget {
                   children: [
                     CircleAvatar(
                       radius: 32,
-                      backgroundColor: AppTheme.violet.withOpacity(0.2),
+                      backgroundColor: AppTheme.violet.withValues(alpha: 0.2),
                       child: Text(
                         a.name[0],
                         style: const TextStyle(color: AppTheme.violet, fontSize: 24, fontWeight: FontWeight.w700),

@@ -113,7 +113,7 @@ class LibraryScannerService {
           return s.trim().replaceAll(RegExp(r'^["\(]|["\)]$'), '').trim();
         }
         return {
-          'title': clean(parts.length > 0 ? parts[0] : null),
+          'title': clean(parts.isNotEmpty ? parts[0] : null),
           'artist': clean(parts.length > 1
               ? parts[1].replaceAll(RegExp(r'[\(\)"\\]'), '').split(',').first
               : null),
