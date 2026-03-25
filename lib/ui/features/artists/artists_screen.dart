@@ -604,31 +604,23 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
           ),
         ),
         Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
-        // Track list — either Spotify catalogue or radar tracks
+        // Grid view — Spotify catalogue or radar tracks
         Expanded(
           child: _view == 'radar'
-              ? ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
-            itemCount: radarTracks.length,
-            itemBuilder: (context, i) {
-              final track = radarTracks[i];
-              final isSelected = _selectedTrackIds.contains(track.id);
-              return _CatalogTrackRow(
-                track: track,
-                rank: i + 1,
-                isSelected: isSelected,
-                onToggleSelect: () {
-                  setState(() {
-                    if (isSelected) {
-                      _selectedTrackIds.remove(track.id);
-                    } else {
-                      _selectedTrackIds.add(track.id);
-                    }
-                  });
-                },
-              );
-            },
-          )
+              ? GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: radarTracks.length,
+                  itemBuilder: (context, i) {
+                    final track = radarTracks[i];
+                    return _RadarTrackCard(track: track, rank: i + 1);
+                  },
+                )
               : _loadingCatalogue
                   ? const Center(child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -642,26 +634,18 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                       ? Center(child: Text('Could not load catalogue', style: TextStyle(color: AppTheme.textTertiary)))
                       : displaySpotify.isEmpty
                           ? const Center(child: Text('No tracks found', style: TextStyle(color: AppTheme.textTertiary)))
-                          : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(28, 8, 28, 28),
+                          : GridView.builder(
+                              padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                                maxCrossAxisExtent: 200,
+                                childAspectRatio: 0.72,
+                                crossAxisSpacing: 12,
+                                mainAxisSpacing: 12,
+                              ),
                               itemCount: displaySpotify.length,
                               itemBuilder: (context, i) {
                                 final st = displaySpotify[i];
-                                final isSelected = _selectedTrackIds.contains(st.id);
-                                return _SpotifyTrackRow(
-                                  track: st,
-                                  rank: i + 1,
-                                  isSelected: isSelected,
-                                  onToggleSelect: () {
-                                    setState(() {
-                                      if (isSelected) {
-                                        _selectedTrackIds.remove(st.id);
-                                      } else {
-                                        _selectedTrackIds.add(st.id);
-                                      }
-                                    });
-                                  },
-                                );
+                                return _SpotifyTrackCard(track: st, rank: i + 1);
                               },
                             ),
         ),
@@ -670,7 +654,264 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   }
 }
 
-// Spotify catalogue track row
+// ─────────────────────────────────────────────────────────────────────────────
+// Grid card for Spotify catalogue tracks
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SpotifyTrackCard extends StatefulWidget {
+  final SpotifyTrackInfo track;
+  final int rank;
+  const _SpotifyTrackCard({required this.track, required this.rank});
+
+  @override
+  State<_SpotifyTrackCard> createState() => _SpotifyTrackCardState();
+}
+
+class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () async {
+          if (t.spotifyUrl.isNotEmpty) {
+            final uri = Uri.tryParse(t.spotifyUrl);
+            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: t.isTopTrack
+                  ? AppTheme.amber.withValues(alpha: _hovered ? 0.5 : 0.3)
+                  : AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      child: SizedBox.expand(
+                        child: t.albumArt != null
+                            ? CachedNetworkImage(imageUrl: t.albumArt!, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                            : Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised]),
+                                ),
+                                child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
+                              ),
+                      ),
+                    ),
+                    if (t.isTopTrack)
+                      Positioned(
+                        top: 8, left: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.amber.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.star_rounded, color: Colors.white, size: 10),
+                              SizedBox(width: 3),
+                              Text('TOP', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    if (t.popularity > 0)
+                      Positioned(
+                        top: 8, right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.cyan.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text('${t.popularity}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                    if (_hovered)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 44, height: 44,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1DB954), shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: const Color(0xFF1DB954).withValues(alpha: 0.5), blurRadius: 16)],
+                              ),
+                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(t.albumName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Text(t.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        const Spacer(),
+                        if (t.releaseDate != null && t.releaseDate!.length >= 4)
+                          Text(t.releaseDate!.substring(0, 4), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Grid card for radar tracks
+class _RadarTrackCard extends StatefulWidget {
+  final Track track;
+  final int rank;
+  const _RadarTrackCard({required this.track, required this.rank});
+
+  @override
+  State<_RadarTrackCard> createState() => _RadarTrackCardState();
+}
+
+class _RadarTrackCardState extends State<_RadarTrackCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    final score = (t.trendScore * 100).toInt();
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () {
+          final url = _bestUrl(t);
+          if (url != null) {
+            final uri = Uri.tryParse(url);
+            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      child: SizedBox.expand(
+                        child: t.artworkUrl.isNotEmpty
+                            ? CachedNetworkImage(imageUrl: t.artworkUrl, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                            : Container(
+                                decoration: const BoxDecoration(gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised])),
+                                child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
+                              ),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8, right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(5)),
+                        child: Text('$score', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                    if (_hovered)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 44, height: 44,
+                              decoration: BoxDecoration(
+                                color: AppTheme.cyan, shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)],
+                              ),
+                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 5),
+                    Row(
+                      children: [
+                        Text('${t.bpm}', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)),
+                          child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
+                        ),
+                        const Spacer(),
+                        Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 9)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Keep old _SpotifyTrackRow for compatibility but it's no longer used
 class _SpotifyTrackRow extends StatefulWidget {
   final SpotifyTrackInfo track;
   final int rank;

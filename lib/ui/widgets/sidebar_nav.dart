@@ -3,8 +3,9 @@ import 'package:google_fonts/google_fonts.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../models/app_section.dart';
+import '../../services/ingest_service.dart';
 
-class SidebarNav extends StatelessWidget {
+class SidebarNav extends StatefulWidget {
   const SidebarNav({
     super.key,
     required this.selectedSection,
@@ -17,7 +18,29 @@ class SidebarNav extends StatelessWidget {
   final String statusMessage;
 
   @override
+  State<SidebarNav> createState() => _SidebarNavState();
+}
+
+class _SidebarNavState extends State<SidebarNav> {
+  bool _refreshing = false;
+  String? _refreshResult;
+
+  Future<void> _refresh() async {
+    setState(() { _refreshing = true; _refreshResult = null; });
+    final result = await IngestService.triggerIngest();
+    if (mounted) {
+      setState(() { _refreshing = false; _refreshResult = result; });
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _refreshResult = null);
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final selectedSection = widget.selectedSection;
+    final onSelected = widget.onSelected;
+    final statusMessage = _refreshResult ?? widget.statusMessage;
     return Container(
       width: 220,
       decoration: BoxDecoration(
@@ -93,6 +116,43 @@ class SidebarNav extends StatelessWidget {
             ),
           ),
           Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
+          // Refresh / re-ingest button
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Material(
+              color: _refreshing
+                  ? AppTheme.cyan.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(8),
+                onTap: _refreshing ? null : _refresh,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  child: Row(
+                    children: [
+                      if (_refreshing)
+                        const SizedBox(
+                          width: 17, height: 17,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan),
+                        )
+                      else
+                        const Icon(Icons.refresh_rounded, size: 17, color: AppTheme.cyan),
+                      const SizedBox(width: 10),
+                      Text(
+                        _refreshing ? 'Refreshing...' : 'Refresh Data',
+                        style: TextStyle(
+                          color: _refreshing ? AppTheme.cyan : AppTheme.textSecondary,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
           _NavItem(section: AppSection.settings, icon: Icons.settings_rounded, selected: selectedSection, onSelected: onSelected),
           // Status bar
           if (statusMessage.isNotEmpty)
