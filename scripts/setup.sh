@@ -1,53 +1,46 @@
 #!/bin/bash
-# VibeRadar — one-command setup for any machine
-# Usage: ./scripts/setup.sh
+# VibeRadar — zero-config setup.
+# On a new machine: git pull && ./scripts/setup.sh
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-ENV_FILE="$ROOT/.env"
+cd "$ROOT"
 
 echo "🎧 VibeRadar Setup"
 echo "=================="
 echo ""
 
-# 1. Create .env if missing
-if [ -f "$ENV_FILE" ]; then
+# 1. Decrypt .env if not present
+if [ ! -f ".env" ] && [ -f ".env.encrypted" ]; then
+  echo "Decrypting .env..."
+  openssl enc -aes-256-cbc -pbkdf2 -d -salt -in .env.encrypted -out .env -pass pass:VibeRadar2026
+  echo "✅ .env decrypted"
+elif [ -f ".env" ]; then
   echo "✅ .env already exists"
 else
-  echo "Creating .env from template..."
-  cp "$ROOT/.env.example" "$ENV_FILE"
-
-  # Prompt for OpenAI key
-  echo ""
-  read -rp "Enter your OpenAI API key (or press Enter to skip): " OPENAI_KEY
-  if [ -n "$OPENAI_KEY" ]; then
-    sed -i '' "s|^OPENAI_API_KEY=.*|OPENAI_API_KEY=$OPENAI_KEY|" "$ENV_FILE"
-    echo "✅ OpenAI key saved to .env"
-  else
-    echo "⚠️  No OpenAI key — AI Copilot will run in simulation mode"
-  fi
+  echo "⚠️  No .env or .env.encrypted found. Copy .env.example and fill in your keys."
+  cp .env.example .env
 fi
 
-# 2. Flutter pub get
+# 2. Flutter dependencies
 echo ""
 echo "Installing Flutter dependencies..."
-cd "$ROOT"
 flutter pub get
 
 # 3. Cloud Functions dependencies
-if [ -d "$ROOT/functions" ]; then
-  echo ""
+if [ -d "functions" ]; then
   echo "Installing Cloud Functions dependencies..."
-  cd "$ROOT/functions"
-  npm install
+  cd functions && npm install && cd ..
 fi
 
 echo ""
-echo "✅ Setup complete! Run the app with:"
+echo "✅ Setup complete! Run the app:"
 echo "   flutter run -d macos"
 echo ""
 echo "📌 API keys status:"
-echo "   • OpenAI (AI Copilot): $(grep -q 'OPENAI_API_KEY=sk-' "$ENV_FILE" 2>/dev/null && echo '✅ Set' || echo '⚠️  Not set — add to .env')"
-echo "   • Firebase:            ✅ Hardcoded in firebase_options.dart"
-echo "   • Spotify/YouTube/Apple Music: ✅ In Firebase Secret Manager (cloud-side)"
+grep -q "OPENAI_API_KEY=sk-" .env 2>/dev/null && echo "   ✅ OpenAI (gpt-5.4)" || echo "   ❌ OpenAI — add to .env"
+grep -q "SPOTIFY_CLIENT_ID=" .env 2>/dev/null && echo "   ✅ Spotify" || echo "   ❌ Spotify — add to .env"
+echo "   ✅ Firebase (hardcoded)"
+echo "   ✅ Billboard, Deezer (no auth)"
+echo "   ✅ YouTube, Apple Music, SoundCloud (Firebase Secrets)"
 echo ""

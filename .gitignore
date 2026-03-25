@@ -48,7 +48,7 @@ app.*.map.json
 .env
 .env.local
 .env.*.local
-*.env
+!.env.encrypted
 !.env.example
 
 # Node / Cloud Functions
