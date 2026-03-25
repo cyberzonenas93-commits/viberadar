@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,17 +23,6 @@ class AppBootstrap {
             : DefaultFirebaseOptions.currentPlatform,
       );
 
-      if (Platform.isMacOS) {
-        try {
-          await FirebaseAuth.instance.setSettings(
-            userAccessGroup: 'com.viberadar.viberadar',
-          );
-        } catch (_) {
-          // Keychain access group may fail without provisioning profile;
-          // Firebase Auth still works, just without shared keychain.
-        }
-      }
-
       final trackRepository = FirestoreTrackRepository(
         FirebaseFirestore.instance,
       );
@@ -42,8 +31,7 @@ class AppBootstrap {
       );
       final sessionRepository = FirebaseSessionRepository(
         auth: FirebaseAuth.instance,
-        googleSignIn: GoogleSignIn.instance,
-        config: config,
+        googleSignIn: await _initializeGoogleSignIn(config),
       );
 
       return AppBootstrapResult(
@@ -84,4 +72,27 @@ class AppBootstrapResult {
 
   final String statusMessage;
   final List providerOverrides;
+}
+
+String? _googleClientId(FirebaseRuntimeConfig config) {
+  if (config.googleClientId.isNotEmpty) {
+    return config.googleClientId;
+  }
+
+  final fallbackClientId = DefaultFirebaseOptions.currentPlatform.iosClientId;
+  return fallbackClientId?.isNotEmpty == true ? fallbackClientId : null;
+}
+
+Future<GoogleSignIn> _initializeGoogleSignIn(
+  FirebaseRuntimeConfig config,
+) async {
+  final googleSignIn = GoogleSignIn.instance;
+  await googleSignIn.initialize(
+    clientId: _googleClientId(config),
+    serverClientId: config.googleServerClientId.isEmpty
+        ? null
+        : config.googleServerClientId,
+  );
+  unawaited(googleSignIn.attemptLightweightAuthentication());
+  return googleSignIn;
 }

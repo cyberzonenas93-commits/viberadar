@@ -78,12 +78,27 @@ export function mergeSignalsIntoTracks(
   // This prevents Pop/Country/Classical from getting high scores in GH/NG/ZA.
   for (const entry of merged.values()) {
     const finalGenre = entry.genre || "Open Format";
+    const genreLower = finalGenre.toLowerCase();
     const adjusted: Record<string, number> = {};
     for (const [region, rawScore] of Object.entries(entry.regionScores)) {
+      // Hard block: genre is on the explicit regional blocklist
+      const blockedGenres = BLOCKED_GENRES_BY_REGION[region] ?? [];
+      if (blockedGenres.some((bg) => genreLower.includes(bg))) {
+        // track.regionalScore = 0, excludedFromRegion = true (implicit — not added to adjusted)
+        continue;
+      }
+
       const affinity = genreRegionAffinity(finalGenre, region);
+
+      // Hard filter: genres with near-zero regional relevance are excluded
+      if (affinity < REGION_GENRE_THRESHOLD) {
+        // track.regionalScore = 0, excludedFromRegion = true (implicit)
+        continue;
+      }
+
       const score = rawScore * affinity;
       // Debug: log unexpected high scores for non-matching genres
-      if (region === "GH" && score > 0.15 && !finalGenre.toLowerCase().includes("afrobeats") && !finalGenre.toLowerCase().includes("dancehall")) {
+      if (region === "GH" && score > 0.15 && !genreLower.includes("afrobeats") && !genreLower.includes("dancehall") && !genreLower.includes("highlife")) {
         console.log(`[REGION DEBUG] GH: "${entry.title}" by ${entry.artist} | genre=${finalGenre} | raw=${rawScore.toFixed(3)} * affinity=${affinity} = ${score.toFixed(3)}`);
       }
       if (score > 0.15) {
@@ -351,13 +366,51 @@ function genreRegionAffinity(genre: string, region: string): number {
 
   const map: Record<string, Record<string, number>> = {
     "GH": {
-      "afrobeats": 1.0, "dancehall": 0.4, "amapiano": 0.3,
+      "afrobeats": 1.0,
+      "highlife": 1.0,
+      "afropop": 0.95,
+      "dancehall": 0.85,
+      "gospel": 0.7,
+      "soca": 0.4,
+      "drill": 0.2,
+      "hip-hop": 0.5,
+      "r&b": 0.4,
+      "latin": 0.1,
+      "pop": 0.05,
+      "open format": 0.05,
+      "house": 0.03,
+      "dance": 0.03,
+      "rock": 0.02,
     },
     "NG": {
-      "afrobeats": 1.0, "dancehall": 0.3, "hip-hop": 0.05, "r&b": 0.05,
+      "afrobeats": 1.0,
+      "afropop": 0.95,
+      "afrofusion": 0.95,
+      "amapiano": 0.8,
+      "dancehall": 0.8,
+      "hip-hop": 0.5,
+      "r&b": 0.4,
+      "soca": 0.3,
+      "drill": 0.2,
+      "latin": 0.1,
+      "pop": 0.05,
+      "open format": 0.05,
+      "house": 0.03,
+      "dance": 0.03,
     },
     "ZA": {
-      "amapiano": 1.0, "gqom": 0.9, "house": 0.15, "afrobeats": 0.1,
+      "amapiano": 1.0,
+      "gqom": 1.0,
+      "kwaito": 0.9,
+      "afrobeats": 0.85,
+      "house": 0.7,
+      "hip-hop": 0.5,
+      "r&b": 0.3,
+      "drill": 0.2,
+      "latin": 0.1,
+      "dance": 0.1,
+      "pop": 0.1,
+      "open format": 0.05,
     },
     "GB": {
       "drill": 0.9, "uk garage": 0.9, "house": 0.6, "dance": 0.5,
@@ -386,6 +439,19 @@ function genreRegionAffinity(genre: string, region: string): number {
   // Genre doesn't match this region — near-zero score (v2)
   return 0.02;
 }
+
+// If a genre's regional affinity falls below this threshold, the track is
+// excluded entirely from that region's filtered view (score forced to 0).
+const REGION_GENRE_THRESHOLD = 0.05;
+
+// Explicit genre-level blocklist per region. These genres should never surface
+// in the region's trending view even if some signals slip through the artist
+// blocklist (e.g. a "Pop" track that isn't Taylor Swift).
+const BLOCKED_GENRES_BY_REGION: Record<string, string[]> = {
+  GH: ["k-pop", "country", "metal", "classical", "pop (western)", "europop", "french pop"],
+  NG: ["k-pop", "country", "metal", "classical", "europop"],
+  ZA: ["k-pop", "country", "metal", "classical"],
+};
 
 const BLOCKED_PATTERNS = [
   /\bbts\b/i, /\bjungkook\b/i, /\bblackpink\b/i, /\btwice\b/i,

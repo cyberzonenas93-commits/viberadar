@@ -1,7 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import '../../core/config/firebase_runtime_config.dart';
 import '../../models/session_state.dart';
 
 abstract class SessionRepository {
@@ -13,6 +13,8 @@ abstract class SessionRepository {
   });
 
   Future<void> signInWithGoogle();
+
+  Future<void> signInAnonymously();
 
   Future<void> createAccount({
     required String email,
@@ -45,6 +47,9 @@ class DemoSessionRepository implements SessionRepository {
   Future<void> signInWithGoogle() async {}
 
   @override
+  Future<void> signInAnonymously() async {}
+
+  @override
   Future<void> signOut() async {}
 }
 
@@ -52,9 +57,8 @@ class FirebaseSessionRepository implements SessionRepository {
   FirebaseSessionRepository({
     required FirebaseAuth auth,
     required GoogleSignIn googleSignIn,
-    required FirebaseRuntimeConfig config,
-  })  : _auth = auth,
-        _googleSignIn = googleSignIn;
+  }) : _auth = auth,
+       _googleSignIn = googleSignIn;
 
   final FirebaseAuth _auth;
   final GoogleSignIn _googleSignIn;
@@ -73,13 +77,16 @@ class FirebaseSessionRepository implements SessionRepository {
         );
       }
 
+      final isAnon = user.isAnonymous;
       return SessionState(
         userId: user.uid,
-        displayName: user.displayName ?? 'VibeRadar DJ',
-        email: user.email ?? 'unknown@viberadar.app',
-        providerLabel: user.providerData.isEmpty
-            ? 'Email'
-            : user.providerData.first.providerId,
+        displayName: isAnon ? 'Guest DJ' : (user.displayName ?? 'VibeRadar DJ'),
+        email: isAnon ? '' : (user.email ?? 'unknown@viberadar.app'),
+        providerLabel: isAnon
+            ? 'Guest'
+            : (user.providerData.isEmpty
+                  ? 'Email'
+                  : user.providerData.first.providerId),
         isAuthenticated: true,
         isDemo: false,
       );
@@ -110,24 +117,43 @@ class FirebaseSessionRepository implements SessionRepository {
   }
 
   @override
+  Future<void> signInAnonymously() async {
+    debugPrint('VIBERADAR: Signing in anonymously...');
+    await _auth.signInAnonymously();
+    debugPrint('VIBERADAR: Anonymous sign-in complete.');
+  }
+
+  @override
   Future<void> signInWithGoogle() async {
-    // Google Sign-In v7 API
-    final googleUser = await _googleSignIn.authenticate();
+    debugPrint('VIBERADAR: Starting Google Sign-In...');
+    try {
+      final googleUser = await _googleSignIn.authenticate();
+      debugPrint('VIBERADAR: Got Google user, fetching ID token...');
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null || idToken.isEmpty) {
+        debugPrint('VIBERADAR: No ID token returned!');
+        throw StateError(
+          'Google Sign-In did not return an ID token. '
+          'Check the Google client ID and Firebase Google provider setup.',
+        );
+      }
 
-    final authorization = await _googleSignIn.authorizationClient
-        .authorizationForScopes(<String>['email']);
-    if (authorization == null) return;
-
-    final credential = GoogleAuthProvider.credential(
-      accessToken: authorization.accessToken,
-    );
-
-    await _auth.signInWithCredential(credential);
+      debugPrint('VIBERADAR: Got ID token, signing into Firebase...');
+      final credential = GoogleAuthProvider.credential(idToken: idToken);
+      await _auth.signInWithCredential(credential);
+      debugPrint('VIBERADAR: Firebase sign-in complete!');
+    } catch (e, stack) {
+      debugPrint('VIBERADAR: Google Sign-In error: $e');
+      debugPrint('VIBERADAR: Stack: $stack');
+      rethrow;
+    }
   }
 
   @override
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
+    try {
+      await _googleSignIn.signOut();
+    } catch (_) {}
     await _auth.signOut();
   }
 }

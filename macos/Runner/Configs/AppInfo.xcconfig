@@ -12,3 +12,6 @@ PRODUCT_BUNDLE_IDENTIFIER = com.viberadar.viberadar
 
 // The copyright displayed in application information
 PRODUCT_COPYRIGHT = Copyright © 2026 com.viberadar. All rights reserved.
+
+// Development team for code signing
+DEVELOPMENT_TEAM = 36TZ8UKL8W
