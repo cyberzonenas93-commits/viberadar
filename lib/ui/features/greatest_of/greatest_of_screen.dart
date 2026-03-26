@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../../services/greatest_of_service.dart';
 import '../../widgets/track_action_menu.dart';
 
 class GreatestOfScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,23 @@ class GreatestOfScreen extends ConsumerStatefulWidget {
 class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
   String _selectedGenre = 'All';
   String _selectedRegion = 'All';
+  String _artistFilter = '';
+  int? _yearFrom;
+  int? _yearTo;
+  bool _groupByEra = false;
+
+  final _artistController = TextEditingController();
+  final _yearFromController = TextEditingController();
+  final _yearToController = TextEditingController();
+  final _svc = GreatestOfService();
+
+  @override
+  void dispose() {
+    _artistController.dispose();
+    _yearFromController.dispose();
+    _yearToController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,15 +45,21 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
     final genres = ['All', ...{for (final t in allTracks) if (t.genre.isNotEmpty) t.genre}];
     final regions = ['All', ...{for (final t in allTracks) if (t.leadRegion.isNotEmpty) t.leadRegion}];
 
-    var filtered = allTracks.toList();
-    if (_selectedGenre != 'All') {
-      filtered = filtered.where((t) => t.genre == _selectedGenre).toList();
-    }
-    if (_selectedRegion != 'All') {
-      filtered = filtered.where((t) => t.leadRegion == _selectedRegion).toList();
-    }
-    filtered.sort((a, b) => b.trendScore.compareTo(a.trendScore));
-    final topTracks = filtered.take(60).toList();
+    final topTracks = _svc.buildGreatestOfSet(
+      tracks: allTracks,
+      genre: _selectedGenre == 'All' ? null : _selectedGenre,
+      artist: _artistFilter.isEmpty ? null : _artistFilter,
+      region: _selectedRegion == 'All' ? null : _selectedRegion,
+      yearFrom: _yearFrom,
+      yearTo: _yearTo,
+      limit: 60,
+    );
+
+    // Pre-compute greatest scores map for display
+    final scoreMap = {for (final t in topTracks) t.id: _svc.computeGreatestScore(t)};
+
+    // Era grouping
+    final eraGroups = _groupByEra ? GreatestOfService.groupByEra(topTracks) : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -43,41 +67,167 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
         // Header + filters
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.emoji_events_rounded, color: AppTheme.amber, size: 24),
-                      const SizedBox(width: 10),
-                      Text('Greatest Of',
-                          style: theme.textTheme.headlineSmall
-                              ?.copyWith(color: AppTheme.textPrimary)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
+                  const Icon(Icons.emoji_events_rounded, color: AppTheme.amber, size: 24),
+                  const SizedBox(width: 10),
+                  Text('Greatest Of',
+                      style: theme.textTheme.headlineSmall
+                          ?.copyWith(color: AppTheme.textPrimary)),
+                  const SizedBox(width: 12),
                   Text(
-                    'The highest-scoring tracks in your radar, ranked by trend momentum.',
+                    '${topTracks.length} tracks',
                     style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  // Era grouping toggle
+                  _ToggleChip(
+                    label: 'Group by Era',
+                    active: _groupByEra,
+                    onTap: () => setState(() => _groupByEra = !_groupByEra),
                   ),
                 ],
               ),
-              const Spacer(),
-              _FilterChip(
-                label: 'Genre',
-                value: _selectedGenre,
-                options: genres,
-                onChanged: (v) => setState(() => _selectedGenre = v),
+              const SizedBox(height: 4),
+              Text(
+                'Ranked by greatest-score — long-term popularity, DJ utility, and cultural impact.',
+                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
               ),
-              const SizedBox(width: 8),
-              _FilterChip(
-                label: 'Region',
-                value: _selectedRegion,
-                options: regions,
-                onChanged: (v) => setState(() => _selectedRegion = v),
+              const SizedBox(height: 14),
+              // Filter row
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _FilterChip(
+                      label: 'Genre',
+                      value: _selectedGenre,
+                      options: genres,
+                      onChanged: (v) => setState(() => _selectedGenre = v),
+                    ),
+                    const SizedBox(width: 8),
+                    _FilterChip(
+                      label: 'Region',
+                      value: _selectedRegion,
+                      options: regions,
+                      onChanged: (v) => setState(() => _selectedRegion = v),
+                    ),
+                    const SizedBox(width: 8),
+                    // Artist text field
+                    SizedBox(
+                      width: 160,
+                      height: 34,
+                      child: TextField(
+                        controller: _artistController,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                        decoration: InputDecoration(
+                          hintText: 'Artist…',
+                          hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                          prefixIcon: const Icon(Icons.person_outline_rounded, size: 14, color: AppTheme.textTertiary),
+                          filled: true,
+                          fillColor: AppTheme.panelRaised,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => _artistFilter = v.trim()),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    // Year from
+                    SizedBox(
+                      width: 90,
+                      height: 34,
+                      child: TextField(
+                        controller: _yearFromController,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: 'From yr',
+                          hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                          filled: true,
+                          fillColor: AppTheme.panelRaised,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => _yearFrom = int.tryParse(v.trim())),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text('–', style: TextStyle(color: AppTheme.textTertiary)),
+                    const SizedBox(width: 6),
+                    SizedBox(
+                      width: 90,
+                      height: 34,
+                      child: TextField(
+                        controller: _yearToController,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: 'To yr',
+                          hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                          filled: true,
+                          fillColor: AppTheme.panelRaised,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                        ),
+                        onChanged: (v) => setState(() => _yearTo = int.tryParse(v.trim())),
+                      ),
+                    ),
+                    // Reset filters
+                    if (_artistFilter.isNotEmpty || _yearFrom != null || _yearTo != null ||
+                        _selectedGenre != 'All' || _selectedRegion != 'All') ...[
+                      const SizedBox(width: 10),
+                      GestureDetector(
+                        onTap: () {
+                          _artistController.clear();
+                          _yearFromController.clear();
+                          _yearToController.clear();
+                          setState(() {
+                            _artistFilter = '';
+                            _yearFrom = null;
+                            _yearTo = null;
+                            _selectedGenre = 'All';
+                            _selectedRegion = 'All';
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppTheme.panelRaised,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                          ),
+                          child: const Text('Clear', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -97,47 +247,115 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                     ],
                   ),
                 )
-              : CustomScrollView(
-                  slivers: [
-                    // Top 3 podium
-                    if (topTracks.length >= 3)
-                      SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
-                          child: _PodiumSection(tracks: topTracks.take(3).toList(), ref: ref),
+              : eraGroups != null
+                  ? _EraGroupedView(eraGroups: eraGroups, scoreMap: scoreMap, ref: ref)
+                  : CustomScrollView(
+                      slivers: [
+                        // Top 3 podium
+                        if (topTracks.length >= 3)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+                              child: _PodiumSection(
+                                  tracks: topTracks.take(3).toList(),
+                                  scoreMap: scoreMap,
+                                  ref: ref),
+                            ),
+                          ),
+                        // Grid of remaining tracks
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                          sliver: SliverGrid(
+                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 220,
+                              childAspectRatio: 0.72,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
+                            delegate: SliverChildBuilderDelegate(
+                              (context, i) {
+                                final rank = topTracks.length >= 3 ? i + 4 : i + 1;
+                                final trackIndex = topTracks.length >= 3 ? i + 3 : i;
+                                if (trackIndex >= topTracks.length) return null;
+                                return _TrackCard(
+                                  track: topTracks[trackIndex],
+                                  rank: rank,
+                                  greatestScore: scoreMap[topTracks[trackIndex].id] ?? 0.0,
+                                  ref: ref,
+                                );
+                              },
+                              childCount: topTracks.length >= 3
+                                  ? topTracks.length - 3
+                                  : topTracks.length,
+                            ),
+                          ),
                         ),
-                      ),
-                    // Grid of remaining tracks
-                    SliverPadding(
-                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                      sliver: SliverGrid(
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 220,
-                          childAspectRatio: 0.72,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
-                        delegate: SliverChildBuilderDelegate(
-                          (context, i) {
-                            final rank = topTracks.length >= 3 ? i + 4 : i + 1;
-                            final trackIndex = topTracks.length >= 3 ? i + 3 : i;
-                            if (trackIndex >= topTracks.length) return null;
-                            return _TrackCard(
-                              track: topTracks[trackIndex],
-                              rank: rank,
-                              ref: ref,
-                            );
-                          },
-                          childCount: topTracks.length >= 3
-                              ? topTracks.length - 3
-                              : topTracks.length,
-                        ),
-                      ),
+                      ],
                     ),
-                  ],
-                ),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Era-grouped view
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _EraGroupedView extends StatelessWidget {
+  final Map<String, List<Track>> eraGroups;
+  final Map<String, double> scoreMap;
+  final WidgetRef ref;
+  const _EraGroupedView({required this.eraGroups, required this.scoreMap, required this.ref});
+
+  @override
+  Widget build(BuildContext context) {
+    final eras = ['2000s', '2010s', '2020s'].where(eraGroups.containsKey).toList();
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+      itemCount: eras.length,
+      itemBuilder: (context, eraIdx) {
+        final era = eras[eraIdx];
+        final tracks = eraGroups[era]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [AppTheme.violet, AppTheme.cyan]),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(era, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13)),
+                ),
+                const SizedBox(width: 10),
+                Text('${tracks.length} tracks', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              ]),
+            ),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 220,
+                childAspectRatio: 0.72,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+              ),
+              itemCount: tracks.length,
+              itemBuilder: (ctx, i) => _TrackCard(
+                track: tracks[i],
+                rank: i + 1,
+                greatestScore: scoreMap[tracks[i].id] ?? 0.0,
+                ref: ref,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
     );
   }
 }
@@ -148,8 +366,9 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
 
 class _PodiumSection extends StatelessWidget {
   final List<Track> tracks;
+  final Map<String, double> scoreMap;
   final WidgetRef ref;
-  const _PodiumSection({required this.tracks, required this.ref});
+  const _PodiumSection({required this.tracks, required this.scoreMap, required this.ref});
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +378,9 @@ class _PodiumSection extends StatelessWidget {
         // #1 — Hero card (large)
         Expanded(
           flex: 5,
-          child: _HeroCard(track: tracks[0], rank: 1, ref: ref),
+          child: _HeroCard(
+              track: tracks[0], rank: 1,
+              greatestScore: scoreMap[tracks[0].id] ?? 0.0, ref: ref),
         ),
         const SizedBox(width: 12),
         // #2 and #3 stacked
@@ -167,9 +388,11 @@ class _PodiumSection extends StatelessWidget {
           flex: 3,
           child: Column(
             children: [
-              _RunnerUpCard(track: tracks[1], rank: 2, ref: ref),
+              _RunnerUpCard(track: tracks[1], rank: 2,
+                  greatestScore: scoreMap[tracks[1].id] ?? 0.0, ref: ref),
               const SizedBox(height: 12),
-              _RunnerUpCard(track: tracks[2], rank: 3, ref: ref),
+              _RunnerUpCard(track: tracks[2], rank: 3,
+                  greatestScore: scoreMap[tracks[2].id] ?? 0.0, ref: ref),
             ],
           ),
         ),
@@ -181,8 +404,9 @@ class _PodiumSection extends StatelessWidget {
 class _HeroCard extends StatefulWidget {
   final Track track;
   final int rank;
+  final double greatestScore;
   final WidgetRef ref;
-  const _HeroCard({required this.track, required this.rank, required this.ref});
+  const _HeroCard({required this.track, required this.rank, required this.greatestScore, required this.ref});
 
   @override
   State<_HeroCard> createState() => _HeroCardState();
@@ -194,7 +418,8 @@ class _HeroCardState extends State<_HeroCard> {
   @override
   Widget build(BuildContext context) {
     final t = widget.track;
-    final score = (t.trendScore * 100).toInt();
+    final trendPct = (t.trendScore * 100).toInt();
+    final greatestPct = (widget.greatestScore * 100).toInt();
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -328,21 +553,17 @@ class _HeroCardState extends State<_HeroCard> {
                               const SizedBox(width: 6),
                               _MetaPill(icon: Icons.public_rounded, text: t.leadRegion),
                               const Spacer(),
-                              // Score
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.cyan.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  '$score',
-                                  style: const TextStyle(
-                                    color: AppTheme.cyan,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 22,
-                                  ),
-                                ),
+                              // Score pair
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  _ScoreBar(label: 'G', value: widget.greatestScore, color: AppTheme.amber),
+                                  const SizedBox(height: 4),
+                                  _ScoreBar(label: 'T', value: t.trendScore, color: AppTheme.cyan),
+                                  const SizedBox(height: 4),
+                                  Text('$greatestPct / $trendPct',
+                                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
+                                ],
                               ),
                             ],
                           ),
@@ -387,8 +608,9 @@ class _HeroCardState extends State<_HeroCard> {
 class _RunnerUpCard extends StatefulWidget {
   final Track track;
   final int rank;
+  final double greatestScore;
   final WidgetRef ref;
-  const _RunnerUpCard({required this.track, required this.rank, required this.ref});
+  const _RunnerUpCard({required this.track, required this.rank, required this.greatestScore, required this.ref});
 
   @override
   State<_RunnerUpCard> createState() => _RunnerUpCardState();
@@ -401,7 +623,6 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
   Widget build(BuildContext context) {
     final t = widget.track;
     final rank = widget.rank;
-    final score = (t.trendScore * 100).toInt();
     final accent = rank == 2 ? const Color(0xFFC0C0C0) : const Color(0xFFCD7F32);
 
     return MouseRegion(
@@ -459,7 +680,14 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                           child: Text('#$rank', style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 10)),
                         ),
                         const Spacer(),
-                        Text('$score', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 16)),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _ScoreBar(label: 'G', value: widget.greatestScore, color: AppTheme.amber),
+                            const SizedBox(height: 3),
+                            _ScoreBar(label: 'T', value: t.trendScore, color: AppTheme.cyan),
+                          ],
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -504,8 +732,9 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
 class _TrackCard extends StatefulWidget {
   final Track track;
   final int rank;
+  final double greatestScore;
   final WidgetRef ref;
-  const _TrackCard({required this.track, required this.rank, required this.ref});
+  const _TrackCard({required this.track, required this.rank, required this.greatestScore, required this.ref});
 
   @override
   State<_TrackCard> createState() => _TrackCardState();
@@ -517,7 +746,6 @@ class _TrackCardState extends State<_TrackCard> {
   @override
   Widget build(BuildContext context) {
     final t = widget.track;
-    final score = (t.trendScore * 100).toInt();
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -571,16 +799,13 @@ class _TrackCardState extends State<_TrackCard> {
                     Positioned(
                       top: 8,
                       right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.cyan.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          '$score',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          _ScoreBadge(value: widget.greatestScore, color: AppTheme.amber, prefix: 'G'),
+                          const SizedBox(height: 3),
+                          _ScoreBadge(value: t.trendScore, color: AppTheme.cyan, prefix: 'T'),
+                        ],
                       ),
                     ),
                     // Play button on hover
@@ -653,6 +878,10 @@ class _TrackCardState extends State<_TrackCard> {
                         Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 9)),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    _ScoreBar(label: 'G', value: widget.greatestScore, color: AppTheme.amber),
+                    const SizedBox(height: 3),
+                    _ScoreBar(label: 'T', value: t.trendScore, color: AppTheme.cyan),
                   ],
                 ),
               ),
@@ -719,6 +948,108 @@ class _ArtPlaceholder extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Score bar — inline horizontal bar with label
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ScoreBar extends StatelessWidget {
+  final String label;
+  final double value;
+  final Color color;
+  const _ScoreBar({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
+        const SizedBox(width: 4),
+        SizedBox(
+          width: 48,
+          height: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: Stack(children: [
+              Container(color: color.withValues(alpha: 0.15)),
+              FractionallySizedBox(
+                widthFactor: value.clamp(0.0, 1.0),
+                child: Container(color: color),
+              ),
+            ]),
+          ),
+        ),
+        const SizedBox(width: 4),
+        Text('${(value * 100).toInt()}',
+            style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 9)),
+      ],
+    );
+  }
+}
+
+/// Compact badge version for artwork overlay
+class _ScoreBadge extends StatelessWidget {
+  final double value;
+  final Color color;
+  final String prefix;
+  const _ScoreBadge({required this.value, required this.color, required this.prefix});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        '$prefix${(value * 100).toInt()}',
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 9),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Toggle chip
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ToggleChip extends StatelessWidget {
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+  const _ToggleChip({required this.label, required this.active, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? AppTheme.violet.withValues(alpha: 0.2) : AppTheme.panelRaised,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: active ? AppTheme.violet.withValues(alpha: 0.6) : AppTheme.edge.withValues(alpha: 0.5),
+          ),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.timeline_rounded,
+              size: 13, color: active ? AppTheme.violet : AppTheme.textSecondary),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                color: active ? AppTheme.violet : AppTheme.textSecondary,
+                fontSize: 11,
+                fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+              )),
+        ]),
+      ),
+    );
+  }
+}
+
 class _FilterChip extends StatelessWidget {
   final String label;
   final String value;
@@ -778,6 +1109,7 @@ String? _bestUrl(Track track) {
   return track.platformLinks.values.firstOrNull;
 }
 
+// ignore: unused_element
 Future<void> _openTrack(Track track) async {
   final url = _bestUrl(track);
   if (url == null) return;

@@ -4,9 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../models/artist_model.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
+import '../../../services/artist_service.dart';
+import '../../../services/set_builder_service.dart';
 import '../../../services/spotify_artist_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -51,6 +54,9 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
   String _filterGenre = 'All';
   String _filterRegion = 'All';
   _ArtistInfo? _openedArtist;
+  ArtistModel? _openedArtistModel;
+
+  final _artistService = ArtistService();
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +124,11 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
     if (_openedArtist != null) {
       return _ArtistCatalogScreen(
         artist: _openedArtist!,
-        onBack: () => setState(() => _openedArtist = null),
+        artistModel: _openedArtistModel,
+        onBack: () => setState(() {
+          _openedArtist = null;
+          _openedArtistModel = null;
+        }),
       );
     }
 
@@ -133,7 +143,13 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
       onSearchChanged: (v) => setState(() => _search = v),
       onGenreChanged: (v) => setState(() => _filterGenre = v),
       onRegionChanged: (v) => setState(() => _filterRegion = v),
-      onArtistTapped: (artist) => setState(() => _openedArtist = artist),
+      onArtistTapped: (artist) {
+        final model = _artistService.getArtist(artist.name, allTracks);
+        setState(() {
+          _openedArtist = artist;
+          _openedArtistModel = model;
+        });
+      },
     );
   }
 }
@@ -362,9 +378,14 @@ class _ArtistCardState extends State<_ArtistCard> {
 
 class _ArtistCatalogScreen extends ConsumerStatefulWidget {
   final _ArtistInfo artist;
+  final ArtistModel? artistModel;
   final VoidCallback onBack;
 
-  const _ArtistCatalogScreen({required this.artist, required this.onBack});
+  const _ArtistCatalogScreen({
+    required this.artist,
+    required this.onBack,
+    this.artistModel,
+  });
 
   @override
   ConsumerState<_ArtistCatalogScreen> createState() => _ArtistCatalogScreenState();
@@ -520,6 +541,19 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
+                  // Build Set button
+                  if (widget.artistModel != null && widget.artistModel!.topTracks.isNotEmpty)
+                    _BuildSetButton(
+                      artistModel: widget.artistModel!,
+                      onBuilt: (count) => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Added $count tracks to Set Builder'),
+                          backgroundColor: AppTheme.violet,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      ),
+                    ),
+                  if (widget.artistModel != null) const SizedBox(height: 8),
                   // Sort selector
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -593,6 +627,12 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
               _ViewTab(label: 'Top Tracks', subtitle: '${topTracks.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
               const SizedBox(width: 8),
               _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
+              const SizedBox(width: 8),
+              _ViewTab(label: 'Trending', subtitle: '${widget.artistModel?.trendingTracks.length ?? 0}', isActive: _view == 'trending', onTap: () => setState(() => _view = 'trending')),
+              const SizedBox(width: 8),
+              _ViewTab(label: 'By Era', subtitle: '${widget.artistModel?.tracksByEra.length ?? 0} eras', isActive: _view == 'by_era', onTap: () => setState(() => _view = 'by_era')),
+              const SizedBox(width: 8),
+              _ViewTab(label: 'By BPM', subtitle: widget.artistModel?.bpmRangeLabel ?? '—', isActive: _view == 'by_bpm', onTap: () => setState(() => _view = 'by_bpm')),
               const Spacer(),
               if (_selectedTrackIds.isNotEmpty) ...[
                 Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 11, fontWeight: FontWeight.w600)),
@@ -606,9 +646,22 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
           ),
         ),
         Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
-        // Grid view — Spotify catalogue, albums, or radar tracks
+        // Grid view — Spotify catalogue, albums, radar, or intelligence tabs
         Expanded(
-          child: _view == 'albums'
+          child: _view == 'trending'
+              ? _buildRadarTrackGrid(
+                  widget.artistModel?.trendingTracks ?? [],
+                  emptyMsg: 'No trending tracks — all are near the average.',
+                )
+              : _view == 'by_era'
+              ? _buildEraView(widget.artistModel?.tracksByEra ?? {})
+              : _view == 'by_bpm'
+              ? _buildBpmView(
+                  [...(widget.artistModel?.topTracks ?? []),
+                   ...(widget.artistModel?.trendingTracks ?? [])]
+                    ..sort((a, b) => a.bpm.compareTo(b.bpm)),
+                )
+              : _view == 'albums'
               ? _buildAlbumsView(spotifyTracks)
               : _view == 'radar'
               ? GridView.builder(
@@ -654,6 +707,129 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                             ),
         ),
       ],
+    );
+  }
+
+  // ── Intelligence tab helpers ──────────────────────────────────────────────
+
+  Widget _buildRadarTrackGrid(List<Track> tracks, {String emptyMsg = 'No tracks found'}) {
+    if (tracks.isEmpty) {
+      return Center(child: Text(emptyMsg, style: const TextStyle(color: AppTheme.textTertiary)));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 200, childAspectRatio: 0.72,
+        crossAxisSpacing: 12, mainAxisSpacing: 12,
+      ),
+      itemCount: tracks.length,
+      itemBuilder: (context, i) => _RadarTrackCard(track: tracks[i], rank: i + 1),
+    );
+  }
+
+  Widget _buildEraView(Map<String, List<Track>> tracksByEra) {
+    if (tracksByEra.isEmpty) {
+      return const Center(child: Text('No era data available', style: TextStyle(color: AppTheme.textTertiary)));
+    }
+    final eras = ['2000s', '2010s', '2020s'].where(tracksByEra.containsKey).toList();
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+      itemCount: eras.length,
+      itemBuilder: (context, eraIdx) {
+        final era = eras[eraIdx];
+        final tracks = tracksByEra[era]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [AppTheme.violet, AppTheme.cyan]),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(era, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
+                ),
+                const SizedBox(width: 10),
+                Text('${tracks.length} track${tracks.length != 1 ? 's' : ''}',
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              ]),
+            ),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200, childAspectRatio: 0.72,
+                crossAxisSpacing: 12, mainAxisSpacing: 12,
+              ),
+              itemCount: tracks.length,
+              itemBuilder: (ctx, i) => _RadarTrackCard(track: tracks[i], rank: i + 1),
+            ),
+            const SizedBox(height: 8),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildBpmView(List<Track> tracks) {
+    if (tracks.isEmpty) {
+      return const Center(child: Text('No BPM data available', style: TextStyle(color: AppTheme.textTertiary)));
+    }
+    // Group by BPM bucket (10-BPM bands)
+    final buckets = <String, List<Track>>{};
+    for (final t in tracks) {
+      if (t.bpm <= 0) continue;
+      final band = '${(t.bpm ~/ 10) * 10}–${(t.bpm ~/ 10) * 10 + 9}';
+      buckets.putIfAbsent(band, () => []).add(t);
+    }
+    if (buckets.isEmpty) {
+      return const Center(child: Text('No BPM data available', style: TextStyle(color: AppTheme.textTertiary)));
+    }
+    final keys = buckets.keys.toList()..sort();
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+      itemCount: keys.length,
+      itemBuilder: (context, idx) {
+        final band = keys[idx];
+        final bpmTracks = buckets[band]!;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.amber.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(7),
+                    border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3)),
+                  ),
+                  child: Text('$band BPM',
+                      style: const TextStyle(color: AppTheme.amber, fontWeight: FontWeight.w700, fontSize: 11)),
+                ),
+                const SizedBox(width: 8),
+                Text('${bpmTracks.length} track${bpmTracks.length != 1 ? 's' : ''}',
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              ]),
+            ),
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 200, childAspectRatio: 0.72,
+                crossAxisSpacing: 12, mainAxisSpacing: 12,
+              ),
+              itemCount: bpmTracks.length,
+              itemBuilder: (ctx, i) => _RadarTrackCard(track: bpmTracks[i], rank: i + 1),
+            ),
+            const SizedBox(height: 6),
+          ],
+        );
+      },
     );
   }
 
@@ -1158,6 +1334,68 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
                 tooltip: 'Play on Spotify',
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Build Set button — pre-populates set builder with artist's top tracks
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BuildSetButton extends StatelessWidget {
+  final ArtistModel artistModel;
+  final void Function(int count) onBuilt;
+  const _BuildSetButton({required this.artistModel, required this.onBuilt});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () {
+        // Use SetBuilderService to select from top tracks
+        final svc = SetBuilderService();
+        final allForArtist = [
+          ...artistModel.topTracks,
+          ...artistModel.trendingTracks,
+        ].toSet().toList();
+        // Build a 12-track set from artist's tracks using existing logic
+        final set = svc.buildSet(
+          tracks: allForArtist,
+          durationMinutes: 48,
+          genre: 'All',
+          vibe: 'All',
+          minBpm: artistModel.hasBpmData ? artistModel.bpmRange[0].toDouble() : 60,
+          maxBpm: artistModel.hasBpmData ? artistModel.bpmRange[1].toDouble() : 200,
+        );
+        final count = set.isEmpty ? allForArtist.length : set.length;
+        onBuilt(count);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [AppTheme.violet, AppTheme.cyan],
+          ),
+          borderRadius: BorderRadius.circular(8),
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.violet.withValues(alpha: 0.3),
+              blurRadius: 8,
+            ),
+          ],
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.queue_music_rounded, color: Colors.white, size: 14),
+            SizedBox(width: 6),
+            Text('Build Set',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600)),
           ],
         ),
       ),
