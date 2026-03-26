@@ -10,6 +10,7 @@ import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
 import '../../../services/artist_service.dart';
 import '../../../services/set_builder_service.dart';
+import '../../../services/apple_music_artist_service.dart';
 import '../../../services/spotify_artist_service.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -394,16 +395,22 @@ class _ArtistCatalogScreen extends ConsumerStatefulWidget {
 class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   String _sortBy = 'score';
   String _view = 'all'; // 'all', 'top', 'radar'
+  String _platform = 'spotify'; // 'spotify', 'apple'
   final Set<String> _selectedTrackIds = {};
   final _spotifyService = SpotifyArtistService();
+  final _appleMusicService = AppleMusicArtistService();
   List<SpotifyTrackInfo>? _spotifyCatalogue;
+  List<AppleMusicTrack>? _appleMusicTracks;
   bool _loadingCatalogue = false;
+  bool _loadingApple = false;
   String? _catalogueError;
+  String? _appleError;
 
   @override
   void initState() {
     super.initState();
     _loadSpotifyCatalogue();
+    _loadAppleMusic();
   }
 
   Future<void> _loadSpotifyCatalogue() async {
@@ -421,6 +428,26 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
         setState(() {
           _catalogueError = e.toString();
           _loadingCatalogue = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadAppleMusic() async {
+    setState(() { _loadingApple = true; _appleError = null; });
+    try {
+      final tracks = await _appleMusicService.getTopTracksForArtist(widget.artist.name);
+      if (mounted) {
+        setState(() {
+          _appleMusicTracks = tracks;
+          _loadingApple = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _appleError = e.toString();
+          _loadingApple = false;
         });
       }
     }
@@ -615,40 +642,75 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
             ],
           ),
         ),
-        // View tabs
+        // Platform switcher + view tabs
         Container(
           padding: const EdgeInsets.fromLTRB(28, 10, 28, 8),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displaySpotify.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
-              const SizedBox(width: 8),
-              _ViewTab(label: 'Albums', subtitle: _loadingCatalogue ? '...' : '${_albumGroups(spotifyTracks).length}', isActive: _view == 'albums', onTap: () => setState(() => _view = 'albums')),
-              const SizedBox(width: 8),
-              _ViewTab(label: 'Top Tracks', subtitle: '${topTracks.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
-              const SizedBox(width: 8),
-              _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
-              const SizedBox(width: 8),
-              _ViewTab(label: 'Trending', subtitle: '${widget.artistModel?.trendingTracks.length ?? 0}', isActive: _view == 'trending', onTap: () => setState(() => _view = 'trending')),
-              const SizedBox(width: 8),
-              _ViewTab(label: 'By Era', subtitle: '${widget.artistModel?.tracksByEra.length ?? 0} eras', isActive: _view == 'by_era', onTap: () => setState(() => _view = 'by_era')),
-              const SizedBox(width: 8),
-              _ViewTab(label: 'By BPM', subtitle: widget.artistModel?.bpmRangeLabel ?? '—', isActive: _view == 'by_bpm', onTap: () => setState(() => _view = 'by_bpm')),
-              const Spacer(),
-              if (_selectedTrackIds.isNotEmpty) ...[
-                Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 11, fontWeight: FontWeight.w600)),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => setState(() => _selectedTrackIds.clear()),
-                  child: const Text('Clear', style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+              // Platform selector
+              Row(
+                children: [
+                  _PlatformTab(
+                    label: 'Spotify',
+                    icon: Icons.music_note_rounded,
+                    color: const Color(0xFF1DB954),
+                    isActive: _platform == 'spotify',
+                    isLoading: _loadingCatalogue,
+                    onTap: () => setState(() { _platform = 'spotify'; _view = 'all'; }),
+                  ),
+                  const SizedBox(width: 8),
+                  _PlatformTab(
+                    label: 'Apple Music',
+                    icon: Icons.apple_rounded,
+                    color: const Color(0xFFFC3C44),
+                    isActive: _platform == 'apple',
+                    isLoading: _loadingApple,
+                    onTap: () => setState(() { _platform = 'apple'; _view = 'all'; }),
+                  ),
+                  const Spacer(),
+                  if (_selectedTrackIds.isNotEmpty) ...[
+                    Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 11, fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => setState(() => _selectedTrackIds.clear()),
+                      child: const Text('Clear', style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Sub-view tabs (only for Spotify)
+              if (_platform == 'spotify')
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displaySpotify.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
+                      const SizedBox(width: 8),
+                      _ViewTab(label: 'Albums', subtitle: _loadingCatalogue ? '...' : '${_albumGroups(spotifyTracks).length}', isActive: _view == 'albums', onTap: () => setState(() => _view = 'albums')),
+                      const SizedBox(width: 8),
+                      _ViewTab(label: 'Top Tracks', subtitle: '${topTracks.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
+                      const SizedBox(width: 8),
+                      _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
+                      const SizedBox(width: 8),
+                      _ViewTab(label: 'Trending', subtitle: '${widget.artistModel?.trendingTracks.length ?? 0}', isActive: _view == 'trending', onTap: () => setState(() => _view = 'trending')),
+                      const SizedBox(width: 8),
+                      _ViewTab(label: 'By Era', subtitle: '${widget.artistModel?.tracksByEra.length ?? 0} eras', isActive: _view == 'by_era', onTap: () => setState(() => _view = 'by_era')),
+                      const SizedBox(width: 8),
+                      _ViewTab(label: 'By BPM', subtitle: widget.artistModel?.bpmRangeLabel ?? '—', isActive: _view == 'by_bpm', onTap: () => setState(() => _view = 'by_bpm')),
+                    ],
+                  ),
                 ),
-              ],
             ],
           ),
         ),
         Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
-        // Grid view — Spotify catalogue, albums, radar, or intelligence tabs
+        // Content area
         Expanded(
-          child: _view == 'trending'
+          child: _platform == 'apple'
+              ? _buildAppleMusicView()
+              : _view == 'trending'
               ? _buildRadarTrackGrid(
                   widget.artistModel?.trendingTracks ?? [],
                   emptyMsg: 'No trending tracks — all are near the average.',
@@ -707,6 +769,39 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                             ),
         ),
       ],
+    );
+  }
+
+  // ── Apple Music view ─────────────────────────────────────────────────────
+
+  Widget _buildAppleMusicView() {
+    if (_loadingApple) {
+      return const Center(child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(color: Color(0xFFFC3C44)),
+          SizedBox(height: 12),
+          Text('Loading from Apple Music...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        ],
+      ));
+    }
+    final tracks = _appleMusicTracks ?? [];
+    if (_appleError != null && tracks.isEmpty) {
+      return Center(child: Text('Apple Music unavailable', style: TextStyle(color: AppTheme.textTertiary)));
+    }
+    if (tracks.isEmpty) {
+      return const Center(child: Text('No Apple Music tracks found', style: TextStyle(color: AppTheme.textTertiary)));
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 200,
+        childAspectRatio: 0.72,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+      ),
+      itemCount: tracks.length,
+      itemBuilder: (context, i) => _AppleMusicTrackCard(track: tracks[i], rank: i + 1),
     );
   }
 
@@ -1404,6 +1499,165 @@ class _BuildSetButton extends StatelessWidget {
 }
 
 // View tab widget
+class _PlatformTab extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final bool isActive;
+  final bool isLoading;
+  final VoidCallback onTap;
+  const _PlatformTab({required this.label, required this.icon, required this.color, required this.isActive, required this.isLoading, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? color.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: isActive ? color.withValues(alpha: 0.4) : AppTheme.edge.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: isActive ? color : AppTheme.textTertiary, size: 14),
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(color: isActive ? color : AppTheme.textSecondary, fontSize: 12, fontWeight: isActive ? FontWeight.w700 : FontWeight.w400)),
+            if (isLoading) ...[
+              const SizedBox(width: 6),
+              SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: color)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AppleMusicTrackCard extends StatefulWidget {
+  final AppleMusicTrack track;
+  final int rank;
+  const _AppleMusicTrackCard({required this.track, required this.rank});
+
+  @override
+  State<_AppleMusicTrackCard> createState() => _AppleMusicTrackCardState();
+}
+
+class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    const appleRed = Color(0xFFFC3C44);
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () async {
+          if (t.appleUrl != null) {
+            final uri = Uri.tryParse(t.appleUrl!);
+            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      child: SizedBox.expand(
+                        child: t.artworkUrl != null
+                            ? Image.network(t.artworkUrl!, fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => _ArtworkPlaceholder())
+                            : _ArtworkPlaceholder(),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8, left: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(6)),
+                        child: Text('#${widget.rank}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 10)),
+                      ),
+                    ),
+                    Positioned(
+                      top: 8, right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(color: appleRed.withValues(alpha: 0.9), shape: BoxShape.circle),
+                        child: const Icon(Icons.apple_rounded, color: Colors.white, size: 12),
+                      ),
+                    ),
+                    if (_hovered)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 44, height: 44,
+                              decoration: BoxDecoration(
+                                color: appleRed, shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: appleRed.withValues(alpha: 0.5), blurRadius: 16)],
+                              ),
+                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(t.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(t.albumName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    Text(t.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ArtworkPlaceholder extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppTheme.edge, AppTheme.panelRaised]),
+      ),
+      child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
+    );
+  }
+}
+
 class _ViewTab extends StatelessWidget {
   final String label;
   final String subtitle;

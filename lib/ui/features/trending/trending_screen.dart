@@ -1,7 +1,6 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
@@ -283,17 +282,4 @@ class _FilterChip extends StatelessWidget {
       ),
     );
   }
-}
-
-Future<void> _openTrack(Track track) async {
-  const priority = ['spotify', 'apple', 'youtube', 'deezer', 'soundcloud', 'audius'];
-  String? url;
-  for (final key in priority) {
-    final u = track.platformLinks[key];
-    if (u != null && u.isNotEmpty) { url = u; break; }
-  }
-  url ??= track.platformLinks.values.firstOrNull;
-  if (url == null) return;
-  final uri = Uri.tryParse(url);
-  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
 }

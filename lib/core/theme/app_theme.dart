@@ -3,16 +3,16 @@ import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Base palette
-  static const Color ink = Color(0xFF0A0D1A);
-  static const Color panel = Color(0xFF12162B);
-  static const Color panelRaised = Color(0xFF1A1F38);
+  static const Color ink = Color(0xFF080914);
+  static const Color panel = Color(0xFF111425);
+  static const Color panelRaised = Color(0xFF191D33);
   static const Color surface = Color(0xFF1E2340);
-  static const Color edge = Color(0xFF2A3155);
+  static const Color edge = Color(0xFF272D4E);
 
   // Accent palette
-  static const Color cyan = Color(0xFF00D4FF);
-  static const Color violet = Color(0xFF8B5CF6);
-  static const Color pink = Color(0xFFFF4D8A);
+  static const Color cyan = Color(0xFF3AD7FF);
+  static const Color violet = Color(0xFF8F6CFF);
+  static const Color pink = Color(0xFFFF4DA6);
   static const Color lime = Color(0xFF4ADE80);
   static const Color amber = Color(0xFFFBBF24);
   static const Color orange = Color(0xFFFB923C);

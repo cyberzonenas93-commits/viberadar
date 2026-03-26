@@ -774,9 +774,9 @@ class _TrackCardState extends State<_TrackCard> {
                             ? CachedNetworkImage(
                                 imageUrl: t.artworkUrl,
                                 fit: BoxFit.cover,
-                                errorWidget: (_, e, s) => _ArtPlaceholder(size: double.infinity, rounded: false),
+                                errorWidget: (_, e, s) => _ArtPlaceholder(size: 120, rounded: false),
                               )
-                            : _ArtPlaceholder(size: double.infinity, rounded: false),
+                            : _ArtPlaceholder(size: 120, rounded: false),
                       ),
                     ),
                     // Rank badge
