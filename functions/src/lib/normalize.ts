@@ -199,6 +199,7 @@ export function mergeSignalsIntoTracks(
       }),
       trend_history: history.slice(-7),
       source_count: entry.signals.length,
+      sources: Array.from(new Set(entry.signals.map((s) => s.source))).sort(),
     } satisfies UnifiedTrackRecord;
   });
 }

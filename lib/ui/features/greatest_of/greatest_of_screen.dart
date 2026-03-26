@@ -52,7 +52,7 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
       region: _selectedRegion == 'All' ? null : _selectedRegion,
       yearFrom: _yearFrom,
       yearTo: _yearTo,
-      limit: 60,
+      limit: 200,
     );
 
     // Pre-compute greatest scores map for display

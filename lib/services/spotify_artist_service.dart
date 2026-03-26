@@ -39,6 +39,45 @@ class SpotifyArtistService {
     return null;
   }
 
+  /// Search Spotify for tracks matching [query]. Returns up to [limit] results.
+  Future<List<SpotifyTrackInfo>> searchTracks(String query, {int limit = 20}) async {
+    final token = await _getToken();
+    if (token == null) return [];
+    try {
+      final response = await http.get(
+        Uri.parse('https://api.spotify.com/v1/search?q=${Uri.encodeComponent(query)}&type=track&limit=$limit&market=US'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body);
+      final items = data['tracks']?['items'] as List? ?? [];
+      return _parseTracks(items);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Search for artists by name, returns up to 20 results.
+  Future<List<SpotifyArtistResult>> searchArtistsByName(String query) async {
+    final token = await _getToken();
+    if (token == null) return [];
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/search?q=${Uri.encodeComponent(query)}&type=artist&limit=20'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) return [];
+    final data = jsonDecode(response.body);
+    final items = data['artists']?['items'] as List? ?? [];
+    return items.map((a) => SpotifyArtistResult(
+      id: a['id'] ?? '',
+      name: a['name'] ?? 'Unknown',
+      imageUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
+      genres: (a['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
+      followers: a['followers']?['total'] as int? ?? 0,
+      popularity: a['popularity'] as int? ?? 0,
+    )).toList();
+  }
+
   /// Search for a Spotify artist by name, return the best match artist ID.
   Future<String?> findArtistId(String artistName) async {
     final token = await _getToken();
@@ -187,6 +226,77 @@ class SpotifyArtistService {
     return allTracks.map((t) => t.copyWith(isTopTrack: topIds.contains(t.id))).toList();
   }
 
+  /// Get artist profile (name, images, genres, followers, popularity).
+  Future<SpotifyArtistProfile?> getArtistProfile(String artistId) async {
+    final token = await _getToken();
+    if (token == null) return null;
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/artists/$artistId'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) return null;
+    final data = jsonDecode(response.body);
+    return SpotifyArtistProfile(
+      id: data['id'] ?? '',
+      name: data['name'] ?? '',
+      imageUrl: (data['images'] as List?)?.firstOrNull?['url'] as String?,
+      genres: (data['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
+      followers: data['followers']?['total'] as int? ?? 0,
+      popularity: data['popularity'] as int? ?? 0,
+    );
+  }
+
+  /// Get full artist profile by searching name first.
+  Future<SpotifyArtistProfile?> getArtistProfileByName(String name) async {
+    final id = await findArtistId(name);
+    if (id == null) return null;
+    return getArtistProfile(id);
+  }
+
+  /// Get artists related to a given artist ID.
+  Future<List<SpotifyArtistProfile>> getRelatedArtists(String artistId) async {
+    final token = await _getToken();
+    if (token == null) return [];
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/artists/$artistId/related-artists'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) return [];
+    final data = jsonDecode(response.body);
+    final items = data['artists'] as List? ?? [];
+    return items.map((a) => SpotifyArtistProfile(
+      id: a['id'] ?? '',
+      name: a['name'] ?? '',
+      imageUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
+      genres: (a['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
+      followers: a['followers']?['total'] as int? ?? 0,
+      popularity: a['popularity'] as int? ?? 0,
+    )).toList();
+  }
+
+  /// Get the most recent album/single for an artist.
+  Future<SpotifyAlbumInfo?> getLatestRelease(String artistId) async {
+    final token = await _getToken();
+    if (token == null) return null;
+    final response = await http.get(
+      Uri.parse('https://api.spotify.com/v1/artists/$artistId/albums?include_groups=album,single&limit=1&market=US'),
+      headers: {'Authorization': 'Bearer $token'},
+    );
+    if (response.statusCode != 200) return null;
+    final data = jsonDecode(response.body);
+    final items = data['items'] as List? ?? [];
+    if (items.isEmpty) return null;
+    final album = items[0];
+    return SpotifyAlbumInfo(
+      id: album['id'],
+      name: album['name'],
+      type: album['album_type'] ?? 'album',
+      imageUrl: (album['images'] as List?)?.firstOrNull?['url'],
+      releaseDate: album['release_date'],
+      totalTracks: album['total_tracks'] ?? 0,
+    );
+  }
+
   List<SpotifyTrackInfo> _parseTracks(List items) {
     return items.map((t) {
       final albumArt = (t['album']?['images'] as List?)?.firstOrNull?['url'];
@@ -269,5 +379,41 @@ class SpotifyAlbumInfo {
     this.imageUrl,
     this.releaseDate,
     this.totalTracks = 0,
+  });
+}
+
+class SpotifyArtistResult {
+  final String id;
+  final String name;
+  final String? imageUrl;
+  final List<String> genres;
+  final int followers;
+  final int popularity;
+
+  const SpotifyArtistResult({
+    required this.id,
+    required this.name,
+    this.imageUrl,
+    this.genres = const [],
+    this.followers = 0,
+    this.popularity = 0,
+  });
+}
+
+class SpotifyArtistProfile {
+  final String id;
+  final String name;
+  final String? imageUrl;
+  final List<String> genres;
+  final int followers;
+  final int popularity;
+
+  const SpotifyArtistProfile({
+    required this.id,
+    required this.name,
+    this.imageUrl,
+    this.genres = const [],
+    this.followers = 0,
+    this.popularity = 0,
   });
 }

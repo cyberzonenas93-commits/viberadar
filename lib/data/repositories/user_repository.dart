@@ -28,6 +28,24 @@ abstract class UserRepository {
     required String fallbackName,
     required String region,
   });
+
+  Future<void> followArtist({
+    required String userId,
+    required String fallbackName,
+    required String artistName,
+  });
+
+  Future<void> unfollowArtist({
+    required String userId,
+    required String fallbackName,
+    required String artistName,
+  });
+
+  Future<void> setFollowedArtists({
+    required String userId,
+    required String fallbackName,
+    required List<String> artists,
+  });
 }
 
 class MockUserRepository implements UserRepository {
@@ -70,6 +88,41 @@ class MockUserRepository implements UserRepository {
     required String region,
   }) async {
     _emit(_getOrCreate(userId, fallbackName).copyWith(preferredRegion: region));
+  }
+
+  @override
+  Future<void> followArtist({
+    required String userId,
+    required String fallbackName,
+    required String artistName,
+  }) async {
+    final profile = _getOrCreate(userId, fallbackName);
+    final current = profile.followedArtists.toList();
+    if (!current.contains(artistName)) {
+      current.add(artistName);
+    }
+    _emit(profile.copyWith(followedArtists: current));
+  }
+
+  @override
+  Future<void> unfollowArtist({
+    required String userId,
+    required String fallbackName,
+    required String artistName,
+  }) async {
+    final profile = _getOrCreate(userId, fallbackName);
+    final current = profile.followedArtists.where((a) => a != artistName).toList();
+    _emit(profile.copyWith(followedArtists: current));
+  }
+
+  @override
+  Future<void> setFollowedArtists({
+    required String userId,
+    required String fallbackName,
+    required List<String> artists,
+  }) async {
+    final profile = _getOrCreate(userId, fallbackName);
+    _emit(profile.copyWith(followedArtists: List<String>.from(artists)));
   }
 
   @override
@@ -176,6 +229,45 @@ class FirestoreUserRepository implements UserRepository {
     );
     await docRef.set(
       profile.copyWith(preferredRegion: region).toMap(),
+      SetOptions(merge: true),
+    );
+  }
+
+  @override
+  Future<void> followArtist({
+    required String userId,
+    required String fallbackName,
+    required String artistName,
+  }) async {
+    final docRef = _firestore.collection('users').doc(userId);
+    await docRef.set(
+      {'followed_artists': FieldValue.arrayUnion([artistName])},
+      SetOptions(merge: true),
+    );
+  }
+
+  @override
+  Future<void> unfollowArtist({
+    required String userId,
+    required String fallbackName,
+    required String artistName,
+  }) async {
+    final docRef = _firestore.collection('users').doc(userId);
+    await docRef.set(
+      {'followed_artists': FieldValue.arrayRemove([artistName])},
+      SetOptions(merge: true),
+    );
+  }
+
+  @override
+  Future<void> setFollowedArtists({
+    required String userId,
+    required String fallbackName,
+    required List<String> artists,
+  }) async {
+    final docRef = _firestore.collection('users').doc(userId);
+    await docRef.set(
+      {'followed_artists': artists},
       SetOptions(merge: true),
     );
   }

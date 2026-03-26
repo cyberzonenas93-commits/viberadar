@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../services/spotify_artist_service.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onComplete});
 
-  final VoidCallback onComplete;
+  final void Function(List<String> artists) onComplete;
 
   @override
   State<OnboardingScreen> createState() => _OnboardingScreenState();
@@ -17,6 +20,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
   final _pageController = PageController();
   int _currentPage = 0;
+  bool _showingArtistPicker = false;
   late final AnimationController _bgController;
 
   static const _pages = <_OnboardingPage>[
@@ -70,6 +74,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    if (_showingArtistPicker) {
+      return Scaffold(
+        backgroundColor: AppTheme.ink,
+        body: _OnboardingArtistPicker(
+          onComplete: widget.onComplete,
+          onSkip: () => widget.onComplete(const []),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.ink,
       body: Stack(
@@ -97,7 +111,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(0, 12, 20, 0),
                     child: TextButton(
-                      onPressed: widget.onComplete,
+                      onPressed: () => widget.onComplete(const []),
                       child: Text(
                         'Skip',
                         style: theme.textTheme.labelLarge?.copyWith(
@@ -159,12 +173,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         }),
                       ),
                       const Spacer(),
-                      // Next / Get Started button
+                      // Next / Choose Artists button
                       _currentPage == _pages.length - 1
                           ? FilledButton.icon(
-                              onPressed: widget.onComplete,
+                              onPressed: () =>
+                                  setState(() => _showingArtistPicker = true),
                               icon: const Icon(Icons.arrow_forward_rounded),
-                              label: const Text('Get Started'),
+                              label: const Text('Choose Artists'),
                               style: FilledButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 24,
@@ -192,6 +207,392 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                             ),
                     ],
                   ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Onboarding artist picker ──────────────────────────────────────────────────
+
+class _OnboardingArtistPicker extends StatefulWidget {
+  const _OnboardingArtistPicker({
+    required this.onComplete,
+    required this.onSkip,
+  });
+  final void Function(List<String> artists) onComplete;
+  final VoidCallback onSkip;
+
+  @override
+  State<_OnboardingArtistPicker> createState() =>
+      _OnboardingArtistPickerState();
+}
+
+class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
+  final _searchCtrl = TextEditingController();
+  final _spotify = SpotifyArtistService();
+  final Set<String> _selected = {};
+  List<SpotifyArtistResult> _searchResults = [];
+  bool _searching = false;
+  Timer? _debounce;
+
+  static const _popular = [
+    'Drake',
+    'Kendrick Lamar',
+    'Bad Bunny',
+    'The Weeknd',
+    'Taylor Swift',
+    'Asake',
+    'Wizkid',
+    'Burna Boy',
+    'Davido',
+    'Fireboy DML',
+    'Rema',
+    'Tems',
+    'Ayra Starr',
+    'Ckay',
+    'Beyoncé',
+    'SZA',
+    'Doja Cat',
+    'Cardi B',
+    'Nicki Minaj',
+    'Travis Scott',
+    'Future',
+    'Lil Baby',
+    'Gunna',
+    'J. Cole',
+    'Nas',
+    'Jay-Z',
+    'Kanye West',
+    'Tyler the Creator',
+    'Frank Ocean',
+    'Bryson Tiller',
+    'H.E.R.',
+    'Jhené Aiko',
+    'Summer Walker',
+    'Chris Brown',
+    'Usher',
+    'Brent Faiyaz',
+    'PartyNextDoor',
+    'Headie One',
+    'Central Cee',
+    'Dave',
+    'Stormzy',
+    'AJ Tracey',
+    'Fivio Foreign',
+    'Lil Durk',
+    'Rod Wave',
+    'Morgan Wallen',
+    'Luke Combs',
+    'Zach Bryan',
+    'Peso Pluma',
+    'Feid',
+    'J Balvin',
+    'Maluma',
+    'Daddy Yankee',
+    'Farruko',
+    'Ozuna',
+  ];
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    _debounce?.cancel();
+    if (query.length < 2) {
+      setState(() {
+        _searchResults = [];
+        _searching = false;
+      });
+      return;
+    }
+    _debounce = Timer(const Duration(milliseconds: 400), () async {
+      if (!mounted) return;
+      setState(() => _searching = true);
+      try {
+        final results = await _spotify.searchArtistsByName(query);
+        if (mounted) {
+          setState(() {
+            _searchResults = results;
+            _searching = false;
+          });
+        }
+      } catch (_) {
+        if (mounted) setState(() => _searching = false);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final showSearch = _searchCtrl.text.length >= 2;
+    final displayItems =
+        showSearch ? _searchResults.map((r) => r.name).toList() : _popular;
+
+    return SafeArea(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 32, 32, 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Choose Your Artists',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Pick artists you love. We'll personalise your For You feed.",
+                  style: TextStyle(color: Colors.white60, fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  controller: _searchCtrl,
+                  onChanged: _onSearchChanged,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Search any artist...',
+                    hintStyle: const TextStyle(color: Colors.white38),
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        color: Colors.white38, size: 18),
+                    suffixIcon: _searching
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.violet)),
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
+                    isDense: true,
+                    contentPadding:
+                        const EdgeInsets.symmetric(vertical: 12),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide:
+                            BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                            color: AppTheme.cyan, width: 1.5)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Selected chips
+          if (_selected.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
+              child: Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: _selected
+                    .take(8)
+                    .map((name) => GestureDetector(
+                          onTap: () =>
+                              setState(() => _selected.remove(name)),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppTheme.violet.withValues(alpha: 0.25),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: AppTheme.violet
+                                      .withValues(alpha: 0.5)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(name,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500)),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.close_rounded,
+                                    color: Colors.white70, size: 12),
+                              ],
+                            ),
+                          ),
+                        ))
+                    .toList(),
+              ),
+            ),
+          const SizedBox(height: 12),
+          // Grid
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              gridDelegate:
+                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 140,
+                childAspectRatio: 0.85,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: displayItems.length,
+              itemBuilder: (context, i) {
+                final name = displayItems[i];
+                final imageUrl =
+                    showSearch ? _searchResults[i].imageUrl : null;
+                final isSelected = _selected.contains(name);
+                return GestureDetector(
+                  onTap: () => setState(() {
+                    if (isSelected) {
+                      _selected.remove(name);
+                    } else {
+                      _selected.add(name);
+                    }
+                  }),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.violet.withValues(alpha: 0.2)
+                          : Colors.white.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.violet
+                            : Colors.white.withValues(alpha: 0.1),
+                        width: isSelected ? 2 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(30),
+                              child: imageUrl != null
+                                  ? CachedNetworkImage(
+                                      imageUrl: imageUrl,
+                                      width: 56,
+                                      height: 56,
+                                      fit: BoxFit.cover)
+                                  : Container(
+                                      width: 56,
+                                      height: 56,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        gradient: LinearGradient(
+                                          colors: [
+                                            AppTheme.violet
+                                                .withValues(alpha: 0.4),
+                                            AppTheme.cyan
+                                                .withValues(alpha: 0.3),
+                                          ],
+                                        ),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          name.isNotEmpty
+                                              ? name[0].toUpperCase()
+                                              : '?',
+                                          style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700),
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                            if (isSelected)
+                              Container(
+                                width: 18,
+                                height: 18,
+                                decoration: const BoxDecoration(
+                                    color: AppTheme.violet,
+                                    shape: BoxShape.circle),
+                                child: const Icon(Icons.check_rounded,
+                                    color: Colors.white, size: 12),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text(
+                            name,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: isSelected
+                                  ? Colors.white
+                                  : Colors.white70,
+                              fontSize: 11,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                            ),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          // Footer
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+            child: Row(
+              children: [
+                Text(
+                  '${_selected.length} selected',
+                  style: const TextStyle(color: Colors.white54, fontSize: 12),
+                ),
+                const Spacer(),
+                TextButton(
+                  onPressed: widget.onSkip,
+                  child: const Text('Skip',
+                      style: TextStyle(color: Colors.white38)),
+                ),
+                const SizedBox(width: 12),
+                FilledButton(
+                  onPressed: () =>
+                      widget.onComplete(_selected.toList()),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.cyan,
+                    foregroundColor: AppTheme.ink,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 28, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Get Started',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
                 ),
               ],
             ),

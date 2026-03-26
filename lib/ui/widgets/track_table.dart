@@ -270,7 +270,7 @@ class _TrackDataSource extends DataTableSource {
           onTap: () => onActivateTrack(track.id),
         ),
         DataCell(
-          SourceBadges(sources: track.platformLinks.keys, compact: true),
+          SourceBadges(sources: track.effectiveSources, compact: true),
           onTap: () => onActivateTrack(track.id),
         ),
         DataCell(_PlayButton(platformLinks: track.platformLinks)),

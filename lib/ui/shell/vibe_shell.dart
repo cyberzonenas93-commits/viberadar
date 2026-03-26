@@ -22,6 +22,7 @@ import '../widgets/sidebar_nav.dart';
 import '../widgets/track_detail_panel.dart';
 import '../widgets/track_table.dart';
 import '../features/artists/artists_screen.dart';
+import '../features/for_you/for_you_screen.dart';
 import '../features/greatest_of/greatest_of_screen.dart';
 import '../features/ai_copilot/ai_copilot_screen.dart';
 import '../features/library/library_screen.dart';
@@ -29,6 +30,7 @@ import '../features/duplicates/duplicates_screen.dart';
 import '../features/exports/exports_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/trending/trending_screen.dart';
+import '../features/search/search_screen.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
   const VibeShell({super.key, required this.statusMessage});
@@ -177,6 +179,14 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     required List<String> regions,
   }) {
     switch (workspace.section) {
+      case AppSection.forYou:
+        return ForYouScreen(
+          onOpenArtist: (name) {
+            ref
+                .read(workspaceControllerProvider.notifier)
+                .setSection(AppSection.artists);
+          },
+        );
       case AppSection.home:
         return HomeScreen(
           allTracks: allTracks,
@@ -184,6 +194,8 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         );
       case AppSection.trending:
         return const TrendingScreen();
+      case AppSection.search:
+        return const SearchScreen();
       case AppSection.regions:
         return _RegionsView(
           tracks: allTracks,

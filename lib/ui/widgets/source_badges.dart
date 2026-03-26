@@ -77,6 +77,8 @@ class SourceBadges extends StatelessWidget {
         return Icons.cloud_rounded;
       case 'beatport':
         return Icons.equalizer_rounded;
+      case 'billboard':
+        return Icons.bar_chart_rounded;
       default:
         return Icons.link_rounded;
     }
@@ -98,6 +100,8 @@ class SourceBadges extends StatelessWidget {
         return const Color(0xFFFFA237);
       case 'beatport':
         return const Color(0xFF32FF7E);
+      case 'billboard':
+        return const Color(0xFFFFD700);
       default:
         return const Color(0xFF5FD7FF);
     }

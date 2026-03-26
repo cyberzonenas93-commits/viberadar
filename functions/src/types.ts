@@ -42,6 +42,8 @@ export interface UnifiedTrackRecord {
   energy_level: number;
   trend_history: Array<{ label: string; score: number }>;
   source_count: number;
+  /** Which ingestion sources contributed to this track (e.g. ["spotify","youtube","billboard"]) */
+  sources: string[];
 }
 
 export interface IngestionSummary {

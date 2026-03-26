@@ -40,6 +40,49 @@ class _ArtistInfo {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Unified track model — may exist on Spotify, Apple Music, or both
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A track that may exist on Spotify, Apple Music, or both.
+class _UnifiedTrack {
+  final String name;
+  final String albumName;
+  final String? artworkUrl;
+  final int durationMs;
+  final String? releaseDate;
+  // Spotify fields
+  final String? spotifyId;
+  final String? spotifyUrl;
+  final int popularity;
+  final int trackNumber;
+  final bool isTopTrack;
+  // Apple Music fields
+  final String? appleId;
+  final String? appleUrl;
+  final String? previewUrl;
+
+  const _UnifiedTrack({
+    required this.name,
+    required this.albumName,
+    this.artworkUrl,
+    this.durationMs = 0,
+    this.releaseDate,
+    this.spotifyId,
+    this.spotifyUrl,
+    this.popularity = 0,
+    this.trackNumber = 0,
+    this.isTopTrack = false,
+    this.appleId,
+    this.appleUrl,
+    this.previewUrl,
+  });
+
+  bool get onSpotify => spotifyId != null;
+  bool get onApple => appleId != null;
+  bool get onBoth => onSpotify && onApple;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main screen — grid of artists OR artist detail (child view)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -57,7 +100,25 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
   _ArtistInfo? _openedArtist;
   ArtistModel? _openedArtistModel;
 
+  List<SpotifyArtistResult> _spotifyResults = [];
+  bool _searchingSpotify = false;
+
   final _artistService = ArtistService();
+  final _spotifyService = SpotifyArtistService();
+
+  Future<void> _searchSpotify(String query) async {
+    if (query.length < 2) {
+      if (mounted) setState(() { _spotifyResults = []; _searchingSpotify = false; });
+      return;
+    }
+    if (mounted) setState(() => _searchingSpotify = true);
+    try {
+      final results = await _spotifyService.searchArtistsByName(query);
+      if (mounted) setState(() { _spotifyResults = results; _searchingSpotify = false; });
+    } catch (_) {
+      if (mounted) setState(() { _spotifyResults = []; _searchingSpotify = false; });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -141,7 +202,12 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
       filterRegion: _filterRegion,
       allGenres: allGenres,
       allRegions: allRegions,
-      onSearchChanged: (v) => setState(() => _search = v),
+      spotifyResults: _spotifyResults,
+      searchingSpotify: _searchingSpotify,
+      onSearchChanged: (v) {
+        setState(() => _search = v);
+        _searchSpotify(v);
+      },
       onGenreChanged: (v) => setState(() => _filterGenre = v),
       onRegionChanged: (v) => setState(() => _filterRegion = v),
       onArtistTapped: (artist) {
@@ -149,6 +215,22 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
         setState(() {
           _openedArtist = artist;
           _openedArtistModel = model;
+        });
+      },
+      onSpotifyArtistTapped: (result) {
+        final artist = _ArtistInfo(
+          name: result.name,
+          topGenre: result.genres.firstOrNull ?? 'Unknown',
+          topRegion: 'Global',
+          avgTrendScore: result.popularity / 100.0,
+          trackCount: 0,
+          artworkUrl: result.imageUrl,
+          spotifyUrl: null,
+          tracks: const [],
+        );
+        setState(() {
+          _openedArtist = artist;
+          _openedArtistModel = null;
         });
       },
     );
@@ -167,10 +249,13 @@ class _ArtistGridScreen extends StatelessWidget {
   final String filterRegion;
   final List<String> allGenres;
   final List<String> allRegions;
+  final List<SpotifyArtistResult> spotifyResults;
+  final bool searchingSpotify;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onGenreChanged;
   final ValueChanged<String> onRegionChanged;
   final ValueChanged<_ArtistInfo> onArtistTapped;
+  final ValueChanged<SpotifyArtistResult> onSpotifyArtistTapped;
 
   const _ArtistGridScreen({
     required this.artists,
@@ -180,10 +265,13 @@ class _ArtistGridScreen extends StatelessWidget {
     required this.filterRegion,
     required this.allGenres,
     required this.allRegions,
+    required this.spotifyResults,
+    required this.searchingSpotify,
     required this.onSearchChanged,
     required this.onGenreChanged,
     required this.onRegionChanged,
     required this.onArtistTapped,
+    required this.onSpotifyArtistTapped,
   });
 
   @override
@@ -247,22 +335,72 @@ class _ArtistGridScreen extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Expanded(
-          child: artists.isEmpty
-              ? const Center(child: Text('No artists found', style: TextStyle(color: AppTheme.textTertiary)))
-              : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 200,
-                    childAspectRatio: 0.78,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
+          child: CustomScrollView(
+            slivers: [
+              if (artists.isEmpty && spotifyResults.isEmpty)
+                const SliverFillRemaining(
+                  child: Center(child: Text('No artists found', style: TextStyle(color: AppTheme.textTertiary))),
+                )
+              else ...[
+                if (artists.isNotEmpty)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
+                    sliver: SliverGrid(
+                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: 200,
+                        childAspectRatio: 0.78,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
+                      delegate: SliverChildBuilderDelegate(
+                        (context, i) => _ArtistCard(
+                          artist: artists[i],
+                          onTap: () => onArtistTapped(artists[i]),
+                        ),
+                        childCount: artists.length,
+                      ),
+                    ),
                   ),
-                  itemCount: artists.length,
-                  itemBuilder: (context, i) => _ArtistCard(
-                    artist: artists[i],
-                    onTap: () => onArtistTapped(artists[i]),
+                if (spotifyResults.isNotEmpty || searchingSpotify) ...[
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 8, 28, 12),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.search_rounded, color: Color(0xFF1DB954), size: 16),
+                          const SizedBox(width: 8),
+                          const Text('Discover on Spotify', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+                          if (searchingSpotify) ...[
+                            const SizedBox(width: 10),
+                            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1DB954))),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
+                  if (spotifyResults.isNotEmpty)
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                      sliver: SliverGrid(
+                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 200,
+                          childAspectRatio: 0.78,
+                          crossAxisSpacing: 12,
+                          mainAxisSpacing: 12,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) => _SpotifyArtistCard(
+                            result: spotifyResults[i],
+                            onTap: () => onSpotifyArtistTapped(spotifyResults[i]),
+                          ),
+                          childCount: spotifyResults.length,
+                        ),
+                      ),
+                    ),
+                ],
+              ],
+            ],
+          ),
         ),
       ],
     );
@@ -374,6 +512,60 @@ class _ArtistCardState extends State<_ArtistCard> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Spotify global search artist card
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SpotifyArtistCard extends StatelessWidget {
+  const _SpotifyArtistCard({required this.result, required this.onTap});
+  final SpotifyArtistResult result;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppTheme.edge),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: result.imageUrl != null
+                    ? CachedNetworkImage(imageUrl: result.imageUrl!, fit: BoxFit.cover, width: double.infinity)
+                    : Container(color: AppTheme.panelRaised, child: const Icon(Icons.person_rounded, color: AppTheme.textTertiary, size: 48)),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(result.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  if (result.genres.isNotEmpty)
+                    Text(result.genres.first, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(color: const Color(0xFF1DB954).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                    child: const Text('Spotify', style: TextStyle(color: Color(0xFF1DB954), fontSize: 9, fontWeight: FontWeight.w600)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Artist Catalog — full child screen when artist is tapped
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -395,7 +587,6 @@ class _ArtistCatalogScreen extends ConsumerStatefulWidget {
 class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   String _sortBy = 'score';
   String _view = 'all'; // 'all', 'top', 'radar'
-  String _platform = 'spotify'; // 'spotify', 'apple'
   final Set<String> _selectedTrackIds = {};
   final _spotifyService = SpotifyArtistService();
   final _appleMusicService = AppleMusicArtistService();
@@ -403,8 +594,6 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   List<AppleMusicTrack>? _appleMusicTracks;
   bool _loadingCatalogue = false;
   bool _loadingApple = false;
-  String? _catalogueError;
-  String? _appleError;
 
   @override
   void initState() {
@@ -414,7 +603,7 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   }
 
   Future<void> _loadSpotifyCatalogue() async {
-    setState(() { _loadingCatalogue = true; _catalogueError = null; });
+    setState(() { _loadingCatalogue = true; });
     try {
       final catalogue = await _spotifyService.getFullCatalogue(widget.artist.name);
       if (mounted) {
@@ -426,7 +615,6 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _catalogueError = e.toString();
           _loadingCatalogue = false;
         });
       }
@@ -434,9 +622,9 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   }
 
   Future<void> _loadAppleMusic() async {
-    setState(() { _loadingApple = true; _appleError = null; });
+    setState(() { _loadingApple = true; });
     try {
-      final tracks = await _appleMusicService.getTopTracksForArtist(widget.artist.name);
+      final tracks = await _appleMusicService.getFullDiscography(widget.artist.name);
       if (mounted) {
         setState(() {
           _appleMusicTracks = tracks;
@@ -446,7 +634,6 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _appleError = e.toString();
           _loadingApple = false;
         });
       }
@@ -464,19 +651,21 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
     radarTracks.sort((a, b) => b.trendScore.compareTo(a.trendScore));
 
     final spotifyTracks = _spotifyCatalogue ?? [];
-    final topTracks = spotifyTracks.where((t) => t.isTopTrack).toList();
 
-    // Sort Spotify tracks
-    var displaySpotify = _view == 'top' ? topTracks : [...spotifyTracks];
+    final appleTracks = _appleMusicTracks ?? [];
+    final mergedAll = _mergeToUnified(spotifyTracks, appleTracks);
+    final mergedTop = mergedAll.where((t) => t.isTopTrack).toList();
+
+    // Sort merged tracks
+    var displayMerged = _view == 'top' ? [...mergedTop] : [...mergedAll];
     switch (_sortBy) {
       case 'title':
-        displaySpotify.sort((a, b) => a.name.compareTo(b.name));
+        displayMerged.sort((a, b) => a.name.compareTo(b.name));
       case 'album':
-        displaySpotify.sort((a, b) => a.albumName.compareTo(b.albumName));
+        displayMerged.sort((a, b) => a.albumName.compareTo(b.albumName));
       case 'popularity':
-        displaySpotify.sort((a, b) => b.popularity.compareTo(a.popularity));
+        displayMerged.sort((a, b) => b.popularity.compareTo(a.popularity));
       default:
-        // Keep default order (top tracks first, then by album)
         break;
     }
 
@@ -642,32 +831,35 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
             ],
           ),
         ),
-        // Platform switcher + view tabs
+        // Source status + view tabs
         Container(
           padding: const EdgeInsets.fromLTRB(28, 10, 28, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Platform selector
+              // Source status row (replaces platform switcher)
               Row(
                 children: [
-                  _PlatformTab(
-                    label: 'Spotify',
-                    icon: Icons.music_note_rounded,
-                    color: const Color(0xFF1DB954),
-                    isActive: _platform == 'spotify',
-                    isLoading: _loadingCatalogue,
-                    onTap: () => setState(() { _platform = 'spotify'; _view = 'all'; }),
-                  ),
-                  const SizedBox(width: 8),
-                  _PlatformTab(
-                    label: 'Apple Music',
-                    icon: Icons.apple_rounded,
-                    color: const Color(0xFFFC3C44),
-                    isActive: _platform == 'apple',
-                    isLoading: _loadingApple,
-                    onTap: () => setState(() { _platform = 'apple'; _view = 'all'; }),
-                  ),
+                  if (_loadingCatalogue) ...[
+                    const SizedBox(width: 4, height: 4, child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF1DB954))),
+                    const SizedBox(width: 6),
+                    const Text('Loading Spotify...', style: TextStyle(color: Color(0xFF1DB954), fontSize: 10)),
+                    const SizedBox(width: 12),
+                  ] else ...[
+                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF1DB954), shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text('${spotifyTracks.length} from Spotify', style: const TextStyle(color: Color(0xFF1DB954), fontSize: 10, fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 12),
+                  ],
+                  if (_loadingApple) ...[
+                    const SizedBox(width: 4, height: 4, child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFFFC3C44))),
+                    const SizedBox(width: 6),
+                    const Text('Loading Apple Music...', style: TextStyle(color: Color(0xFFFC3C44), fontSize: 10)),
+                  ] else ...[
+                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFFC3C44), shape: BoxShape.circle)),
+                    const SizedBox(width: 6),
+                    Text('${appleTracks.length} from Apple Music', style: const TextStyle(color: Color(0xFFFC3C44), fontSize: 10, fontWeight: FontWeight.w500)),
+                  ],
                   const Spacer(),
                   if (_selectedTrackIds.isNotEmpty) ...[
                     Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 11, fontWeight: FontWeight.w600)),
@@ -680,37 +872,34 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 ],
               ),
               const SizedBox(height: 8),
-              // Sub-view tabs (only for Spotify)
-              if (_platform == 'spotify')
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displaySpotify.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
-                      const SizedBox(width: 8),
-                      _ViewTab(label: 'Albums', subtitle: _loadingCatalogue ? '...' : '${_albumGroups(spotifyTracks).length}', isActive: _view == 'albums', onTap: () => setState(() => _view = 'albums')),
-                      const SizedBox(width: 8),
-                      _ViewTab(label: 'Top Tracks', subtitle: '${topTracks.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
-                      const SizedBox(width: 8),
-                      _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
-                      const SizedBox(width: 8),
-                      _ViewTab(label: 'Trending', subtitle: '${widget.artistModel?.trendingTracks.length ?? 0}', isActive: _view == 'trending', onTap: () => setState(() => _view = 'trending')),
-                      const SizedBox(width: 8),
-                      _ViewTab(label: 'By Era', subtitle: '${widget.artistModel?.tracksByEra.length ?? 0} eras', isActive: _view == 'by_era', onTap: () => setState(() => _view = 'by_era')),
-                      const SizedBox(width: 8),
-                      _ViewTab(label: 'By BPM', subtitle: widget.artistModel?.bpmRangeLabel ?? '—', isActive: _view == 'by_bpm', onTap: () => setState(() => _view = 'by_bpm')),
-                    ],
-                  ),
+              // Sub-view tabs
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displayMerged.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
+                    const SizedBox(width: 8),
+                    _ViewTab(label: 'Albums', subtitle: _loadingCatalogue ? '...' : '${_albumGroups(spotifyTracks).length}', isActive: _view == 'albums', onTap: () => setState(() => _view = 'albums')),
+                    const SizedBox(width: 8),
+                    _ViewTab(label: 'Top Tracks', subtitle: '${mergedTop.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
+                    const SizedBox(width: 8),
+                    _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
+                    const SizedBox(width: 8),
+                    _ViewTab(label: 'Trending', subtitle: '${widget.artistModel?.trendingTracks.length ?? 0}', isActive: _view == 'trending', onTap: () => setState(() => _view = 'trending')),
+                    const SizedBox(width: 8),
+                    _ViewTab(label: 'By Era', subtitle: '${widget.artistModel?.tracksByEra.length ?? 0} eras', isActive: _view == 'by_era', onTap: () => setState(() => _view = 'by_era')),
+                    const SizedBox(width: 8),
+                    _ViewTab(label: 'By BPM', subtitle: widget.artistModel?.bpmRangeLabel ?? '—', isActive: _view == 'by_bpm', onTap: () => setState(() => _view = 'by_bpm')),
+                  ],
                 ),
+              ),
             ],
           ),
         ),
         Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
         // Content area
         Expanded(
-          child: _platform == 'apple'
-              ? _buildAppleMusicView()
-              : _view == 'trending'
+          child: _view == 'trending'
               ? _buildRadarTrackGrid(
                   widget.artistModel?.trendingTracks ?? [],
                   emptyMsg: 'No trending tracks — all are near the average.',
@@ -735,73 +924,35 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                     mainAxisSpacing: 12,
                   ),
                   itemCount: radarTracks.length,
-                  itemBuilder: (context, i) {
-                    final track = radarTracks[i];
-                    return _RadarTrackCard(track: track, rank: i + 1);
-                  },
+                  itemBuilder: (context, i) => _RadarTrackCard(track: radarTracks[i], rank: i + 1),
                 )
-              : _loadingCatalogue
+              : (_loadingCatalogue && displayMerged.isEmpty)
                   ? const Center(child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         CircularProgressIndicator(color: AppTheme.violet),
                         SizedBox(height: 12),
-                        Text('Loading full catalogue from Spotify...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                        Text('Loading catalogue...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                       ],
                     ))
-                  : _catalogueError != null
-                      ? Center(child: Text('Could not load catalogue', style: TextStyle(color: AppTheme.textTertiary)))
-                      : displaySpotify.isEmpty
-                          ? const Center(child: Text('No tracks found', style: TextStyle(color: AppTheme.textTertiary)))
-                          : GridView.builder(
-                              padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
-                              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent: 200,
-                                childAspectRatio: 0.72,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                              ),
-                              itemCount: displaySpotify.length,
-                              itemBuilder: (context, i) {
-                                final st = displaySpotify[i];
-                                return _SpotifyTrackCard(track: st, rank: i + 1);
-                              },
-                            ),
+                  : displayMerged.isEmpty
+                      ? const Center(child: Text('No tracks found', style: TextStyle(color: AppTheme.textTertiary)))
+                      : GridView.builder(
+                          padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 200,
+                            childAspectRatio: 0.72,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
+                          itemCount: displayMerged.length,
+                          itemBuilder: (context, i) => _UnifiedTrackCard(
+                            track: displayMerged[i],
+                            rank: i + 1,
+                          ),
+                        ),
         ),
       ],
-    );
-  }
-
-  // ── Apple Music view ─────────────────────────────────────────────────────
-
-  Widget _buildAppleMusicView() {
-    if (_loadingApple) {
-      return const Center(child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(color: Color(0xFFFC3C44)),
-          SizedBox(height: 12),
-          Text('Loading from Apple Music...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-        ],
-      ));
-    }
-    final tracks = _appleMusicTracks ?? [];
-    if (_appleError != null && tracks.isEmpty) {
-      return Center(child: Text('Apple Music unavailable', style: TextStyle(color: AppTheme.textTertiary)));
-    }
-    if (tracks.isEmpty) {
-      return const Center(child: Text('No Apple Music tracks found', style: TextStyle(color: AppTheme.textTertiary)));
-    }
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 200,
-        childAspectRatio: 0.72,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-      ),
-      itemCount: tracks.length,
-      itemBuilder: (context, i) => _AppleMusicTrackCard(track: tracks[i], rank: i + 1),
     );
   }
 
@@ -1451,10 +1602,10 @@ class _BuildSetButton extends StatelessWidget {
       onTap: () {
         // Use SetBuilderService to select from top tracks
         final svc = SetBuilderService();
-        final allForArtist = [
+        final allForArtist = {
           ...artistModel.topTracks,
           ...artistModel.trendingTracks,
-        ].toSet().toList();
+        }.toList();
         // Build a 12-track set from artist's tracks using existing logic
         final set = svc.buildSet(
           tracks: allForArtist,
@@ -1491,45 +1642,6 @@ class _BuildSetButton extends StatelessWidget {
                     color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w600)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// View tab widget
-class _PlatformTab extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final Color color;
-  final bool isActive;
-  final bool isLoading;
-  final VoidCallback onTap;
-  const _PlatformTab({required this.label, required this.icon, required this.color, required this.isActive, required this.isLoading, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: isActive ? color.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isActive ? color.withValues(alpha: 0.4) : AppTheme.edge.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: isActive ? color : AppTheme.textTertiary, size: 14),
-            const SizedBox(width: 6),
-            Text(label, style: TextStyle(color: isActive ? color : AppTheme.textSecondary, fontSize: 12, fontWeight: isActive ? FontWeight.w700 : FontWeight.w400)),
-            if (isLoading) ...[
-              const SizedBox(width: 6),
-              SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 1.5, color: color)),
-            ],
           ],
         ),
       ),
@@ -1583,7 +1695,7 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
                       child: SizedBox.expand(
                         child: t.artworkUrl != null
                             ? Image.network(t.artworkUrl!, fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => _ArtworkPlaceholder())
+                                errorBuilder: (_, e, s) => _ArtworkPlaceholder())
                             : _ArtworkPlaceholder(),
                       ),
                     ),
@@ -1640,6 +1752,133 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _UnifiedTrackCard extends StatelessWidget {
+  const _UnifiedTrackCard({required this.track, required this.rank});
+  final _UnifiedTrack track;
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: () async {
+        // Prefer Apple Music for preview, Spotify for full track
+        final url = track.appleUrl ?? track.spotifyUrl;
+        if (url != null) {
+          final uri = Uri.tryParse(url);
+          if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+        }
+      },
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.panel,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.edge.withValues(alpha: 0.6)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Artwork
+            Expanded(
+              child: Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                    child: track.artworkUrl != null
+                        ? CachedNetworkImage(
+                            imageUrl: track.artworkUrl!,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorWidget: (context, error, stack) => _ArtworkPlaceholder(),
+                          )
+                        : _ArtworkPlaceholder(),
+                  ),
+                  // Rank badge
+                  Positioned(
+                    top: 6,
+                    left: 6,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('#$rank', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  // Platform badges
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (track.onSpotify)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF1DB954),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: const Text('S', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                          ),
+                        if (track.onSpotify && track.onApple) const SizedBox(width: 3),
+                        if (track.onApple)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFC3C44),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: const Text('A', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (track.isTopTrack)
+                    Positioned(
+                      bottom: 6,
+                      left: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.amber.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Text('TOP', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.w800)),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            // Info
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    track.name,
+                    style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    track.albumName,
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -2039,4 +2278,68 @@ String? _bestUrl(Track track) {
     if (url != null && url.isNotEmpty) return url;
   }
   return track.platformLinks.values.firstOrNull;
+}
+
+/// Merge Spotify and Apple Music track lists into a single deduplicated list.
+/// Tracks with matching names (case-insensitive) are combined into one entry.
+List<_UnifiedTrack> _mergeToUnified(
+  List<SpotifyTrackInfo> spotifyTracks,
+  List<AppleMusicTrack> appleTracks,
+) {
+  final unified = <String, _UnifiedTrack>{};
+
+  // Add Spotify tracks first
+  for (final t in spotifyTracks) {
+    final key = t.name.toLowerCase().trim();
+    unified[key] = _UnifiedTrack(
+      name: t.name,
+      albumName: t.albumName,
+      artworkUrl: t.albumArt,
+      durationMs: t.durationMs,
+      releaseDate: t.releaseDate,
+      spotifyId: t.id,
+      spotifyUrl: t.spotifyUrl,
+      popularity: t.popularity,
+      trackNumber: t.trackNumber,
+      isTopTrack: t.isTopTrack,
+    );
+  }
+
+  // Merge in Apple Music tracks
+  for (final t in appleTracks) {
+    final key = t.name.toLowerCase().trim();
+    final existing = unified[key];
+    if (existing != null) {
+      // Enrich Spotify entry with Apple data
+      unified[key] = _UnifiedTrack(
+        name: existing.name,
+        albumName: existing.albumName,
+        artworkUrl: existing.artworkUrl ?? t.artworkUrl,
+        durationMs: existing.durationMs > 0 ? existing.durationMs : t.durationMs,
+        releaseDate: existing.releaseDate ?? t.releaseDate,
+        spotifyId: existing.spotifyId,
+        spotifyUrl: existing.spotifyUrl,
+        popularity: existing.popularity,
+        trackNumber: existing.trackNumber,
+        isTopTrack: existing.isTopTrack,
+        appleId: t.id,
+        appleUrl: t.appleUrl,
+        previewUrl: t.previewUrl,
+      );
+    } else {
+      // Apple-only track
+      unified[key] = _UnifiedTrack(
+        name: t.name,
+        albumName: t.albumName,
+        artworkUrl: t.artworkUrl,
+        durationMs: t.durationMs,
+        releaseDate: t.releaseDate,
+        appleId: t.id,
+        appleUrl: t.appleUrl,
+        previewUrl: t.previewUrl,
+      );
+    }
+  }
+
+  return unified.values.toList();
 }

@@ -90,8 +90,10 @@ class _SidebarNavState extends State<SidebarNav> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _SectionHeader('DISCOVER'),
+                  _NavItem(section: AppSection.forYou, icon: Icons.favorite_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.home, icon: Icons.dashboard_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.trending, icon: Icons.local_fire_department_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.search, icon: Icons.search_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.artists, icon: Icons.person_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.regions, icon: Icons.public_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.genres, icon: Icons.library_music_rounded, selected: selectedSection, onSelected: onSelected),

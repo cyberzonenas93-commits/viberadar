@@ -6,6 +6,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
 import '../../../models/user_profile.dart';
+import '../../../providers/app_state.dart';
+import '../../../providers/repositories.dart';
 import '../../widgets/track_action_menu.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -31,7 +33,11 @@ class HomeScreen extends ConsumerWidget {
     final regional = [...allTracks]..sort((a, b) {
       return _regionalRelevance(b, region).compareTo(_regionalRelevance(a, region));
     });
-    final regionalTop = regional.where((t) => _regionalRelevance(t, region) > 0.25).take(24).toList();
+    // Keep all tracks with any regional relevance, minimum 100
+    final relevanceFiltered = regional.where((t) => _regionalRelevance(t, region) > 0.05).toList();
+    final regionalTop = (relevanceFiltered.length >= 100
+        ? relevanceFiltered
+        : regional.take(100).toList());
 
     // Genre breakdown
     final genreCounts = <String, int>{};
@@ -121,15 +127,7 @@ class HomeScreen extends ConsumerWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.cyan.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text('Region: ${formatRegionLabel(region)}',
-                          style: const TextStyle(color: AppTheme.cyan, fontSize: 11, fontWeight: FontWeight.w500)),
-                    ),
+                    _RegionPickerBadge(currentRegion: region),
                   ],
                 ),
               ],
@@ -811,4 +809,72 @@ double _regionalRelevance(Track track, String region) {
     if (genre.contains('latin')) genreBoost = 0.2;
   }
   return (rawScore + genreBoost + track.trendScore * 0.3).clamp(0.0, 1.0);
+}
+
+// ── Region picker badge ───────────────────────────────────────────────────────
+
+class _RegionPickerBadge extends ConsumerWidget {
+  const _RegionPickerBadge({required this.currentRegion});
+
+  final String currentRegion;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final regions = ref.watch(availableRegionsProvider);
+    final session = ref.watch(sessionProvider).value;
+
+    return PopupMenuButton<String>(
+      tooltip: 'Change region',
+      offset: const Offset(0, 32),
+      color: AppTheme.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppTheme.edge),
+      ),
+      onSelected: (region) {
+        if (session == null) return;
+        ref.read(userRepositoryProvider).updatePreferredRegion(
+          userId: session.userId,
+          fallbackName: session.displayName,
+          region: region,
+        );
+      },
+      itemBuilder: (_) => regions.map((r) => PopupMenuItem<String>(
+        value: r,
+        child: Row(
+          children: [
+            if (r == currentRegion)
+              const Icon(Icons.check_rounded, size: 14, color: AppTheme.cyan)
+            else
+              const SizedBox(width: 14),
+            const SizedBox(width: 8),
+            Text(
+              formatRegionLabel(r),
+              style: TextStyle(
+                color: r == currentRegion ? AppTheme.cyan : AppTheme.textPrimary,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      )).toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.cyan.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Region: ${formatRegionLabel(currentRegion)}',
+                style: const TextStyle(color: AppTheme.cyan, fontSize: 11, fontWeight: FontWeight.w500)),
+            const SizedBox(width: 4),
+            const Icon(Icons.arrow_drop_down_rounded, color: AppTheme.cyan, size: 14),
+          ],
+        ),
+      ),
+    );
+  }
 }

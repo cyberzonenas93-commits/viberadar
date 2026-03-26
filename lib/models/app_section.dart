@@ -1,7 +1,9 @@
 enum AppSection {
   // DISCOVER
+  forYou,
   home,
   trending,
+  search,
   artists,
   regions,
   genres,
@@ -27,10 +29,14 @@ enum AppSection {
 extension AppSectionLabel on AppSection {
   String get label {
     switch (this) {
+      case AppSection.forYou:
+        return 'For You';
       case AppSection.home:
         return 'Home';
       case AppSection.trending:
         return 'Trending';
+      case AppSection.search:
+        return 'Search';
       case AppSection.artists:
         return 'Artists';
       case AppSection.regions:

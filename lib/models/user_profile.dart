@@ -7,12 +7,14 @@ class UserProfile {
     required this.preferredRegion,
     required this.watchlist,
     required this.savedCrates,
+    this.followedArtists = const <String>[],
   });
 
   factory UserProfile.empty({
     required String id,
     required String displayName,
     String preferredRegion = 'US',
+    List<String> followedArtists = const <String>[],
   }) {
     return UserProfile(
       id: id,
@@ -20,6 +22,7 @@ class UserProfile {
       preferredRegion: preferredRegion,
       watchlist: const <String>{},
       savedCrates: const <Crate>[],
+      followedArtists: followedArtists,
     );
   }
 
@@ -28,12 +31,14 @@ class UserProfile {
   final String preferredRegion;
   final Set<String> watchlist;
   final List<Crate> savedCrates;
+  final List<String> followedArtists;
 
   UserProfile copyWith({
     String? displayName,
     String? preferredRegion,
     Set<String>? watchlist,
     List<Crate>? savedCrates,
+    List<String>? followedArtists,
   }) {
     return UserProfile(
       id: id,
@@ -41,6 +46,7 @@ class UserProfile {
       preferredRegion: preferredRegion ?? this.preferredRegion,
       watchlist: watchlist ?? this.watchlist,
       savedCrates: savedCrates ?? this.savedCrates,
+      followedArtists: followedArtists ?? this.followedArtists,
     );
   }
 
@@ -63,6 +69,9 @@ class UserProfile {
           .whereType<Map>()
           .map((item) => Crate.fromMap(Map<String, dynamic>.from(item.cast())))
           .toList(),
+      followedArtists: List<String>.from(
+        map['followed_artists'] as List? ?? const [],
+      ),
     );
   }
 
@@ -72,6 +81,7 @@ class UserProfile {
       'preferences': {'region': preferredRegion},
       'watchlist': watchlist.toList(),
       'saved_crates': savedCrates.map((crate) => crate.toMap()).toList(),
+      'followed_artists': followedArtists,
     };
   }
 }

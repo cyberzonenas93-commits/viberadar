@@ -338,7 +338,7 @@ class TrackDetailPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                SourceBadges(sources: track.platformLinks.keys),
+                SourceBadges(sources: track.effectiveSources),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 10,

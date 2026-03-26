@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../models/session_state.dart';
 import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
 import '../shell/vibe_shell.dart';
@@ -41,10 +42,32 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     }
   }
 
-  Future<void> _completeOnboarding() async {
+  Future<void> _completeOnboarding(List<String> artists) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('onboarding_completed', true);
+    if (artists.isNotEmpty) {
+      await prefs.setStringList('pending_followed_artists', artists);
+    }
     if (mounted) setState(() => _phase = _AuthPhase.login);
+  }
+
+  bool _syncedArtists = false;
+
+  Future<void> _syncPendingArtists(SessionState session) async {
+    if (_syncedArtists) return;
+    _syncedArtists = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final pending = prefs.getStringList('pending_followed_artists');
+      if (pending != null && pending.isNotEmpty) {
+        await prefs.remove('pending_followed_artists');
+        await ref.read(userRepositoryProvider).setFollowedArtists(
+              userId: session.userId,
+              fallbackName: session.displayName,
+              artists: pending,
+            );
+      }
+    } catch (_) {}
   }
 
   @override
@@ -62,7 +85,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           onFinished: () => setState(() => _phase = _AuthPhase.onboarding),
         );
       case _AuthPhase.onboarding:
-        return OnboardingScreen(onComplete: _completeOnboarding);
+        return OnboardingScreen(onComplete: (artists) => _completeOnboarding(artists));
       case _AuthPhase.login:
         break;
     }
@@ -78,6 +101,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     }
 
     if (session?.isAuthenticated == true) {
+      _syncPendingArtists(session!);
       return VibeShell(statusMessage: widget.statusMessage);
     }
 

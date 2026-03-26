@@ -64,33 +64,45 @@ class FirebaseSessionRepository implements SessionRepository {
   final GoogleSignIn _googleSignIn;
 
   @override
-  Stream<SessionState> sessionChanges() {
-    return _auth.authStateChanges().map((user) {
-      if (user == null) {
-        return const SessionState(
-          userId: '',
-          displayName: '',
-          email: '',
-          providerLabel: '',
-          isAuthenticated: false,
-          isDemo: false,
-        );
-      }
+  Stream<SessionState> sessionChanges() async* {
+    // Only seed from currentUser if it is already available (non-null).
+    // If null we must NOT yield yet — Riverpod stays in AsyncLoading and
+    // the auth_gate shows a spinner while Firebase restores the persisted
+    // token from the Keychain.  Yielding an unauthenticated state here
+    // would immediately flip the UI to the login screen before Firebase
+    // has had a chance to restore the session, causing every cold-start
+    // to require a fresh sign-in.
+    final cached = _auth.currentUser;
+    if (cached != null) {
+      yield _toState(cached);
+    }
+    yield* _auth.authStateChanges().map(_toState);
+  }
 
-      final isAnon = user.isAnonymous;
-      return SessionState(
-        userId: user.uid,
-        displayName: isAnon ? 'Guest DJ' : (user.displayName ?? 'VibeRadar DJ'),
-        email: isAnon ? '' : (user.email ?? 'unknown@viberadar.app'),
-        providerLabel: isAnon
-            ? 'Guest'
-            : (user.providerData.isEmpty
-                  ? 'Email'
-                  : user.providerData.first.providerId),
-        isAuthenticated: true,
+  SessionState _toState(User? user) {
+    if (user == null) {
+      return const SessionState(
+        userId: '',
+        displayName: '',
+        email: '',
+        providerLabel: '',
+        isAuthenticated: false,
         isDemo: false,
       );
-    });
+    }
+    final isAnon = user.isAnonymous;
+    return SessionState(
+      userId: user.uid,
+      displayName: isAnon ? 'Guest DJ' : (user.displayName ?? 'VibeRadar DJ'),
+      email: isAnon ? '' : (user.email ?? 'unknown@viberadar.app'),
+      providerLabel: isAnon
+          ? 'Guest'
+          : (user.providerData.isEmpty
+                ? 'Email'
+                : user.providerData.first.providerId),
+      isAuthenticated: true,
+      isDemo: false,
+    );
   }
 
   @override
