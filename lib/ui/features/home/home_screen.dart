@@ -4,13 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
+import '../../../models/app_section.dart';
 import '../../../models/track.dart';
 import '../../../models/user_profile.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/repositories.dart';
+import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({
     super.key,
     required this.allTracks,
@@ -21,15 +23,34 @@ class HomeScreen extends ConsumerWidget {
   final UserProfile userProfile;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  String _selectedGenre = 'All';
+
+  @override
+  Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final sorted = [...allTracks]..sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    final allTracks = widget.allTracks;
+    final userProfile = widget.userProfile;
+    final region = widget.userProfile.preferredRegion;
+    final genreFiltered = _selectedGenre == 'All'
+        ? allTracks
+        : allTracks.where((t) => t.genre == _selectedGenre).toList();
+    // Sort by regional score when a specific region is set, otherwise global trendScore
+    final sorted = [...genreFiltered];
+    if (region.isNotEmpty && region != 'Global') {
+      sorted.sort((a, b) =>
+          (b.regionScores[region] ?? 0).compareTo(a.regionScores[region] ?? 0));
+    } else {
+      sorted.sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    }
     final top = sorted.take(80).toList();
     final rising = allTracks.where((t) => t.isRisingFast).toList()
       ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
     final risingTop = rising.take(15).toList();
 
-    final region = userProfile.preferredRegion;
     final regional = [...allTracks]..sort((a, b) {
       return _regionalRelevance(b, region).compareTo(_regionalRelevance(a, region));
     });
@@ -73,7 +94,7 @@ class HomeScreen extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Welcome to Vibe Radar',
+                      Text('Welcome to VibeRadar',
                           style: theme.textTheme.headlineSmall?.copyWith(
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w700,
@@ -181,28 +202,54 @@ class HomeScreen extends ConsumerWidget {
               height: 34,
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
-                itemCount: topGenres.take(8).length,
+                itemCount: topGenres.take(8).length + 1, // +1 for "All"
                 separatorBuilder: (_, i) => const SizedBox(width: 8),
                 itemBuilder: (ctx, i) {
-                  final genre = topGenres[i];
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: AppTheme.panelRaised,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppTheme.edge.withValues(alpha: 0.4)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(genre.key, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w500)),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: AppTheme.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                          child: Text('${genre.value}', style: const TextStyle(color: AppTheme.violet, fontSize: 9, fontWeight: FontWeight.w700)),
+                  // First item is "All" to clear the filter
+                  if (i == 0) {
+                    final isAll = _selectedGenre == 'All';
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedGenre = 'All'),
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: isAll ? AppTheme.violet.withValues(alpha: 0.2) : AppTheme.panelRaised,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: isAll ? AppTheme.violet.withValues(alpha: 0.5) : AppTheme.edge.withValues(alpha: 0.4)),
+                          ),
+                          child: Text('All', style: TextStyle(color: isAll ? AppTheme.violet : AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
                         ),
-                      ],
+                      ),
+                    );
+                  }
+                  final genre = topGenres[i - 1];
+                  final isSelected = _selectedGenre == genre.key;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedGenre = genre.key),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppTheme.violet.withValues(alpha: 0.2) : AppTheme.panelRaised,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isSelected ? AppTheme.violet.withValues(alpha: 0.5) : AppTheme.edge.withValues(alpha: 0.4)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(genre.key, style: TextStyle(color: isSelected ? AppTheme.violet : AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w500)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              decoration: BoxDecoration(color: AppTheme.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                              child: Text('${genre.value}', style: const TextStyle(color: AppTheme.violet, fontSize: 9, fontWeight: FontWeight.w700)),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 },
@@ -445,6 +492,8 @@ class _HeroCardState extends State<_HeroCard> {
                                 decoration: BoxDecoration(color: AppTheme.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                                 child: Text(t.genre, style: const TextStyle(color: AppTheme.violet, fontSize: 10, fontWeight: FontWeight.w600)),
                               ),
+                              const SizedBox(width: 8),
+                              SourceBadges(sources: t.effectiveSources, compact: true),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -529,6 +578,7 @@ class _RunnerCardState extends State<_RunnerCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
@@ -541,9 +591,9 @@ class _RunnerCardState extends State<_RunnerCard> {
                         Text('$score', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 16)),
                       ],
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 1),
                     Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
@@ -638,7 +688,7 @@ class _TrackCardState extends State<_TrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 9)),
+                        SourceBadges(sources: t.effectiveSources, compact: true),
                       ],
                     ),
                   ],
@@ -724,6 +774,8 @@ class _RisingCardState extends State<_RisingCard> {
                     Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 2),
                     Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 4),
+                    SourceBadges(sources: t.effectiveSources, compact: true),
                   ],
                 ),
               ),

@@ -16,6 +16,7 @@ class LibraryTrack {
     required this.bitrate,
     required this.sampleRate,
     this.year,
+    this.artworkUrl,
   });
 
   final String id;
@@ -35,6 +36,10 @@ class LibraryTrack {
   final int sampleRate;
   final int? year;
 
+  /// Album artwork URL fetched from Spotify/Apple Music/YouTube.
+  /// Null until enrichment runs after scan.
+  final String? artworkUrl;
+
   /// Release year — alias for [year], used for client-side year-range filtering.
   int? get releaseYear => year;
 
@@ -49,11 +54,12 @@ class LibraryTrack {
     return '${(fileSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  LibraryTrack copyWith({String? md5Hash}) => LibraryTrack(
+  LibraryTrack copyWith({String? md5Hash, String? artworkUrl}) => LibraryTrack(
     id: id, filePath: filePath, fileName: fileName, title: title, artist: artist,
     album: album, genre: genre, bpm: bpm, key: key, durationSeconds: durationSeconds,
     fileSizeBytes: fileSizeBytes, fileExtension: fileExtension,
-    md5Hash: md5Hash ?? this.md5Hash, bitrate: bitrate, sampleRate: sampleRate, year: year,
+    md5Hash: md5Hash ?? this.md5Hash, bitrate: bitrate, sampleRate: sampleRate,
+    year: year, artworkUrl: artworkUrl ?? this.artworkUrl,
   );
 }
 

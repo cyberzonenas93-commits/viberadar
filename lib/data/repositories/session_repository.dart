@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../models/session_state.dart';
 
@@ -65,17 +66,50 @@ class FirebaseSessionRepository implements SessionRepository {
 
   @override
   Stream<SessionState> sessionChanges() async* {
-    // Only seed from currentUser if it is already available (non-null).
-    // If null we must NOT yield yet — Riverpod stays in AsyncLoading and
-    // the auth_gate shows a spinner while Firebase restores the persisted
-    // token from the Keychain.  Yielding an unauthenticated state here
-    // would immediately flip the UI to the login screen before Firebase
-    // has had a chance to restore the session, causing every cold-start
-    // to require a fresh sign-in.
+    // Check "remember me" preference
+    final prefs = await SharedPreferences.getInstance();
+    final rememberMe = prefs.getBool('remember_me') ?? true;
+
+    // ── Warm start: user already in memory ──
     final cached = _auth.currentUser;
     if (cached != null) {
+      if (!rememberMe) {
+        // User opted out of "keep me signed in" — sign out
+        await _auth.signOut();
+        yield _toState(null);
+        yield* _auth.authStateChanges().map(_toState);
+        return;
+      }
       yield _toState(cached);
+      yield* _auth.authStateChanges().map(_toState);
+      return;
     }
+
+    // ── Cold start: wait for Firebase to restore from Keychain ──
+    if (!rememberMe) {
+      // Not remembering — go straight to login
+      yield _toState(null);
+      yield* _auth.authStateChanges().map(_toState);
+      return;
+    }
+
+    // Wait up to 3 seconds for a non-null user from the auth stream.
+    User? firstUser;
+    try {
+      firstUser = await _auth.authStateChanges()
+          .where((u) => u != null)
+          .first
+          .timeout(const Duration(seconds: 3));
+    } catch (_) {
+      firstUser = _auth.currentUser;
+    }
+
+    if (firstUser != null) {
+      yield _toState(firstUser);
+    } else {
+      yield _toState(null);
+    }
+
     yield* _auth.authStateChanges().map(_toState);
   }
 

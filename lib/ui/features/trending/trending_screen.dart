@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
 
 class TrendingScreen extends ConsumerStatefulWidget {
@@ -29,14 +30,25 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
 
     var filtered = allTracks.toList();
     if (_selectedGenre != 'All') filtered = filtered.where((t) => t.genre == _selectedGenre).toList();
-    if (_selectedRegion != 'All') filtered = filtered.where((t) => t.leadRegion == _selectedRegion).toList();
+    if (_selectedRegion != 'All') {
+      // Keep tracks that have ANY score in the selected region, sort by regional score
+      filtered = filtered.where((t) => (t.regionScores[_selectedRegion] ?? 0) > 0).toList();
+    }
     if (_search.isNotEmpty) {
       final q = _search.toLowerCase();
       filtered = filtered.where((t) => t.title.toLowerCase().contains(q) || t.artist.toLowerCase().contains(q)).toList();
     }
-    filtered.sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    // Sort by regional score when a region is selected, otherwise by global trendScore
+    if (_selectedRegion != 'All') {
+      filtered.sort((a, b) =>
+          (b.regionScores[_selectedRegion] ?? 0).compareTo(a.regionScores[_selectedRegion] ?? 0));
+    } else {
+      filtered.sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    }
 
-    return Column(
+    return Stack(
+      children: [
+        Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Header
@@ -112,6 +124,20 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
                   itemBuilder: (context, i) => _TrackCard(track: filtered[i], rank: i + 1, ref: ref),
                 ),
         ),
+      ],
+    ),
+        // Floating "Add All to Crate" button
+        if (filtered.isNotEmpty)
+          Positioned(
+            bottom: 20, right: 20,
+            child: FloatingActionButton.extended(
+              heroTag: 'trending_crate',
+              onPressed: () => showBulkAddToCrate(context, ref, filtered),
+              backgroundColor: AppTheme.violet,
+              icon: const Icon(Icons.playlist_add_rounded, size: 18),
+              label: Text('Add ${filtered.length} to Crate', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+            ),
+          ),
       ],
     );
   }
@@ -231,7 +257,7 @@ class _TrackCardState extends State<_TrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 9)),
+                        SourceBadges(sources: t.effectiveSources, compact: true),
                       ],
                     ),
                   ],

@@ -7,6 +7,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../services/greatest_of_service.dart';
+import '../../../services/platform_search_service.dart';
+import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
 
 class GreatestOfScreen extends ConsumerStatefulWidget {
@@ -22,11 +24,16 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
   int? _yearFrom;
   int? _yearTo;
   bool _groupByEra = false;
+  bool _searchingPlatforms = false;
+  List<PlatformTrackResult> _platformResults = [];
 
   final _artistController = TextEditingController();
   final _yearFromController = TextEditingController();
   final _yearToController = TextEditingController();
   final _svc = GreatestOfService();
+  final _platformSearch = PlatformSearchService();
+
+  String _lastSearchKey = '';
 
   @override
   void dispose() {
@@ -36,13 +43,47 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
     super.dispose();
   }
 
+  /// Auto-search platforms when filters change
+  void _autoSearchPlatforms() {
+    final searchKey = '$_selectedGenre|$_artistFilter|$_yearFrom|$_yearTo';
+    if (searchKey == _lastSearchKey) return;
+    _lastSearchKey = searchKey;
+
+    // Only search if we have a specific filter (not "All" with no artist)
+    if (_selectedGenre == 'All' && _artistFilter.isEmpty) {
+      setState(() => _platformResults = []);
+      return;
+    }
+
+    setState(() => _searchingPlatforms = true);
+
+    Future<void> doSearch() async {
+      try {
+        List<PlatformTrackResult> results;
+        if (_artistFilter.isNotEmpty) {
+          results = await _platformSearch.searchByArtist(_artistFilter, limit: 100);
+        } else {
+          final era = _yearFrom != null ? '${_yearFrom}s' : null;
+          results = await _platformSearch.searchByGenre(_selectedGenre, limit: 100, era: era);
+        }
+        if (mounted) setState(() { _platformResults = results; _searchingPlatforms = false; });
+      } catch (_) {
+        if (mounted) setState(() => _searchingPlatforms = false);
+      }
+    }
+    doSearch();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final tracksAsync = ref.watch(trackStreamProvider);
     final allTracks = tracksAsync.value ?? const <Track>[];
 
-    final genres = ['All', ...{for (final t in allTracks) if (t.genre.isNotEmpty) t.genre}];
+    final genres = ['All', 'Afrobeats', 'Amapiano', 'Hip-Hop', 'R&B', 'House',
+        'Dancehall', 'Pop', 'Latin', 'Drill', 'Dance', 'UK Garage',
+        ...{for (final t in allTracks) if (t.genre.isNotEmpty) t.genre}];
+    final uniqueGenres = genres.toSet().toList();
     final regions = ['All', ...{for (final t in allTracks) if (t.leadRegion.isNotEmpty) t.leadRegion}];
 
     final topTracks = _svc.buildGreatestOfSet(
@@ -52,8 +93,11 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
       region: _selectedRegion == 'All' ? null : _selectedRegion,
       yearFrom: _yearFrom,
       yearTo: _yearTo,
-      limit: 200,
+      limit: 500,
     );
+
+    // Auto-search platforms
+    WidgetsBinding.instance.addPostFrameCallback((_) => _autoSearchPlatforms());
 
     // Pre-compute greatest scores map for display
     final scoreMap = {for (final t in topTracks) t.id: _svc.computeGreatestScore(t)};
@@ -106,7 +150,7 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                     _FilterChip(
                       label: 'Genre',
                       value: _selectedGenre,
-                      options: genres,
+                      options: uniqueGenres,
                       onChanged: (v) => setState(() => _selectedGenre = v),
                     ),
                     const SizedBox(width: 8),
@@ -290,6 +334,43 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                             ),
                           ),
                         ),
+                        // Platform results section
+                        if (_platformResults.isNotEmpty || _searchingPlatforms) ...[
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.cloud_download_rounded, color: AppTheme.cyan, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'From Apple Music & Spotify',
+                                    style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 14),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  if (_searchingPlatforms)
+                                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan))
+                                  else
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
+                                      child: Text('${_platformResults.length}', style: const TextStyle(color: AppTheme.cyan, fontSize: 10, fontWeight: FontWeight.w600)),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          if (_platformResults.isNotEmpty)
+                            SliverPadding(
+                              padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                              sliver: SliverList(
+                                delegate: SliverChildBuilderDelegate(
+                                  (context, i) => _PlatformTrackRow(track: _platformResults[i], index: i),
+                                  childCount: _platformResults.length,
+                                ),
+                              ),
+                            ),
+                        ],
                       ],
                     ),
         ),
@@ -522,6 +603,8 @@ class _HeroCardState extends State<_HeroCard> {
                                 ),
                                 child: Text(t.genre, style: const TextStyle(color: AppTheme.violet, fontSize: 10, fontWeight: FontWeight.w600)),
                               ),
+                              const SizedBox(width: 8),
+                              SourceBadges(sources: t.effectiveSources, compact: true),
                             ],
                           ),
                           const SizedBox(height: 14),
@@ -712,6 +795,8 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                         Text(t.keySignature, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
                         const SizedBox(width: 8),
                         Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 10)),
+                        const SizedBox(width: 8),
+                        SourceBadges(sources: t.effectiveSources, compact: true),
                       ],
                     ),
                   ],
@@ -875,7 +960,7 @@ class _TrackCardState extends State<_TrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 9)),
+                        SourceBadges(sources: t.effectiveSources, compact: true),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -1116,5 +1201,107 @@ Future<void> _openTrack(Track track) async {
   final uri = Uri.tryParse(url);
   if (uri != null) {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform track row (for Spotify/Apple Music results)
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PlatformTrackRow extends StatefulWidget {
+  const _PlatformTrackRow({required this.track, required this.index});
+  final PlatformTrackResult track;
+  final int index;
+
+  @override
+  State<_PlatformTrackRow> createState() => _PlatformTrackRowState();
+}
+
+class _PlatformTrackRowState extends State<_PlatformTrackRow> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: _hovered ? AppTheme.panelRaised : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 24,
+              child: Text('${widget.index + 1}', textAlign: TextAlign.right,
+                  style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+            ),
+            const SizedBox(width: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: t.artworkUrl != null
+                  ? CachedNetworkImage(imageUrl: t.artworkUrl!, width: 36, height: 36, fit: BoxFit.cover)
+                  : Container(width: 36, height: 36, color: AppTheme.panelRaised,
+                      child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 16)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                ],
+              ),
+            ),
+            if (t.durationMs > 0)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: Text('${t.durationMs ~/ 60000}:${((t.durationMs % 60000) ~/ 1000).toString().padLeft(2, '0')}',
+                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+              ),
+            if (t.spotifyUrl != null)
+              _PlayBtn(icon: Icons.graphic_eq_rounded, color: const Color(0xFF1ED760), url: t.spotifyUrl!, tip: 'Spotify'),
+            if (t.appleUrl != null)
+              _PlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: t.appleUrl!, tip: 'Apple Music'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PlayBtn extends StatelessWidget {
+  const _PlayBtn({required this.icon, required this.color, required this.url, required this.tip});
+  final IconData icon;
+  final Color color;
+  final String url;
+  final String tip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Play on $tip',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: () {
+            final uri = Uri.tryParse(url);
+            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(4),
+            child: Icon(icon, color: color, size: 18),
+          ),
+        ),
+      ),
+    );
   }
 }

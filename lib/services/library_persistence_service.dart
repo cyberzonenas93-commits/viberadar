@@ -63,6 +63,7 @@ class LibraryPersistenceService {
         'bitrate': t.bitrate,
         'sampleRate': t.sampleRate,
         'year': t.year,
+        if (t.artworkUrl != null) 'artworkUrl': t.artworkUrl,
       };
 
   LibraryTrack _trackFromJson(Map<String, dynamic> j) => LibraryTrack(
@@ -82,5 +83,6 @@ class LibraryPersistenceService {
         bitrate: j['bitrate'] as int,
         sampleRate: j['sampleRate'] as int,
         year: j['year'] as int?,
+        artworkUrl: j['artworkUrl'] as String?,
       );
 }

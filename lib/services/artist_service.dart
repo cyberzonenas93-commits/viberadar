@@ -1,11 +1,14 @@
 import '../models/artist_model.dart';
 import '../models/track.dart';
+import 'greatest_of_service.dart';
 
 /// Builds [ArtistModel] aggregates from the existing Firestore [Track] list.
 /// Does NOT call any external API and does NOT write to Firestore.
 /// Uses [SpotifyArtistService] data only if it is already present on tracks
 /// via [platformLinks] — no new network calls are made here.
 class ArtistService {
+  final _greatestOf = GreatestOfService();
+
   // ── public API ────────────────────────────────────────────────────────────
 
   /// Build the full artist catalogue from a flat list of tracks.
@@ -77,7 +80,7 @@ class ArtistService {
         .map((e) => e.key)
         .toList();
 
-    // Era grouping
+    // Era grouping (uses effectiveReleaseYear)
     final tracksByEra = _groupByEra(tracks);
 
     // BPM range (exclude 0-BPM unknowns)
@@ -110,6 +113,49 @@ class ArtistService {
           .key;
     }
 
+    // Collaborators — extract feat., &, x, vs. from artist field
+    final collaborators = _extractCollaborators(name, tracks);
+
+    // Vibe grouping
+    final tracksByVibe = <String, List<Track>>{};
+    for (final t in tracks) {
+      if (t.vibe.isNotEmpty) {
+        tracksByVibe.putIfAbsent(t.vibe, () => []).add(t);
+      }
+    }
+
+    // BPM bucket grouping
+    final tracksByBpmBucket = <String, List<Track>>{};
+    for (final t in tracks) {
+      if (t.bpm > 0) {
+        final bucket = '${(t.bpm ~/ 10) * 10}–${(t.bpm ~/ 10) * 10 + 9}';
+        tracksByBpmBucket.putIfAbsent(bucket, () => []).add(t);
+      }
+    }
+
+    // Greatest-of score (average across catalogue)
+    final greatestOfScore = tracks.isEmpty
+        ? 0.0
+        : tracks
+                .map((t) => _greatestOf.computeGreatestScore(t))
+                .reduce((a, b) => a + b) /
+            tracks.length;
+
+    // Active sources
+    final activeSources = <String>{};
+    for (final t in tracks) {
+      activeSources.addAll(t.effectiveSources);
+    }
+
+    // Year range
+    final years = tracks.map((t) => t.effectiveReleaseYear).toList();
+    final yearRange = years.isEmpty
+        ? <int>[]
+        : [
+            years.reduce((a, b) => a < b ? a : b),
+            years.reduce((a, b) => a > b ? a : b),
+          ];
+
     // Artwork + Spotify URL from best track
     final best = sorted.first;
     return ArtistModel(
@@ -126,14 +172,20 @@ class ArtistService {
       leadRegion: leadRegion,
       artworkUrl: best.artworkUrl.isNotEmpty ? best.artworkUrl : null,
       spotifyUrl: best.platformLinks['spotify'],
+      collaborators: collaborators,
+      tracksByVibe: tracksByVibe,
+      tracksByBpmBucket: tracksByBpmBucket,
+      greatestOfScore: greatestOfScore,
+      allTracks: sorted,
+      activeSources: activeSources,
+      yearRange: yearRange,
     );
   }
 
   Map<String, List<Track>> _groupByEra(List<Track> tracks) {
     final map = <String, List<Track>>{};
     for (final t in tracks) {
-      final y = t.createdAt.year;
-      final era = y < 2010 ? '2000s' : (y < 2020 ? '2010s' : '2020s');
+      final era = GreatestOfService.eraLabel(t);
       map.putIfAbsent(era, () => []).add(t);
     }
     // Sort within each era by trendScore descending
@@ -141,5 +193,24 @@ class ArtistService {
       map[era]!.sort((a, b) => b.trendScore.compareTo(a.trendScore));
     }
     return map;
+  }
+
+  /// Extract collaborator names from the artist field of all tracks.
+  /// Looks for patterns like "feat.", "ft.", "&", " x ", " vs ".
+  List<String> _extractCollaborators(String primaryName, List<Track> tracks) {
+    final collabs = <String>{};
+    final splitPattern = RegExp(r'\s+(?:feat\.?|ft\.?|&|x|vs\.?)\s+', caseSensitive: false);
+
+    for (final t in tracks) {
+      final parts = t.artist.split(splitPattern);
+      for (final part in parts) {
+        final trimmed = part.trim();
+        if (trimmed.isNotEmpty &&
+            trimmed.toLowerCase() != primaryName.toLowerCase()) {
+          collabs.add(trimmed);
+        }
+      }
+    }
+    return collabs.toList()..sort();
   }
 }

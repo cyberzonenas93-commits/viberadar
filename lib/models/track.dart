@@ -20,6 +20,7 @@ class Track {
     required this.energyLevel,
     required this.trendHistory,
     this.sources = const <String>[],
+    this.releaseYear,
   });
 
   final String id;
@@ -39,6 +40,14 @@ class Track {
   final List<TrendPoint> trendHistory;
   /// Which ingestion sources contributed to this track (e.g. ["spotify","youtube","billboard"]).
   final List<String> sources;
+
+  /// Release year of the track. May be null if not available from any source.
+  /// Falls back to createdAt.year for filtering when null.
+  final int? releaseYear;
+
+  /// Best-effort release year: explicit releaseYear if available, otherwise
+  /// createdAt.year as a rough proxy.
+  int get effectiveReleaseYear => releaseYear ?? createdAt.year;
 
   /// Sources that contributed to this track's trend score.
   /// Returns the dedicated `sources` list when available (set by the Cloud
@@ -86,6 +95,7 @@ class Track {
       energyLevel: (map['energy_level'] as num?)?.toDouble() ?? 0.5,
       trendHistory: _parseTrendHistory(map['trend_history']),
       sources: (map['sources'] as List?)?.cast<String>() ?? const <String>[],
+      releaseYear: (map['release_year'] as num?)?.toInt(),
     );
   }
 
@@ -107,6 +117,7 @@ class Track {
       'energy_level': energyLevel,
       'trend_history': trendHistory.map((point) => point.toMap()).toList(),
       'sources': sources,
+      if (releaseYear != null) 'release_year': releaseYear,
     };
   }
 

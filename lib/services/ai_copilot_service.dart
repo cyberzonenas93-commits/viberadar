@@ -45,22 +45,31 @@ class AiCopilotService {
 
   static const _baseSystemPrompt =
       'You are VibeRadar AI Copilot — an expert DJ intelligence assistant '
-      'specializing in Afrobeats, Amapiano, R&B, Hip-Hop, and House music.\n\n'
-      'CRITICAL: When a DJ asks you to build a set, crate, or playlist, you MUST '
-      'respond with a structured JSON block that the app can parse into a real crate. '
-      'Format your crate recommendations as:\n'
+      'specializing in Afrobeats, Amapiano, R&B, Hip-Hop, House, Dancehall, '
+      'Pop, Latin, and all open-format music.\n\n'
+      'IMPORTANT: You have access to the ENTIRE catalogue of Apple Music, Spotify, '
+      'YouTube, Deezer, and Billboard charts. You are NOT limited to the tracks below. '
+      'The tracks below are what the user currently has in their radar — but you can and '
+      'should recommend ANY song that exists on these platforms when building sets. '
+      'Use your full knowledge of music across all genres, eras, and regions.\n\n'
+      '*** MANDATORY RULE FOR SET/CRATE/PLAYLIST REQUESTS ***\n'
+      'When a user asks you to BUILD, CREATE, or MAKE a set, crate, or playlist:\n'
+      'You MUST ALWAYS end your response with a ```crate JSON block. NO EXCEPTIONS.\n'
+      'This is how the app creates the actual crate. Without it, nothing gets created.\n\n'
+      'Response format:\n'
+      '1. One brief sentence about the vibe\n'
+      '2. Numbered track list: "1. Artist - Title (BPM, Key)"\n'
+      '3. One brief mixing tip\n'
+      '4. MANDATORY crate block at the very end:\n'
       '```crate\n'
-      '{"name":"Crate Name","tracks":[\n'
-      '  {"title":"Song Title","artist":"Artist Name","bpm":120,"key":"7A"},\n'
-      '  ...\n'
-      ']}\n'
-      '```\n\n'
-      'Always include BPM and Camelot key for each track. Order tracks for optimal '
-      'energy flow and harmonic mixing. Add a brief explanation after the crate block.\n\n'
-      'You also help with: harmonic mixing advice (Camelot wheel), regional scene '
-      'intelligence (Ghana, Nigeria, South Africa, UK, US), BPM/energy flow, and '
-      'artist deep-dives. Be concise, knowledgeable, use DJ/music-industry language.\n\n'
-      'AVAILABLE TRACKS IN RADAR (use these when possible):\n';
+      '{"name":"Crate Name","tracks":[{"title":"Song","artist":"Artist","bpm":120,"key":"7A"}]}\n'
+      '```\n'
+      'NEVER skip the crate block. NEVER. The app will not create the crate without it.\n'
+      'Include 15-30 tracks. Always include BPM and Camelot key.\n\n'
+      'For non-set questions (mixing advice, artist info, etc), respond normally without a crate block.\n\n'
+      'You also help with: harmonic mixing (Camelot wheel), regional scene intel '
+      '(Ghana, Nigeria, South Africa, UK, US), BPM/energy flow, artist deep-dives.\n\n'
+      'TRACKS CURRENTLY IN RADAR (prefer these when relevant, but use ANY songs):\n';
 
   /// System prompt for structured command parsing.
   static const _parseCommandSystemPrompt =
@@ -230,7 +239,7 @@ class AiCopilotService {
             body: jsonEncode({
               'model': model,
               'messages': messages,
-              'max_tokens': 600,
+              'max_completion_tokens': 1500,
               'temperature': 0.7,
             }),
           )
@@ -247,6 +256,86 @@ class AiCopilotService {
       }
     } catch (e) {
       return '⚠️ Network error — check your connection and try again.';
+    }
+  }
+
+  // ── Streaming chat ─────────────────────────────────────────────────────
+
+  /// Streams the AI response token-by-token via SSE.
+  /// Calls [onToken] with each new chunk of text as it arrives.
+  /// Returns the full completed response when done.
+  Stream<String> chatStream(
+    List<Map<String, String>> history,
+    String userMessage, {
+    List<Map<String, String>>? trackContext,
+    int? yearFrom,
+    int? yearTo,
+  }) async* {
+    final apiKey = await getApiKey();
+    if (apiKey == null || apiKey.trim().isEmpty) {
+      yield _simulateResponse(userMessage);
+      return;
+    }
+
+    final model = await getModel();
+    final messages = [
+      {
+        'role': 'system',
+        'content': _buildSystemPrompt(trackContext,
+            yearFrom: yearFrom, yearTo: yearTo)
+      },
+      ...history,
+      {'role': 'user', 'content': userMessage},
+    ];
+
+    final request = http.Request('POST', Uri.parse(_endpoint));
+    request.headers['Authorization'] = 'Bearer $apiKey';
+    request.headers['Content-Type'] = 'application/json';
+    request.body = jsonEncode({
+      'model': model,
+      'messages': messages,
+      'max_completion_tokens': 1500,
+      'temperature': 0.7,
+      'stream': true,
+    });
+
+    try {
+      final client = http.Client();
+      final response = await client.send(request).timeout(const Duration(seconds: 60));
+
+      if (response.statusCode != 200) {
+        final body = await response.stream.bytesToString();
+        try {
+          final err = jsonDecode(body);
+          yield '⚠️ OpenAI error: ${err['error']?['message'] ?? 'API error ${response.statusCode}'}';
+        } catch (_) {
+          yield '⚠️ API error ${response.statusCode}';
+        }
+        client.close();
+        return;
+      }
+
+      final buffer = StringBuffer();
+      await for (final chunk in response.stream.transform(utf8.decoder)) {
+        // SSE: each line starts with "data: "
+        for (final line in chunk.split('\n')) {
+          final trimmed = line.trim();
+          if (trimmed.isEmpty || trimmed == 'data: [DONE]') continue;
+          if (!trimmed.startsWith('data: ')) continue;
+
+          try {
+            final json = jsonDecode(trimmed.substring(6)) as Map<String, dynamic>;
+            final delta = json['choices']?[0]?['delta']?['content'] as String?;
+            if (delta != null && delta.isNotEmpty) {
+              buffer.write(delta);
+              yield buffer.toString();
+            }
+          } catch (_) {}
+        }
+      }
+      client.close();
+    } catch (e) {
+      yield '⚠️ Network error — check your connection and try again.';
     }
   }
 
@@ -290,7 +379,7 @@ class AiCopilotService {
                 {'role': 'system', 'content': systemPrompt},
                 {'role': 'user', 'content': userMessage},
               ],
-              'max_tokens': 400,
+              'max_completion_tokens': 400,
               'temperature': 0.3,
               'response_format': {'type': 'json_object'},
             }),

@@ -125,6 +125,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   _LoginMode _mode = _LoginMode.main;
   bool _isLoading = false;
   String? _error;
+  bool _rememberMe = true;
 
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -254,7 +255,29 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     mainAxisSize: MainAxisSize.min,
     children: [
       _brand(theme),
-      const SizedBox(height: 36),
+      const SizedBox(height: 28),
+
+      // Keep me signed in
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 20, height: 20,
+            child: Checkbox(
+              value: _rememberMe,
+              onChanged: (v) => setState(() => _rememberMe = v ?? true),
+              activeColor: AppTheme.violet,
+              side: BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => setState(() => _rememberMe = !_rememberMe),
+            child: const Text('Keep me signed in', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 20),
 
       // Google Sign-In
       _PrimaryButton(
@@ -352,7 +375,27 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
           icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: AppTheme.textSecondary, size: 18),
         ),
       ),
-      const SizedBox(height: 20),
+
+      // Remember me checkbox
+      Row(
+        children: [
+          SizedBox(
+            width: 20, height: 20,
+            child: Checkbox(
+              value: _rememberMe,
+              onChanged: (v) => setState(() => _rememberMe = v ?? true),
+              activeColor: AppTheme.violet,
+              side: BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () => setState(() => _rememberMe = !_rememberMe),
+            child: const Text('Keep me signed in', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ),
+        ],
+      ),
+      const SizedBox(height: 16),
 
       _PrimaryButton(
         onPressed: _isLoading ? null : (_mode == _LoginMode.emailCreate ? _createAccount : _signInWithEmail),
@@ -415,10 +458,16 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
 
   // ── Auth actions ──────────────────────────────────────────────────────────
 
+  Future<void> _saveRememberMe() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('remember_me', _rememberMe);
+  }
+
   Future<void> _signInWithGoogle() async {
     setState(() { _isLoading = true; _error = null; });
     try {
       await ref.read(sessionRepositoryProvider).signInWithGoogle();
+      await _saveRememberMe();
     } catch (e) {
       if (mounted) setState(() => _error = _friendly(e));
     } finally {
@@ -430,6 +479,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     setState(() { _isLoading = true; _error = null; });
     try {
       await ref.read(sessionRepositoryProvider).signInAnonymously();
+      await _saveRememberMe();
     } catch (e) {
       if (mounted) setState(() => _error = _friendly(e));
     } finally {
@@ -444,6 +494,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
         email: _emailCtrl.text.trim(),
         password: _passwordCtrl.text,
       );
+      await _saveRememberMe();
     } catch (e) {
       if (mounted) setState(() => _error = _friendly(e));
     } finally {

@@ -45,15 +45,18 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
 
       final results = await Future.wait([
         _spotify.getArtistProfile(artistId),
-        _spotify.getTopTracks(artistId),
+        _spotify.getFullCatalogue(name),
         _spotify.getLatestRelease(artistId),
       ]);
 
       if (!mounted) return;
+      final catalogue = results[1] as List<SpotifyTrackInfo>;
+      // Sort by popularity descending, keep at least 50
+      catalogue.sort((a, b) => b.popularity.compareTo(a.popularity));
       setState(() {
         _profiles[name] = results[0] as SpotifyArtistProfile? ??
             SpotifyArtistProfile(id: artistId, name: name);
-        _topTracks[name] = results[1] as List<SpotifyTrackInfo>;
+        _topTracks[name] = catalogue.take(50).toList();
         _latestRelease[name] = results[2] as SpotifyAlbumInfo?;
       });
 
@@ -738,6 +741,8 @@ class _ArtistPickerDialogState extends State<_ArtistPickerDialog> {
   List<SpotifyArtistResult> _searchResults = [];
   bool _searching = false;
   Timer? _debounce;
+  // Cached images for popular artists
+  final Map<String, String?> _popularImages = {};
 
   // Popular artists to show by default
   static const _popular = [
@@ -802,6 +807,24 @@ class _ArtistPickerDialogState extends State<_ArtistPickerDialog> {
   void initState() {
     super.initState();
     _selected = Set.from(widget.initialFollowed);
+    _loadPopularImages();
+  }
+
+  /// Load images for popular artists in batches via Spotify search.
+  Future<void> _loadPopularImages() async {
+    // Search in batches of 5 to avoid rate limits
+    for (var i = 0; i < _popular.length; i += 5) {
+      final batch = _popular.skip(i).take(5);
+      await Future.wait(batch.map((name) async {
+        try {
+          final results = await _spotify.searchArtistsByName(name);
+          if (results.isNotEmpty && mounted) {
+            setState(() => _popularImages[name] = results.first.imageUrl);
+          }
+        } catch (_) {}
+      }));
+      if (!mounted) return;
+    }
   }
 
   @override
@@ -847,7 +870,12 @@ class _ArtistPickerDialogState extends State<_ArtistPickerDialog> {
     return Dialog(
       backgroundColor: AppTheme.panel,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: SizedBox(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.85,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: SizedBox(
         width: 620,
         height: 600,
         child: Column(
@@ -979,8 +1007,9 @@ class _ArtistPickerDialogState extends State<_ArtistPickerDialog> {
                 itemCount: displayItems.length,
                 itemBuilder: (context, i) {
                   final name = displayItems[i];
-                  final imageUrl =
-                      showSearch ? _searchResults[i].imageUrl : null;
+                  final imageUrl = showSearch
+                      ? _searchResults[i].imageUrl
+                      : _popularImages[name];
                   final isSelected = _selected.contains(name);
                   return GestureDetector(
                     onTap: () => setState(() {
@@ -1127,6 +1156,7 @@ class _ArtistPickerDialogState extends State<_ArtistPickerDialog> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

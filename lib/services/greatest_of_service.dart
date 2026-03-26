@@ -3,14 +3,16 @@ import '../models/track.dart';
 /// Computes a [greatestScore] (0.0–1.0) for each [Track] that weighs
 /// long-term cultural impact rather than just the current trend momentum.
 ///
-/// Weights
+/// Weights (8 dimensions)
 /// ─────────────────────────────────────────────
-///  long_term_popularity  0.25  (trend_score proxy)
-///  chart_legacy          0.20  (platform breadth)
-///  replay_longevity      0.20  (energy + history depth)
-///  dj_usefulness         0.15  (BPM sweetspot + key)
-///  timelessness          0.10  (age × sustained popularity)
-///  artist_influence      0.10  (relative to peer avg)
+///  long_term_popularity   0.20  (trend_score proxy)
+///  chart_legacy           0.15  (platform breadth)
+///  replay_longevity       0.15  (energy + history depth)
+///  dj_usefulness          0.12  (BPM sweetspot + key)
+///  timelessness           0.10  (age × sustained popularity)
+///  familiarity            0.10  (mainstream crossover appeal)
+///  artist_influence       0.08  (regional + source breadth)
+///  cross_source           0.10  (how many sources carry it)
 class GreatestOfService {
   // ─── public API ────────────────────────────────────────────────────────────
 
@@ -21,17 +23,24 @@ class GreatestOfService {
     final longevity = _replayLongevity(track);
     final djUse = _djUsefulness(track);
     final timeless = _timelessness(track);
+    final familiar = _familiarity(track);
     final influence = _artistInfluence(track);
+    final crossSource = _crossSourceProminence(track);
 
-    return (popularity * 0.25) +
-        (legacy * 0.20) +
-        (longevity * 0.20) +
-        (djUse * 0.15) +
+    return (popularity * 0.20) +
+        (legacy * 0.15) +
+        (longevity * 0.15) +
+        (djUse * 0.12) +
         (timeless * 0.10) +
-        (influence * 0.10);
+        (familiar * 0.10) +
+        (influence * 0.08) +
+        (crossSource * 0.10);
   }
 
   /// Filter and rank tracks for a greatest-of set.
+  ///
+  /// Supports multiple genres and multiple artists via comma-separated strings.
+  /// Release-range filtering uses [Track.effectiveReleaseYear].
   List<Track> buildGreatestOfSet({
     required List<Track> tracks,
     String? genre,
@@ -43,30 +52,52 @@ class GreatestOfService {
   }) {
     var filtered = tracks.toList();
 
+    // ── Genre filter (supports comma-separated multi-genre) ──
     if (genre != null && genre.isNotEmpty && genre != 'All') {
-      filtered =
-          filtered.where((t) => t.genre.toLowerCase() == genre.toLowerCase()).toList();
+      final genres = genre
+          .split(',')
+          .map((g) => g.trim().toLowerCase())
+          .where((g) => g.isNotEmpty)
+          .toSet();
+      if (genres.isNotEmpty) {
+        filtered = filtered
+            .where((t) => genres.contains(t.genre.toLowerCase()))
+            .toList();
+      }
     }
+
+    // ── Artist filter (supports comma-separated multi-artist) ──
     if (artist != null && artist.isNotEmpty) {
-      final q = artist.toLowerCase();
-      filtered =
-          filtered.where((t) => t.artist.toLowerCase().contains(q)).toList();
+      final artists = artist
+          .split(',')
+          .map((a) => a.trim().toLowerCase())
+          .where((a) => a.isNotEmpty)
+          .toList();
+      if (artists.isNotEmpty) {
+        filtered = filtered.where((t) {
+          final tArtist = t.artist.toLowerCase();
+          return artists.any((a) => tArtist.contains(a));
+        }).toList();
+      }
     }
+
+    // ── Region filter ──
     if (region != null && region.isNotEmpty && region != 'All') {
-      filtered =
-          filtered.where((t) => t.leadRegion == region).toList();
+      filtered = filtered.where((t) => t.leadRegion == region).toList();
     }
+
+    // ── Release-year range (uses effectiveReleaseYear) ──
     if (yearFrom != null) {
       filtered =
-          filtered.where((t) => t.createdAt.year >= yearFrom).toList();
+          filtered.where((t) => t.effectiveReleaseYear >= yearFrom).toList();
     }
     if (yearTo != null) {
       filtered =
-          filtered.where((t) => t.createdAt.year <= yearTo).toList();
+          filtered.where((t) => t.effectiveReleaseYear <= yearTo).toList();
     }
 
-    filtered.sort((a, b) =>
-        computeGreatestScore(b).compareTo(computeGreatestScore(a)));
+    filtered.sort(
+        (a, b) => computeGreatestScore(b).compareTo(computeGreatestScore(a)));
 
     return filtered.take(limit).toList();
   }
@@ -80,8 +111,8 @@ class GreatestOfService {
   /// More platform links → wider cultural footprint.
   double _chartLegacy(Track t) {
     final count = t.platformLinks.length;
-    // Normalise: 0 → 0.0, 4+ → 1.0
-    return (count / 4).clamp(0.0, 1.0);
+    // Normalise: 0 → 0.0, 5+ → 1.0
+    return (count / 5).clamp(0.0, 1.0);
   }
 
   /// Replay longevity: energy level + trend-history depth.
@@ -93,52 +124,65 @@ class GreatestOfService {
   }
 
   /// DJ usefulness: optimal BPM range and key compatibility.
+  /// Broadened to reward more genres (R&B at 70-90, Afrobeats at 95-115, etc.)
   double _djUsefulness(Track t) {
     double bpmScore;
     final bpm = t.bpm;
-    if (bpm >= 120 && bpm <= 130) {
-      // House/tech-house sweet spot
+    if (bpm == 0) {
+      bpmScore = 0.3; // unknown BPM — neutral
+    } else if (bpm >= 85 && bpm <= 140) {
+      // Broad DJ-friendly range (R&B through House)
       bpmScore = 1.0;
-    } else if (bpm >= 110 && bpm <= 140) {
-      bpmScore = 0.7;
-    } else if (bpm >= 90 && bpm <= 150) {
-      bpmScore = 0.4;
-    } else if (bpm == 0) {
-      bpmScore = 0.3; // unknown BPM — neutral penalty
+    } else if (bpm >= 70 && bpm <= 160) {
+      bpmScore = 0.6;
     } else {
       bpmScore = 0.2;
     }
 
     // Bonus for tracks with a known key (better harmonic mixing).
-    final keyBonus = (t.keySignature.isNotEmpty && t.keySignature != '--')
-        ? 0.15
-        : 0.0;
+    final keyBonus =
+        (t.keySignature.isNotEmpty && t.keySignature != '--') ? 0.15 : 0.0;
 
     return (bpmScore + keyBonus).clamp(0.0, 1.0);
   }
 
-  /// Timelessness: old tracks with sustained popularity get a bonus.
+  /// Timelessness: older tracks with sustained popularity get a bonus.
+  /// Uses effectiveReleaseYear for age calculation.
   double _timelessness(Track t) {
-    final ageYears = DateTime.now().difference(t.createdAt).inDays / 365;
-    if (ageYears < 3) return 0.0; // too new to be "timeless"
-    // Scale: 3 yrs = base, 10+ yrs = full bonus, weighted by trend.
-    final ageFactor = ((ageYears - 3) / 7).clamp(0.0, 1.0);
+    final currentYear = DateTime.now().year;
+    final ageYears = currentYear - t.effectiveReleaseYear;
+    if (ageYears < 2) return 0.0; // too new to be "timeless"
+    // Scale: 2 yrs = base, 10+ yrs = full bonus, weighted by trend.
+    final ageFactor = ((ageYears - 2) / 8).clamp(0.0, 1.0);
     return (ageFactor * t.trendScore).clamp(0.0, 1.0);
   }
 
-  /// Artist influence: relative score versus the average across all tracks.
-  /// Computed per track with a simple heuristic (trend_score above median).
+  /// Familiarity: mainstream crossover appeal.
+  /// Tracks with high trend scores and multiple regions are more familiar.
+  double _familiarity(Track t) {
+    final trendFactor = t.trendScore.clamp(0.0, 1.0);
+    final regionBreadth = (t.regionScores.length / 4).clamp(0.0, 1.0);
+    return (trendFactor * 0.6 + regionBreadth * 0.4).clamp(0.0, 1.0);
+  }
+
+  /// Artist influence: regional + source breadth.
   double _artistInfluence(Track t) {
-    // Without a full catalogue context here we use regionScores breadth.
     final regionCount = t.regionScores.length;
-    final maxRegions = 8.0;
-    return (regionCount / maxRegions).clamp(0.0, 1.0);
+    return (regionCount / 6.0).clamp(0.0, 1.0);
+  }
+
+  /// Cross-source prominence: how many distinct ingestion sources carry this track.
+  double _crossSourceProminence(Track t) {
+    final sourceCount = t.effectiveSources.length;
+    // 1 source → 0.2, 3+ sources → 1.0
+    return ((sourceCount - 1) / 2).clamp(0.0, 1.0);
   }
 
   // ─── era helpers ──────────────────────────────────────────────────────────
 
   static String eraLabel(Track t) {
-    final y = t.createdAt.year;
+    final y = t.effectiveReleaseYear;
+    if (y < 2000) return 'Pre-2000';
     if (y < 2010) return '2000s';
     if (y < 2020) return '2010s';
     return '2020s';
@@ -151,4 +195,13 @@ class GreatestOfService {
     }
     return map;
   }
+
+  /// Era presets for quick UI selection.
+  static const eraPresets = {
+    '90s': (1990, 1999),
+    '2000s': (2000, 2009),
+    '2010s': (2010, 2019),
+    '2020s': (2020, 2029),
+    'All Time': (null, null),
+  };
 }

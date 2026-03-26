@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -417,6 +418,22 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                     color: AppTheme.lime, fontSize: 11),
                                 overflow: TextOverflow.ellipsis),
                           ),
+                          const SizedBox(width: 8),
+                          InkWell(
+                            onTap: () => Process.run('open', ['-R', _lastExportPath!]),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cyan.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(Icons.folder_open_rounded, color: AppTheme.cyan, size: 12),
+                                SizedBox(width: 4),
+                                Text('Show in Finder', style: TextStyle(color: AppTheme.cyan, fontSize: 10, fontWeight: FontWeight.w600)),
+                              ]),
+                            ),
+                          ),
                         ]),
                       ),
                     ),
@@ -675,6 +692,8 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
         default:
           return;
       }
+      // Auto-reveal in Finder so user immediately sees where the file went
+      ExportService.revealInFinder(path);
       if (mounted) {
         setState(() {
           _exportingFormat = null;
@@ -1182,6 +1201,7 @@ class _MatchRow extends StatelessWidget {
       MatchStatus.found => (Icons.check_circle_rounded, AppTheme.lime),
       MatchStatus.fuzzyMatch => (Icons.change_circle_rounded, AppTheme.amber),
       MatchStatus.duplicateVersions => (Icons.copy_rounded, AppTheme.cyan),
+      MatchStatus.uncertain => (Icons.help_outline_rounded, AppTheme.orange),
       MatchStatus.missing => (Icons.cancel_rounded, AppTheme.pink),
     };
 

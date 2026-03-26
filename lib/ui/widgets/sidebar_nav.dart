@@ -11,11 +11,14 @@ class SidebarNav extends StatefulWidget {
     required this.selectedSection,
     required this.onSelected,
     required this.statusMessage,
+    this.onRefreshComplete,
   });
 
   final AppSection selectedSection;
   final ValueChanged<AppSection> onSelected;
   final String statusMessage;
+  /// Called after a manual refresh completes so the parent can update the track cache.
+  final VoidCallback? onRefreshComplete;
 
   @override
   State<SidebarNav> createState() => _SidebarNavState();
@@ -28,6 +31,7 @@ class _SidebarNavState extends State<SidebarNav> {
   Future<void> _refresh() async {
     setState(() { _refreshing = true; _refreshResult = null; });
     final result = await IngestService.triggerIngest();
+    widget.onRefreshComplete?.call();
     if (mounted) {
       setState(() { _refreshing = false; _refreshResult = result; });
       Future.delayed(const Duration(seconds: 5), () {
@@ -72,7 +76,7 @@ class _SidebarNavState extends State<SidebarNav> {
                 ),
                 const SizedBox(width: 10),
                 Text(
-                  'VIBE RADAR',
+                  'VIBERADAR',
                   style: GoogleFonts.inter(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w800,
@@ -97,6 +101,13 @@ class _SidebarNavState extends State<SidebarNav> {
                   _NavItem(section: AppSection.artists, icon: Icons.person_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.regions, icon: Icons.public_rounded, selected: selectedSection, onSelected: onSelected),
                   _NavItem(section: AppSection.genres, icon: Icons.library_music_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.playlists, icon: Icons.playlist_play_rounded, selected: selectedSection, onSelected: onSelected),
+
+                  _SectionHeader('COMMUNITY'),
+                  _NavItem(section: AppSection.community, icon: Icons.groups_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.myProfile, icon: Icons.account_circle_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.upload, icon: Icons.cloud_upload_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(section: AppSection.discoverDJs, icon: Icons.explore_rounded, selected: selectedSection, onSelected: onSelected),
 
                   _SectionHeader('BUILD'),
                   _NavItem(section: AppSection.greatestOf, icon: Icons.star_rounded, selected: selectedSection, onSelected: onSelected),

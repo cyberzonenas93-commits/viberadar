@@ -12,6 +12,7 @@ import '../../../services/artist_service.dart';
 import '../../../services/set_builder_service.dart';
 import '../../../services/apple_music_artist_service.dart';
 import '../../../services/spotify_artist_service.dart';
+import '../../widgets/source_badges.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Artist aggregate model
@@ -1430,7 +1431,7 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 9)),
+                        SourceBadges(sources: t.effectiveSources, compact: true),
                       ],
                     ),
                   ],

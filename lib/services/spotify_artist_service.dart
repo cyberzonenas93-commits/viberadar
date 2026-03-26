@@ -8,6 +8,9 @@ class SpotifyArtistService {
   String? _accessToken;
   DateTime? _tokenExpiry;
 
+  /// Public accessor for the Spotify access token (used by playlist service).
+  Future<String?> getAccessToken() => _getToken();
+
   Future<String?> _getToken() async {
     if (_accessToken != null &&
         _tokenExpiry != null &&

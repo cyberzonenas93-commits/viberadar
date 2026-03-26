@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VibeRadar - DJ Intelligence Workstation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      background: #080914;
+      color: #EEF0F9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      text-align: center;
+      max-width: 660px;
+      padding: 40px 24px;
+    }
+    .logo {
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 32px;
+      background: linear-gradient(135deg, #8F6CFF, #FF4DA6, #3AD7FF);
+      border-radius: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 20px 60px rgba(143,108,255,0.3);
+    }
+    .logo svg { width: 64px; height: 64px; }
+    h1 {
+      font-size: 48px;
+      font-weight: 800;
+      background: linear-gradient(135deg, #8F6CFF, #FF4DA6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 12px;
+    }
+    .subtitle {
+      font-size: 18px;
+      color: #9CA3C4;
+      margin-bottom: 40px;
+      line-height: 1.6;
+    }
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 40px;
+      background: linear-gradient(135deg, #8F6CFF, #6D4AE6);
+      color: white;
+      text-decoration: none;
+      border-radius: 14px;
+      font-size: 17px;
+      font-weight: 700;
+      transition: transform 0.2s, box-shadow 0.2s;
+      box-shadow: 0 8px 32px rgba(143,108,255,0.4);
+    }
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 40px rgba(143,108,255,0.5);
+    }
+    .download-btn svg { width: 20px; height: 20px; }
+    .meta {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #636B8C;
+    }
+    .install-guide {
+      margin-top: 36px;
+      background: #111425;
+      border: 1px solid #272D4E;
+      border-radius: 16px;
+      padding: 24px 28px;
+      text-align: left;
+    }
+    .install-guide h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: #FBAF24;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .install-guide ol {
+      list-style: none;
+      counter-reset: steps;
+      padding: 0;
+    }
+    .install-guide li {
+      counter-increment: steps;
+      font-size: 13.5px;
+      color: #9CA3C4;
+      line-height: 1.7;
+      margin-bottom: 10px;
+      padding-left: 28px;
+      position: relative;
+    }
+    .install-guide li::before {
+      content: counter(steps);
+      position: absolute;
+      left: 0;
+      width: 20px;
+      height: 20px;
+      background: #272D4E;
+      border-radius: 6px;
+      text-align: center;
+      line-height: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #8F6CFF;
+    }
+    .install-guide strong { color: #EEF0F9; }
+    .install-guide code {
+      background: #191D33;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #3AD7FF;
+    }
+    .features {
+      display: flex;
+      gap: 16px;
+      margin-top: 36px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .feature {
+      background: #111425;
+      border: 1px solid #272D4E;
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 13px;
+      color: #9CA3C4;
+      min-width: 140px;
+    }
+    .feature strong { color: #EEF0F9; display: block; margin-bottom: 4px; font-size: 14px; }
+    .builder {
+      margin-top: 48px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #8F6CFF, #FF4DA6, #3AD7FF);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .builder-sub {
+      margin-top: 6px;
+      font-size: 13px;
+      color: #636B8C;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <svg viewBox="0 0 64 64" fill="none"><rect x="6" y="20" width="8" height="24" rx="4" fill="white" opacity="0.95"/><rect x="18" y="10" width="8" height="44" rx="4" fill="white" opacity="0.95"/><rect x="30" y="4" width="8" height="56" rx="4" fill="white" opacity="0.95"/><rect x="42" y="12" width="8" height="40" rx="4" fill="white" opacity="0.95"/><rect x="54" y="18" width="8" height="28" rx="4" fill="white" opacity="0.95"/></svg>
+    </div>
+    <h1>VibeRadar</h1>
+    <p class="subtitle">
+      Mac-first DJ intelligence workstation.<br>
+      Discover trending tracks, build sets, and manage your music<br>
+      across Apple Music, Spotify, and YouTube.
+    </p>
+    <a href="/VibeRadar.dmg" class="download-btn">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+      Download for macOS
+    </a>
+    <p class="meta">macOS 10.13+ &middot; 43 MB &middot; Version 1.0.0</p>
+
+    <div class="install-guide">
+      <h3>&#9888;&#65039; First time opening VibeRadar?</h3>
+      <ol>
+        <li>Open the downloaded <strong>VibeRadar.dmg</strong> and drag the app to your <strong>Applications</strong> folder.</li>
+        <li>Double-click <strong>VibeRadar</strong> to launch it. macOS will show a warning saying the app is from an unidentified developer &mdash; this is normal for apps distributed outside the App Store.</li>
+        <li>Open <strong>System Settings</strong> &rarr; <strong>Privacy &amp; Security</strong>, then scroll down. You will see a message about VibeRadar being blocked.</li>
+        <li>Click <strong>&ldquo;Open Anyway&rdquo;</strong> and confirm when prompted. You only need to do this once &mdash; after that, VibeRadar will open normally every time.</li>
+      </ol>
+    </div>
+
+    <div class="features">
+      <div class="feature"><strong>10+ Sources</strong>Apple Music, Spotify, YouTube, Billboard</div>
+      <div class="feature"><strong>AI Copilot</strong>GPT-5.4 powered intelligence</div>
+      <div class="feature"><strong>Smart Sets</strong>Multi-genre slot builder</div>
+      <div class="feature"><strong>Export</strong>Rekordbox, Serato, VirtualDJ</div>
+    </div>
+    <p class="builder">Built by Angelo Nartey</p>
+    <p class="builder-sub">Engineered for DJs who demand intelligence.</p>
+  </div>
+</body>
+</html>

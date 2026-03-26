@@ -10,13 +10,18 @@ class SetBuilderService {
     required String vibe,
     required double minBpm,
     required double maxBpm,
+    int? yearFrom,
+    int? yearTo,
+    int? trackCount,
   }) {
     final filtered = tracks.where((track) {
       final bpm = track.bpm.toDouble();
-      return bpm >= minBpm &&
-          bpm <= maxBpm &&
-          (genre == 'All' || track.genre == genre) &&
-          (vibe == 'All' || track.vibe == vibe);
+      if (bpm < minBpm || bpm > maxBpm) return false;
+      if (genre != 'All' && track.genre != genre) return false;
+      if (vibe != 'All' && track.vibe != vibe) return false;
+      if (yearFrom != null && track.effectiveReleaseYear < yearFrom) return false;
+      if (yearTo != null && track.effectiveReleaseYear > yearTo) return false;
+      return true;
     }).toList()
       ..sort((a, b) => a.energyLevel.compareTo(b.energyLevel));
 
@@ -24,8 +29,8 @@ class SetBuilderService {
       return const [];
     }
 
-    // ~4 min per track on average, allow up to 45 tracks for long sets
-    final targetCount = (durationMinutes / 4).clamp(6, 45).round();
+    // User-specified count takes priority; otherwise estimate from duration
+    final targetCount = trackCount ?? (durationMinutes / 4).clamp(6, 200).round();
     final initial = filtered.first;
     final selected = <Track>[initial];
     final remaining =

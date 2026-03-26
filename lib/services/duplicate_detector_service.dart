@@ -1,4 +1,22 @@
+import 'dart:io';
+import 'package:path/path.dart' as p;
 import '../models/library_track.dart';
+
+/// Result of a batch cleanup operation.
+class CleanupResult {
+  const CleanupResult({
+    required this.movedCount,
+    required this.skippedCount,
+    required this.errors,
+  });
+  final int movedCount;
+  final int skippedCount;
+  final List<String> errors;
+
+  String get summary =>
+      '$movedCount moved, $skippedCount skipped'
+      '${errors.isNotEmpty ? ', ${errors.length} errors' : ''}';
+}
 
 class DuplicateDetectorService {
   List<DuplicateGroup> findDuplicates(List<LibraryTrack> tracks) {
@@ -54,6 +72,142 @@ class DuplicateDetectorService {
     }
 
     return groups;
+  }
+
+  /// Move duplicate files (excluding the recommended keeper) to the macOS Trash.
+  /// Never deletes files — always moves to Trash for safety.
+  /// Returns a [CleanupResult] with counts and errors.
+  Future<CleanupResult> trashDuplicates(
+    DuplicateGroup group, {
+    LibraryTrack? keepFile,
+  }) async {
+    final keeper = keepFile ?? group.recommended;
+    if (keeper == null) {
+      return const CleanupResult(movedCount: 0, skippedCount: 0, errors: ['No keeper selected']);
+    }
+
+    int moved = 0;
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (final t in group.tracks) {
+      if (t.id == keeper.id) continue; // keep this one
+
+      try {
+        final file = File(t.filePath);
+        if (!file.existsSync()) {
+          skipped++;
+          continue;
+        }
+        // Move to macOS Trash via rename to ~/.Trash/
+        final trashPath = p.join(
+          Platform.environment['HOME'] ?? '/tmp',
+          '.Trash',
+          p.basename(t.filePath),
+        );
+        await file.rename(trashPath);
+        moved++;
+      } catch (e) {
+        errors.add('${t.fileName}: $e');
+        skipped++;
+      }
+    }
+
+    return CleanupResult(movedCount: moved, skippedCount: skipped, errors: errors);
+  }
+
+  /// Move duplicate files to a review folder instead of Trash.
+  /// Safer than trashing — user can review before permanent deletion.
+  Future<CleanupResult> moveDuplicatesToReview(
+    DuplicateGroup group, {
+    required String reviewFolderPath,
+    LibraryTrack? keepFile,
+  }) async {
+    final keeper = keepFile ?? group.recommended;
+    if (keeper == null) {
+      return const CleanupResult(movedCount: 0, skippedCount: 0, errors: ['No keeper selected']);
+    }
+
+    final reviewDir = Directory(reviewFolderPath);
+    await reviewDir.create(recursive: true);
+
+    int moved = 0;
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (final t in group.tracks) {
+      if (t.id == keeper.id) continue;
+
+      try {
+        final file = File(t.filePath);
+        if (!file.existsSync()) {
+          skipped++;
+          continue;
+        }
+        final destPath = p.join(reviewFolderPath, p.basename(t.filePath));
+        await file.rename(destPath);
+        moved++;
+      } catch (e) {
+        errors.add('${t.fileName}: $e');
+        skipped++;
+      }
+    }
+
+    return CleanupResult(movedCount: moved, skippedCount: skipped, errors: errors);
+  }
+
+  /// Batch cleanup: process multiple groups at once.
+  /// Only processes groups above the [minConfidence] threshold.
+  /// For each group, keeps the recommended file and moves others.
+  Future<CleanupResult> batchCleanup(
+    List<DuplicateGroup> groups, {
+    double minConfidence = 0.85,
+    String? reviewFolderPath,
+  }) async {
+    int totalMoved = 0;
+    int totalSkipped = 0;
+    final allErrors = <String>[];
+
+    for (final group in groups) {
+      if (group.confidence < minConfidence) continue;
+
+      final result = reviewFolderPath != null
+          ? await moveDuplicatesToReview(group, reviewFolderPath: reviewFolderPath)
+          : await trashDuplicates(group);
+
+      totalMoved += result.movedCount;
+      totalSkipped += result.skippedCount;
+      allErrors.addAll(result.errors);
+    }
+
+    return CleanupResult(
+      movedCount: totalMoved,
+      skippedCount: totalSkipped,
+      errors: allErrors,
+    );
+  }
+
+  /// Compare two files and return a quality comparison map.
+  Map<String, String> compareQuality(LibraryTrack a, LibraryTrack b) {
+    return {
+      'bitrate': '${a.bitrate} vs ${b.bitrate} kbps',
+      'size': '${a.fileSizeFormatted} vs ${b.fileSizeFormatted}',
+      'format': '${a.fileExtension} vs ${b.fileExtension}',
+      'metadata': '${_metaScore(a)} vs ${_metaScore(b)} fields',
+      'recommended': _metaScore(a) >= _metaScore(b) ? a.fileName : b.fileName,
+    };
+  }
+
+  int _metaScore(LibraryTrack t) {
+    int score = 0;
+    if (t.title.isNotEmpty) score++;
+    if (t.artist.isNotEmpty) score++;
+    if (t.album.isNotEmpty) score++;
+    if (t.genre.isNotEmpty) score++;
+    if (t.year != null && t.year! > 0) score++;
+    if (t.bpm > 0) score++;
+    if (t.key.isNotEmpty) score++;
+    return score;
   }
 
   String _normalize(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');

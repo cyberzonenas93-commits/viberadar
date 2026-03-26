@@ -24,7 +24,7 @@ Future<void> main() async {
     size: Size(1280, 820),
     minimumSize: Size(1100, 700),
     center: true,
-    title: 'Vibe Radar',
+    title: 'VibeRadar',
     titleBarStyle: TitleBarStyle.hidden,
   );
   await windowManager.waitUntilReadyToShow(windowOptions, () async {

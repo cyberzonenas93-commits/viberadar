@@ -1,426 +1,339 @@
-# VibeRadar — Technical Breakdown
+# VibeRadar — Full Technical Breakdown
 
-> DJ trend intelligence platform. Aggregates signals from 9 music sources, scores them, and surfaces actionable insights for DJs in a desktop-grade Flutter app.
+**Version:** 1.0.0
+**Platform:** macOS (Flutter Desktop)
+**Firebase Project:** viberadar-462b8
+**Download:** https://viberadar-462b8.web.app
+**Built by:** Angelo Nartey
+**Codebase:** 25,170 lines across 73 files (61 Dart + 16 TypeScript)
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Flutter macOS App                            │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐   │
-│  │ Riverpod │  │ Services │  │   UI     │  │  Local Store  │   │
-│  │ State    │  │ (8)      │  │ (8 scr.) │  │ SharedPrefs   │   │
-│  └────┬─────┘  └────┬─────┘  └──────────┘  │ File Cache    │   │
-│       │              │                       └──────────────┘   │
-│       └──────────────┴───────────────┐                          │
-│                                      ▼                          │
-│                            Cloud Firestore                      │
-│                          (real-time streams)                    │
-└─────────────────────────────────────────────────────────────────┘
-                               ▲
-                               │ writes every 30 min
-┌─────────────────────────────────────────────────────────────────┐
-│                   Firebase Cloud Functions (v2)                  │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Ingestion Pipeline (TypeScript)              │   │
-│  │                                                           │   │
-│  │  Spotify ──┐                                              │   │
-│  │  YouTube ──┤                                              │   │
-│  │  Apple   ──┤    ┌───────────┐    ┌─────────┐             │   │
-│  │  Deezer  ──┼───►│ Normalize │───►│  Score  │──► Firestore│   │
-│  │  Billboard─┤    │ & Merge   │    │ & Rank  │             │   │
-│  │  SoundCloud┤    └───────────┘    └─────────┘             │   │
-│  │  Beatport ─┤                                              │   │
-│  │  Audius  ──┤                                              │   │
-│  │  Audiomack─┘                                              │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                    macOS Desktop App                      │
+│  Flutter 3.x + Riverpod 3.x + Firebase + OpenAI GPT-5.4  │
+├──────────────────────────────────────────────────────────┤
+│  UI Layer (21 files)                                      │
+│  ├── Shell (sidebar + main + detail panel)                │
+│  ├── Auth (splash, onboarding, auth gate)                 │
+│  ├── 10 Feature Screens                                   │
+│  └── 7 Reusable Widgets                                   │
+├──────────────────────────────────────────────────────────┤
+│  State Management (3 providers)                           │
+│  ├── WorkspaceController (navigation + filters + sort)    │
+│  ├── LibraryNotifier (scan + tracks + duplicates)         │
+│  └── Repository Providers (DI overrides)                  │
+├──────────────────────────────────────────────────────────┤
+│  Service Layer (17 services)                              │
+│  ├── AI Copilot (GPT-5.4 streaming chat + intent parse)   │
+│  ├── Platform Search (Apple Music + Spotify merge)        │
+│  ├── Playlist Aggregation (multi-source playlists)        │
+│  ├── Set Builder (energy curve + harmonic mixing)         │
+│  ├── Greatest-Of Engine (8-dimension scoring)             │
+│  ├── Library Scanner (parallel + isolate + cache)         │
+│  ├── Local Match (6-tier fuzzy matching)                  │
+│  ├── Export (7 formats + physical crates)                 │
+│  ├── Duplicate Detector (3-tier + batch cleanup)          │
+│  ├── Artist Service (aggregation + collaborators)         │
+│  ├── DJ Workflow (VirtualDJ/Serato path detection)        │
+│  └── Action Log (file operation audit trail)              │
+├──────────────────────────────────────────────────────────┤
+│  Data Layer (4 files)                                     │
+│  ├── Firestore Track Repository (real-time stream)        │
+│  ├── Firestore User Repository (prefs + crates)           │
+│  ├── Firebase Session Repository (auth persistence)       │
+│  └── Mock Track Seed (500 demo tracks)                    │
+├──────────────────────────────────────────────────────────┤
+│  Models (9 models)                                        │
+│  ├── Track (with releaseYear, effectiveSources)           │
+│  ├── ArtistModel (collaborators, vibes, BPM buckets)      │
+│  ├── LibraryTrack + DuplicateGroup                        │
+│  ├── UserProfile + Crate                                  │
+│  ├── SessionState + AppSection + TrendPoint               │
+│  └── TrackFilters                                         │
+├──────────────────────────────────────────────────────────┤
+│  Cloud Functions (16 TypeScript files) [LOCKED]           │
+│  ├── 10 ingestion clients (Spotify, YouTube, Apple,       │
+│  │   Deezer, Billboard, SoundCloud, Beatport, Audius,     │
+│  │   Audiomack, MusicBrainz)                              │
+│  ├── normalize.ts (signal merging + scoring)              │
+│  ├── classify.ts (vibe/energy classification)             │
+│  ├── scoring.ts (trend score calculation)                 │
+│  └── index.ts (scheduled + manual ingestion)              │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Tech Stack
+## 1. Models (lib/models/) — 9 Files
 
-| Layer | Technology | Version |
-|-------|-----------|---------|
-| Frontend | Flutter (Dart) | SDK ^3.11.0 |
-| State | Riverpod | ^3.3.1 |
-| Backend | Firebase Cloud Functions v2 | Node 20 |
-| Database | Cloud Firestore | Real-time |
-| Auth | Firebase Auth | Email + Google |
-| AI | OpenAI API | gpt-5.4 |
-| Desktop | window_manager | macOS native |
-| Fonts | Google Fonts (Inter) | ^8.0.2 |
+### Track (`track.dart`)
+Core data model representing a unified track from Firestore.
 
----
+| Field | Type | Description |
+|-------|------|-------------|
+| id | String | Firestore document ID |
+| title | String | Track title |
+| artist | String | Artist name |
+| artworkUrl | String | Album artwork URL |
+| bpm | int | Beats per minute |
+| keySignature | String | Musical key (e.g. "7A") |
+| genre | String | Genre classification |
+| vibe | String | Vibe classification (club, chill, etc.) |
+| trendScore | double | 0.0-1.0 aggregated trend momentum |
+| regionScores | Map | Per-region scores (GH, NG, ZA, GB, US, DE) |
+| platformLinks | Map | Source to URL map |
+| energyLevel | double | 0.0-1.0 track energy |
+| trendHistory | List | Historical trend snapshots |
+| sources | List | Contributing ingestion sources |
+| releaseYear | int? | Release year (nullable) |
+| createdAt / updatedAt | DateTime | Timestamps |
 
-## Firebase Project
+Key getters:
+- `effectiveReleaseYear` — falls back to `createdAt.year`
+- `effectiveSources` — falls back to `platformLinks.keys`
+- `leadRegion` — region with highest score
+- `isRisingFast` — trend delta >= 0.18 or score >= 0.84
 
-| Setting | Value |
-|---------|-------|
-| Project ID | `viberadar-462b8` |
-| API Key | `AIzaSyCDZ2kVmhIQenh-YsI_sWXIYDPmWmMFmRE` |
-| iOS Bundle ID | `com.viberadar.viberadar` |
-| Functions Region | `us-central1` |
-| Ingest Schedule | Every 30 minutes |
-| Ingest Regions | US, GB, GH, NG, ZA, DE |
+### ArtistModel (`artist_model.dart`)
+Aggregated artist intelligence built from Track data.
 
-### Firestore Collections
+| Field | Type | Description |
+|-------|------|-------------|
+| id | String | Normalized lowercase name |
+| name | String | Display name |
+| genres | List | Most common first |
+| popularityScore | double | Average trendScore across catalogue |
+| trendScore | double | Average of top-5 tracks |
+| trackCount | int | Total tracks |
+| topTracks | List | Top 5 by trendScore |
+| trendingTracks | List | Above-average tracks |
+| tracksByEra | Map | Pre-2000, 2000s, 2010s, 2020s |
+| bpmRange | List | [min, max] |
+| leadRegion | String | Dominant region |
+| collaborators | List | Extracted from feat/ft/& patterns |
+| tracksByVibe | Map | Grouped by vibe |
+| tracksByBpmBucket | Map | 10-BPM bands |
+| greatestOfScore | double | Average greatest-of across catalogue |
+| allTracks | List | Full sorted catalogue |
+| activeSources | Set | All sources present |
+| yearRange | List | [earliest, latest] year |
 
-**`/tracks/{trackId}`** — 1,900+ documents
-```
-id: string                          // SHA1 hash of canonical title::artist
-title: string
-artist: string
-artwork_url: string
-bpm: number
-key: string                         // Camelot notation (e.g., "7A")
-genre: string                       // Afrobeats, Amapiano, House, Hip-Hop, etc.
-vibe: string                        // aggressive, club, afro-smooth, chill, lounge, hype
-trend_score: number                 // 0–1, primary ranking metric
-region_scores: {[region]: number}   // GH: 0.9, NG: 0.8, US: 0.5, etc.
-platform_links: {[source]: string}  // spotify, youtube, apple, deezer, etc.
-energy_level: number                // 0.12–0.99
-trend_history: [{label, score}]     // Last 7 snapshots for momentum graph
-source_count: number                // How many platforms feature this track
-created_at: string                  // ISO 8601
-updated_at: string                  // ISO 8601
-```
+### LibraryTrack (`library_track.dart`)
+Local audio file metadata with all fields: filePath, fileName, title, artist, album, genre, bpm, key, durationSeconds, fileSizeBytes, fileExtension, md5Hash, bitrate, sampleRate, year.
 
-**`/users/{userId}`**
-```
-display_name: string
-preferences: {region: string}
-watchlist: [trackId]
-saved_crates: [{id, name, context, track_ids, created_at, updated_at}]
-```
+Also contains `DuplicateGroup` with tracks, reason, recommended keeper, confidence.
 
----
-
-## Data Sources (9 total)
-
-| Source | Auth | Method | What it fetches |
-|--------|------|--------|-----------------|
-| **Spotify** | Client Credentials | Search + Recommendations | Genre-seeded tracks, 30/query, 6 regions |
-| **YouTube** | API Key | Data API v3 | Top 20 music videos/region (category 10) |
-| **Apple Music** | Developer Token (JWT) | Catalog Charts | Top songs per storefront |
-| **Deezer** | None (free) | Charts + Search + Playlists | Regional charts, Afro Hits, Viral Afro |
-| **Billboard** | None (GitHub JSON) | Hot 100 archive | Weekly chart positions |
-| **SoundCloud** | OAuth Token | Trending search | Favorites, plays, comments |
-| **Beatport** | Partner API Token | Feed endpoint | BPM, key, genre (most accurate) |
-| **Audius** | None (free) | Trending endpoint | Decentralized platform trends |
-| **Audiomack** | OAuth 1.0a | Trending feed | African/Caribbean music focus |
+### Other Models
+- **UserProfile** — displayName, preferredRegion, watchlist, savedCrates, followedArtists
+- **Crate** — id, name, context, trackIds, timestamps
+- **SessionState** — userId, displayName, email, provider, isAuthenticated, isDemo
+- **AppSection** — enum of 17+ navigation sections
+- **TrendPoint** — label + score for trend history
+- **TrackFilters** — BPM/energy ranges, genre/vibe/region selectors
 
 ---
 
-## Ingestion Pipeline
+## 2. Services (lib/services/) — 17 Files
 
-```
-Every 30 minutes (or manual trigger):
+### AI Copilot (`ai_copilot_service.dart`)
+- **Model:** GPT-5.4 (from .env OPENAI_MODEL)
+- **API:** OpenAI v1/chat/completions with `max_completion_tokens`
+- **Streaming:** Server-sent events for real-time response display
+- **Intent parsing:** Structured JSON (temperature 0.3)
+- **Intents:** buildSet, findArtist, setReleaseRange, matchLibrary, cleanDuplicates, createCrate, general
+- **Crate generation:** Parses numbered track lists, searches Apple Music + Spotify, creates AiCrateTrack objects
+- **Fallback:** Simulated responses when no API key
 
-1. FETCH — 5,500+ signals from 9 sources across 6 regions
-   └─ Each signal: {source, title, artist, engagement, growthRate, recency, region}
+### Platform Search (`platform_search_service.dart`)
+- Wraps SpotifyArtistService + AppleMusicArtistService
+- `search(query)` — parallel search both platforms, merge by title+artist key
+- `searchByGenre(genre, era, limit)` — 10+ varied queries for broad coverage
+- `searchByArtist(artistName)` — comma-separated multi-artist support
+- Deduplicates, combines URLs, sorts by popularity
 
-2. FILTER — Blocklist removes non-DJ content
-   └─ Blocked: BTS, BLACKPINK, K-pop, country, gospel, classical, metal, punk
+### Playlist Aggregation (`playlist_aggregation_service.dart`)
+- Fetches from Spotify Featured Playlists API + Apple Music Charts API
+- Genre-filtered playlist search
+- Concurrent fetching with Future.wait()
+- 10-second timeout per request
 
-3. MERGE — Canonical key = lowercase(title)::lowercase(artist)
-   └─ Deduplicates across sources, merges platform links
+### Set Builder (`set_builder_service.dart`)
+- Filters: genre, vibe, BPM range, yearFrom/yearTo, duration
+- Greedy next-track selection maximizing transition score
+- Transition scoring: energy fit (0.35), BPM proximity (0.25), harmonic compatibility (0.20), trend fit (0.20)
+- Full Camelot wheel mapping (24 keys)
+- Progressive energy curve from 0.35 to 0.90
 
-4. GENRE-REGION AFFINITY — Post-merge scoring
-   ├─ GH: Afrobeats (1.0), Dancehall (0.4), Amapiano (0.3) → all else blocked
-   ├─ NG: Afrobeats (1.0), Dancehall (0.3) → all else blocked
-   ├─ ZA: Amapiano (1.0), Gqom (0.9), House (0.15), Afrobeats (0.1)
-   ├─ GB: Drill (0.9), UK Garage (0.9), House (0.6), Hip-Hop (0.5)
-   ├─ US: Hip-Hop (0.8), R&B (0.8), Latin (0.6), House (0.4)
-   └─ Threshold: score > 0.15 or region is dropped
+### Greatest-Of Engine (`greatest_of_service.dart`)
+8-dimension weighted scoring:
 
-5. SCORE — Weighted trend formula:
-   ├─ growthRate:        40%
-   ├─ engagement:        20%
-   ├─ recency:           20%
-   ├─ platformDiversity: 10%  (appears on more platforms = higher)
-   └─ regionWeight:      10%  (popular in more regions = higher)
+| Dimension | Weight | Logic |
+|-----------|--------|-------|
+| Long-term popularity | 0.20 | Direct trendScore |
+| Chart legacy | 0.15 | platformLinks count / 5 |
+| Replay longevity | 0.15 | Energy x 0.6 + history bonus |
+| DJ usefulness | 0.12 | BPM 85-140 = 1.0, key bonus +0.15 |
+| Timelessness | 0.10 | Age factor x trendScore |
+| Familiarity | 0.10 | Trend x 0.6 + region breadth x 0.4 |
+| Artist influence | 0.08 | regionScores count / 6 |
+| Cross-source prominence | 0.10 | (sourceCount - 1) / 2 |
 
-6. CLASSIFY
-   ├─ Vibe: aggressive | club | afro-smooth | chill | lounge | hype
-   └─ Energy: BPM 85→0.12, BPM 155→0.98 (linear + genre/keyword adjustments)
+Multi-genre, multi-artist, release-range filtering via effectiveReleaseYear. Era presets: 90s, 2000s, 2010s, 2020s, All Time.
 
-7. WRITE — 1,900+ UnifiedTrackRecords to Firestore /tracks/{id}
-   └─ Merges with existing trend_history (keeps last 7 snapshots)
-```
+### Library Scanner (`library_scanner_service.dart`)
+- **Formats:** MP3, FLAC, WAV, AAC, M4A, OGG, OPUS, AIFF
+- **Parallel processing:** 6 concurrent files per batch
+- **Metadata:** macOS mdls (Spotlight) for title, artist, album, genre, BPM, key, duration, bitrate, sample rate, year
+- **MD5 hashing:** compute() isolate for files > 5MB
+- **Incremental cache:** Skips unchanged files (same mtime + size)
+- **Fallbacks:** BPM simulation, key simulation, genre guessing
 
----
+### Local Match (`local_match_service.dart`)
+6-tier matching:
 
-## Flutter App Structure
+| Tier | Method | Confidence |
+|------|--------|------------|
+| 1 | Exact artist + title | 1.0 |
+| 2 | Artist-title inversion | 0.7 |
+| 3 | Remix/edit stripped | 0.9 |
+| 4 | Fuzzy Levenshtein <= 3 | Variable |
+| 5 | Filename heuristic | 0.5-0.7 |
+| 6 | Missing | 0.0 |
 
-### File Count: 48 Dart files
+MatchStatus: found, fuzzyMatch, duplicateVersions, uncertain, missing
 
-```
-lib/
-├── main.dart                           # Entry point, dotenv, window manager
-├── app/
-│   ├── app.dart                        # MaterialApp, dark theme
-│   └── bootstrap.dart                  # Firebase init, repo injection, demo fallback
-├── core/
-│   ├── config/
-│   │   └── firebase_runtime_config.dart  # Runtime Firebase config via dart-define
-│   ├── theme/
-│   │   └── app_theme.dart              # Dark theme, Google Fonts (Inter), color palette
-│   └── utils/
-│       └── formatters.dart             # Number/date formatters, regionScoreForTrack
-├── data/
-│   ├── repositories/
-│   │   ├── track_repository.dart       # Firestore + Mock track streams
-│   │   ├── user_repository.dart        # Firestore + Mock user profiles
-│   │   └── session_repository.dart     # Firebase Auth + Demo sessions
-│   └── sources/
-│       └── mock_track_seed.dart        # 20+ realistic mock tracks for demo mode
-├── models/
-│   ├── track.dart                      # Core track model (BPM, key, score, regions)
-│   ├── library_track.dart              # Local file metadata + DuplicateGroup
-│   ├── user_profile.dart               # Preferences, watchlist, crates
-│   ├── crate.dart                      # Playlist/set container
-│   ├── trend_point.dart                # Historical score snapshot
-│   ├── session_state.dart              # Auth state (user, email, provider)
-│   ├── track_filters.dart              # BPM/energy/genre/vibe/region filters
-│   └── app_section.dart                # Navigation enum (14 sections)
-├── providers/
-│   ├── app_state.dart                  # WorkspaceController, computed providers
-│   ├── library_provider.dart           # LibraryNotifier, CrateNotifier
-│   └── repositories.dart               # Provider wrappers for DI
-├── services/
-│   ├── ai_copilot_service.dart         # OpenAI chat + crate generation
-│   ├── spotify_artist_service.dart     # Spotify artist catalog lookup
-│   ├── ingest_service.dart             # Manual re-ingestion trigger
-│   ├── set_builder_service.dart        # Algorithmic DJ set generation
-│   ├── library_scanner_service.dart    # Local audio file scanner (macOS mdls)
-│   ├── library_persistence_service.dart # Library cache to disk
-│   ├── duplicate_detector_service.dart # MD5 + Levenshtein deduplication
-│   └── export_service.dart             # Rekordbox XML, Serato CSV, M3U, Traktor NML
-└── ui/
-    ├── auth/
-    │   ├── auth_gate.dart              # Auth routing
-    │   ├── splash_screen.dart          # Loading state
-    │   └── onboarding_screen.dart      # First-run setup
-    ├── shell/
-    │   └── vibe_shell.dart             # Main layout (sidebar + content + detail)
-    ├── features/
-    │   ├── home/home_screen.dart       # Dashboard: hero, grid, rising, regional
-    │   ├── trending/trending_screen.dart  # Artwork grid, filters, ranked cards
-    │   ├── artists/artists_screen.dart # Artist grid + Spotify catalog child view
-    │   ├── greatest_of/greatest_of_screen.dart # Podium + ranked grid
-    │   ├── ai_copilot/ai_copilot_screen.dart  # Chat + crate builder
-    │   ├── library/library_screen.dart # Local file browser + scan
-    │   ├── duplicates/duplicates_screen.dart # Duplicate detection
-    │   └── exports/exports_screen.dart # Crate export to DJ software
-    └── widgets/
-        ├── sidebar_nav.dart            # Navigation + refresh button
-        ├── track_table.dart            # Sortable multi-select PaginatedDataTable
-        ├── track_detail_panel.dart     # Right-side info + momentum chart
-        ├── track_action_menu.dart      # Context menu (play, add to crate, info)
-        ├── dashboard_cards.dart        # KPI summary cards
-        ├── filter_bar.dart             # BPM/energy/genre/vibe/region filters
-        └── source_badges.dart          # Platform availability badges
-```
+### Export (`export_service.dart`)
+7 export formats:
 
-### Cloud Functions Structure
+| Format | Method |
+|--------|--------|
+| Rekordbox XML | exportRekordboxXml() |
+| Serato CSV | exportSeratoCsv() (with year + bitrate) |
+| M3U Playlist | exportM3u() |
+| Traktor NML | exportTraktorNml() |
+| VirtualDJ XML | exportVirtualDjXml() |
+| TIDAL-aware M3U | exportTidalAwareM3u() |
+| Missing Manifest | exportMissingManifest() |
 
-```
-functions/
-├── src/
-│   ├── index.ts                        # Cloud Function exports, orchestration
-│   ├── types.ts                        # SourceTrackSignal, UnifiedTrackRecord
-│   ├── clients/
-│   │   ├── spotify.ts                  # Search + recommendations + genre seeds
-│   │   ├── youtube.ts                  # Data API v3, trending music videos
-│   │   ├── appleMusic.ts              # Catalog charts per storefront
-│   │   ├── deezer.ts                  # Charts + search + editorial playlists
-│   │   ├── billboard.ts               # Hot 100 JSON archive
-│   │   ├── soundcloud.ts             # OAuth trending search
-│   │   ├── beatport.ts               # Partner feed (optional)
-│   │   ├── audius.ts                  # Decentralized trending
-│   │   ├── audiomack.ts              # OAuth 1.0a trending
-│   │   └── musicbrainz.ts            # Harmonic key enrichment
-│   └── lib/
-│       ├── normalize.ts               # Signal merge, blocklist, genre-region affinity
-│       ├── scoring.ts                 # Min-max normalization, weighted trend formula
-│       ├── classify.ts                # Vibe classification, energy derivation
-│       └── config.ts                  # Secret definitions, region config
-├── package.json
-└── tsconfig.json
-```
+Physical crate: virtualOnly, copyFiles, aliasLinks. Auto-logging via ActionLogService. Show in Finder utility.
+
+### Duplicate Detector (`duplicate_detector_service.dart`)
+3-tier detection (exact hash 1.0, same title/artist 0.85, similar filename 0.5). Cleanup: trashDuplicates, moveDuplicatesToReview, batchCleanup with minConfidence threshold.
+
+### Artist Service (`artist_service.dart`)
+Builds ArtistModel from tracks. Collaborator extraction, vibe/BPM grouping, greatest-of scoring, source aggregation.
+
+### DJ Workflow (`dj_workflow_service.dart`)
+Auto-detects VirtualDJ and Serato install paths. Manual override. Auto-load toggle. LibrarySafetySettings for crate mode, cleanup mode, confirmation preference.
+
+### Action Log (`action_log_service.dart`)
+Logs exports, crate creation, duplicate cleanup to ~/Documents/VibeRadar/Logs/action_log.tsv. In-memory cache of 200 recent actions.
+
+### Other Services
+- **Spotify Artist Service** — Client Credentials, token caching, search/catalogue
+- **Apple Music Artist Service** — MusicKit REST API, searchSongs, discography
+- **YouTube Search Service** — Data API v3, music category filter
+- **Ingest Service** — Manual Cloud Functions trigger
+- **Library Persistence** — JSON cache
 
 ---
 
-## State Management (Riverpod)
+## 3. State Management — 3 Providers
 
-### Stream Providers (Real-time from Firestore)
-| Provider | Source | Updates |
-|----------|--------|---------|
-| `sessionProvider` | Firebase Auth | On auth state change |
-| `trackStreamProvider` | Firestore /tracks | Real-time (limit 500, ordered by trend_score) |
-| `userProfileProvider` | Firestore /users/{uid} | Real-time |
+- **WorkspaceController** — section, search, filters, sort, selection, detail panel
+- **LibraryNotifier** — scanned tracks, duplicates, scan progress, crates
+- **Repository Providers** — DI overrides for Firestore/Mock implementations
 
-### Computed Providers (Derived)
-| Provider | Derives From | Purpose |
-|----------|-------------|---------|
-| `visibleTracksProvider` | tracks + workspace filters | Filtered & sorted track list |
-| `selectedTrackProvider` | tracks + workspace.primaryTrackId | Currently selected track |
-| `availableGenresProvider` | all tracks | Unique genre list for filter chips |
-| `availableVibesProvider` | all tracks | Unique vibe list |
-| `availableRegionsProvider` | all tracks | Unique region list |
-
-### Notifiers (Mutable State)
-| Notifier | State Class | Key Methods |
-|----------|------------|-------------|
-| `WorkspaceController` | `WorkspaceState` | setSection, setSearchQuery, updateFilters, sortBy, toggleSelection, activateTrack |
-| `LibraryNotifier` | `LibraryState` | scanDirectory, clearLibrary |
-| `CrateNotifier` | `CrateState` | createCrate, addTrackToCrate, removeTrackFromCrate, deleteCrate |
+Stream providers: sessionProvider, trackStreamProvider, userProfileProvider
+Computed: visibleTracksProvider, selectedTrackProvider, genre/vibe/region providers
 
 ---
 
-## Services
+## 4. UI — 21 Files
 
-| Service | Purpose | Key Methods |
-|---------|---------|-------------|
-| `AiCopilotService` | OpenAI gpt-5.4 chat with crate generation | `chat(history, message, trackContext)` |
-| `SpotifyArtistService` | Full artist discography from Spotify | `getFullCatalogue(artistName)` → albums + tracks |
-| `IngestService` | Trigger cloud re-ingestion from app | `triggerIngest()` → authenticates + calls function |
-| `SetBuilderService` | Algorithmic DJ set generation | `buildSet(tracks, duration, genre, vibe, bpmRange)` |
-| `LibraryScannerService` | Scan local audio files (macOS) | `scanDirectory(path, onProgress)` |
-| `LibraryPersistenceService` | Cache library to disk | `load()`, `save()`, `clear()` |
-| `DuplicateDetectorService` | Find duplicate files | `findDuplicates(tracks)` → MD5 + Levenshtein |
-| `ExportService` | Export crates to DJ software | Rekordbox XML, Serato CSV, M3U, Traktor NML |
+### Shell (`vibe_shell.dart`, ~2800 lines)
+Sidebar (262px) + main panel + detail panel (360/420px). Contains RegionsView, GenresView, SetBuilderView, ShellTrackCard, PlatformResultCard, AI/regular crate cards. Left-click = direct play + detail panel; right-click = action menu.
 
----
+### 10 Feature Screens
 
-## Theme System
+| Screen | Key Features |
+|--------|-------------|
+| Home | Hero cards, genre chips, hot now grid, rising fast scroll, regional highlights |
+| Trending | Track grid, genre/region filters, source badges |
+| Search | 3-way search (Spotify+Apple+YouTube), grid cards with BPM, detail dialog |
+| Artists | Intelligence tab, Spotify catalogue, eras, BPM analysis, albums |
+| For You | Auto-trigger artist picker on first visit |
+| Greatest Of | 8-dimension scoring, release-range, multi-genre/artist |
+| Library | 5 tabs: All Tracks, Recommendations, Create Crate, Duplicates, Stats |
+| Duplicates | Groups with confidence, keeper recommendation, comparison |
+| Exports | 7 formats, physical crates, local match, Show in Finder |
+| AI Copilot | GPT-5.4 streaming, persistent chat, crate generation, year filter |
 
-### Color Palette
-```
-Background:  ink (#0A0D1A) → panel (#12162B) → panelRaised (#1A1F38) → surface (#1E2340)
-Borders:     edge (#2A3155)
-Accents:     cyan (#00D4FF) | violet (#8B5CF6) | pink (#FF4D8A) | lime (#4ADE80) | amber (#FBBF24)
-Text:        primary (#EEF0F9) | secondary (#9CA3C4) | tertiary (#636B8C) | sectionHeader (#6B74A0)
-```
+### 7 Widgets
+SourceBadges, TrackTable, TrackDetailPanel, SidebarNav, TrackActionMenu, FilterBar, DashboardCards
 
-### Typography: Google Fonts — Inter
-- Display: 800 weight, -1.5 letter spacing
-- Headlines: 700 weight, -0.5 to -0.8 letter spacing
-- Titles: 600-700 weight
-- Body: 400-500 weight, 1.4-1.5 line height
-
-### Component Tokens
-| Component | Border Radius | Background | Border |
-|-----------|--------------|------------|--------|
-| Cards | 16px | panel | edge @ 0.5 alpha |
-| Inputs | 12px | panelRaised | edge @ 0.6 alpha |
-| Chips | 999px (pill) | panelRaised | edge @ 0.5 alpha |
-| Buttons | 10px | violet gradient | none |
-| Track cards | 14px | panel → panelRaised on hover | edge @ 0.35–0.6 alpha |
+### 3 Auth Screens
+AuthGate (session restore), OnboardingScreen (artist selection), SplashScreen (animated intro)
 
 ---
 
-## Scoring Algorithm
+## 5. Cloud Functions — 16 Files [LOCKED]
 
-### Trend Score Formula
-```
-trendScore =
-    normalizedGrowthRate   × 0.40
-  + normalizedEngagement   × 0.20
-  + normalizedRecency      × 0.20
-  + normalizedPlatformDiv  × 0.10
-  + normalizedRegionWeight × 0.10
-```
-
-### Genre-Region Affinity Matrix
-| Region | Afrobeats | Dancehall | Amapiano | Gqom | House | Hip-Hop | R&B | Drill | UK Garage | Pop | Everything Else |
-|--------|-----------|-----------|----------|------|-------|---------|-----|-------|-----------|-----|----------------|
-| **GH** | 1.0 | 0.4 | 0.3 | — | — | — | — | — | — | — | 0.02 (blocked) |
-| **NG** | 1.0 | 0.3 | — | — | — | 0.05 | 0.05 | — | — | — | 0.02 (blocked) |
-| **ZA** | 0.1 | — | 1.0 | 0.9 | 0.15 | — | — | — | — | — | 0.02 (blocked) |
-| **GB** | 0.4 | — | — | — | 0.6 | 0.5 | 0.4 | 0.9 | 0.9 | 0.2 | 0.02 |
-| **US** | 0.2 | — | — | — | 0.4 | 0.8 | 0.8 | — | — | 0.3 | 0.02 |
-| **DE** | 0.1 | — | — | — | 0.8 | 0.3 | — | — | — | 0.2 | 0.02 |
-
-Threshold: region score must be > 0.15 or it's dropped entirely.
-
-### Vibe Classification
-| Vibe | Conditions |
-|------|-----------|
-| Aggressive | BPM ≥ 145 OR drill/rage keywords |
-| Afro-smooth | Amapiano genre + BPM < 120 |
-| Club | House/dance + BPM > 126, OR Amapiano + BPM ≥ 120 |
-| Hype | BPM ≥ 135 OR party/hype keywords |
-| Chill | R&B/soul genre OR BPM < 100 |
-| Lounge | BPM < 122 (default) |
-
-### Energy Level
-Linear mapping: BPM 85 → 0.12, BPM 155 → 0.98, with genre/keyword adjustments (±0.1).
+Scheduled ingestion every 30 minutes from 10 sources. Signal merging with genre-region affinity. Trend scoring. Vibe/energy classification. All TypeScript, deployed to Firebase Functions.
 
 ---
 
-## Environment & Secrets
+## 6. Theme
 
-### Local (.env — decrypted from .env.encrypted)
-```
-OPENAI_API_KEY=sk-proj-...          # AI Copilot
-OPENAI_MODEL=gpt-5.4                # Default model
-SPOTIFY_CLIENT_ID=c22011...         # Artist catalog lookup
-SPOTIFY_CLIENT_SECRET=8c1d3d...     # Artist catalog lookup
-```
-
-### Firebase Secret Manager (Cloud Functions)
-```
-SPOTIFY_CLIENT_ID                    # Ingestion pipeline
-SPOTIFY_CLIENT_SECRET                # Ingestion pipeline
-YOUTUBE_API_KEY                      # YouTube Data API v3
-APPLE_MUSIC_DEVELOPER_TOKEN          # Apple Music JWT
-SOUNDCLOUD_CLIENT_ID                 # SoundCloud OAuth
-SOUNDCLOUD_OAUTH_TOKEN               # SoundCloud OAuth
-BEATPORT_API_TOKEN                   # Beatport partner feed
-AUDIOMACK_CONSUMER_KEY               # Audiomack OAuth 1.0a
-AUDIOMACK_CONSUMER_SECRET            # Audiomack OAuth 1.0a
-```
-
-### Firebase Parameters
-```
-INGEST_REGIONS=US,GB,GH,NG,ZA,DE    # Markets to fetch from
-BEATPORT_API_BASE_URL=               # Optional partner endpoint
-```
+Dark premium desktop theme. Colors: ink (#080914), panel (#111425), panelRaised (#191D33), surface (#1E2340), edge (#272D4E). Accents: cyan, violet, pink, lime, amber, orange. Typography: Google Fonts Inter.
 
 ---
 
-## Setup (New Machine)
+## 7. Security and Safety
 
-```bash
-git clone https://github.com/cyberzonenas93-commits/viberadar.git
-cd viberadar
-./scripts/setup.sh    # Decrypts .env, installs dependencies
-flutter run -d macos  # Launch app
-```
-
-The setup script:
-1. Decrypts `.env.encrypted` → `.env` (passphrase: `VibeRadar2026`)
-2. Runs `flutter pub get`
-3. Runs `cd functions && npm install`
+- Firebase Auth with Keychain persistence, session restore without login flash
+- Library READ-ONLY by default (copy-based crates, trash-based cleanup)
+- All file operations logged
+- Configurable safety settings
+- Google Sign-In + Anonymous support
 
 ---
 
-## Key Metrics
+## 8. Build and Distribution
 
-| Metric | Value |
-|--------|-------|
-| Dart files | 48 |
-| TypeScript files | 15 |
-| Data sources | 9 |
-| Signals per ingestion | ~5,500 |
-| Tracks in Firestore | ~1,900 |
-| Regions monitored | 6 (US, GB, GH, NG, ZA, DE) |
-| Ingestion frequency | Every 30 minutes |
-| Flutter dependencies | 24 |
-| Cloud Function secrets | 9 |
-| Export formats | 4 (Rekordbox, Serato, M3U, Traktor) |
+- Production: `flutter build macos --release` (116.7MB)
+- DMG: `hdiutil create -volname VibeRadar -srcfolder VibeRadar.app -format UDZO`
+- Deploy: `firebase deploy --only hosting`
+- Live: https://viberadar-462b8.web.app
+- Signing: Apple Development cert available, Developer ID Application needed for Gatekeeper
+
+---
+
+## 9. File Tree
+
+```
+lib/ (61 files, 25,170 lines)
+├── main.dart
+├── app/ (app.dart, bootstrap.dart)
+├── core/ (firebase_runtime_config.dart, app_theme.dart, formatters.dart)
+├── models/ (9 files)
+├── services/ (17 files)
+├── providers/ (3 files)
+├── data/ (4 files)
+└── ui/ (21 files)
+    ├── auth/ (3)
+    ├── shell/ (1)
+    ├── features/ (10)
+    └── widgets/ (7)
+
+functions/src/ (16 files) [LOCKED]
+├── index.ts, types.ts
+├── lib/ (classify, config, normalize, scoring)
+└── clients/ (10 source integrations)
+
+public/ (index.html + VibeRadar.dmg)
+```

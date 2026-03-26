@@ -24,19 +24,22 @@ void showTrackActionMenu(
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     elevation: 8,
     items: [
-      // Play
-      if (_bestUrl(track) != null)
+      // Individual platform play options
+      for (final entry in track.platformLinks.entries)
         PopupMenuItem(
-          value: 'play',
+          value: 'play:${entry.key}',
           child: Row(
             children: [
-              Icon(Icons.play_circle_rounded, color: AppTheme.cyan, size: 18),
+              Icon(_iconForPlatform(entry.key), color: _colorForPlatform(entry.key), size: 18),
               const SizedBox(width: 10),
-              Text('Play in ${_platformLabel(track)}',
+              Text('Play on ${_capitalize(entry.key)}',
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
             ],
           ),
         ),
+      // Divider between play and actions
+      if (track.platformLinks.isNotEmpty)
+        const PopupMenuDivider(),
       // Add to crate
       PopupMenuItem(
         value: 'crate',
@@ -64,13 +67,14 @@ void showTrackActionMenu(
     ],
   ).then((value) {
     if (value == null) return;
-    switch (value) {
-      case 'play':
-        _playTrack(track);
-      case 'crate':
-        _showAddToCrateSheet(context, ref, track);
-      case 'info':
-        _showTrackInfoSheet(context, track);
+    if (value.startsWith('play:')) {
+      final platform = value.substring(5);
+      final url = track.platformLinks[platform];
+      if (url != null) _openUrl(url);
+    } else if (value == 'crate') {
+      _showAddToCrateSheet(context, ref, track);
+    } else if (value == 'info') {
+      _showTrackInfoSheet(context, track);
     }
   });
 }
@@ -85,12 +89,40 @@ void showTrackActionMenuFromCard(
   showTrackActionMenu(context, ref, track, position: details.globalPosition);
 }
 
-void _playTrack(Track track) async {
-  final url = _bestUrl(track);
-  if (url == null) return;
+void _openUrl(String url) async {
   final uri = Uri.tryParse(url);
   if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
 }
+
+IconData _iconForPlatform(String platform) {
+  switch (platform.toLowerCase()) {
+    case 'spotify': return Icons.graphic_eq_rounded;
+    case 'apple': return Icons.music_note_rounded;
+    case 'youtube': return Icons.play_circle_fill_rounded;
+    case 'deezer': return Icons.headphones_rounded;
+    case 'soundcloud': return Icons.cloud_rounded;
+    case 'beatport': return Icons.equalizer_rounded;
+    case 'audius': return Icons.podcasts_rounded;
+    case 'billboard': return Icons.bar_chart_rounded;
+    default: return Icons.open_in_new_rounded;
+  }
+}
+
+Color _colorForPlatform(String platform) {
+  switch (platform.toLowerCase()) {
+    case 'spotify': return const Color(0xFF1ED760);
+    case 'apple': return const Color(0xFFFF7AB5);
+    case 'youtube': return const Color(0xFFFF4B4B);
+    case 'deezer': return const Color(0xFFA238FF);
+    case 'soundcloud': return const Color(0xFFFFA237);
+    case 'beatport': return const Color(0xFF32FF7E);
+    case 'audius': return const Color(0xFF7C5CFF);
+    case 'billboard': return const Color(0xFFFFD700);
+    default: return AppTheme.cyan;
+  }
+}
+
+String _capitalize(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
 void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
   final crateState = ref.read(crateProvider);
@@ -297,4 +329,106 @@ class _InfoTag extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Bulk add to crate ─────────────────────────────────────────────────────────
+
+/// Shows a sheet to add multiple tracks to a crate at once.
+void showBulkAddToCrate(BuildContext context, WidgetRef ref, List<Track> tracks) {
+  if (tracks.isEmpty) return;
+  final crateState = ref.read(crateProvider);
+  final crates = crateState.crates.keys.toList();
+
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppTheme.panel,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (ctx) => Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 20),
+              const SizedBox(width: 10),
+              Text('Add ${tracks.length} tracks to Crate',
+                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (crates.isNotEmpty)
+            ...crates.map((name) => ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.folder_rounded, color: AppTheme.violet, size: 20),
+              title: Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+              trailing: Text('${crateState.crates[name]?.length ?? 0} tracks',
+                  style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+              onTap: () {
+                for (final t in tracks) {
+                  ref.read(crateProvider.notifier).addTrackToCrate(name, t.id);
+                }
+                Navigator.of(ctx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Added ${tracks.length} tracks to $name'),
+                    backgroundColor: AppTheme.violet,
+                  ),
+                );
+              },
+            )),
+          const Divider(color: AppTheme.edge),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.add_circle_rounded, color: AppTheme.cyan, size: 20),
+            title: const Text('New Crate...', style: TextStyle(color: AppTheme.cyan, fontSize: 13, fontWeight: FontWeight.w600)),
+            onTap: () {
+              Navigator.of(ctx).pop();
+              _showNewBulkCrateDialog(context, ref, tracks);
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+void _showNewBulkCrateDialog(BuildContext context, WidgetRef ref, List<Track> tracks) {
+  final controller = TextEditingController();
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.panel,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      title: const Text('New Crate', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        style: const TextStyle(color: AppTheme.textPrimary),
+        decoration: const InputDecoration(hintText: 'Crate name...'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () {
+            final name = controller.text.trim();
+            if (name.isNotEmpty) {
+              ref.read(crateProvider.notifier).createCrate(name);
+              for (final t in tracks) {
+                ref.read(crateProvider.notifier).addTrackToCrate(name, t.id);
+              }
+              Navigator.of(ctx).pop();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Created "$name" with ${tracks.length} tracks'), backgroundColor: AppTheme.violet),
+              );
+            }
+          },
+          child: const Text('Create & Add All'),
+        ),
+      ],
+    ),
+  );
 }

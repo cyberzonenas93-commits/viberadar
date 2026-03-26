@@ -34,38 +34,93 @@ class MockTrackRepository implements TrackRepository {
   }
 }
 
+/// Cost-optimised Firestore repository.
+///
+/// Instead of a live `.snapshots()` listener (which charges a read for every
+/// document on every change), this uses single `.get()` fetches:
+///   • One fetch on first subscribe (cold start)
+///   • Subsequent fetches only on explicit `refresh()` calls
+///   • Firestore SDK disk cache is enabled so repeat reads hit local storage
+///
+/// This cuts read costs from thousands-per-hour to a handful-per-session.
 class FirestoreTrackRepository implements TrackRepository {
-  FirestoreTrackRepository(this._firestore);
+  FirestoreTrackRepository(this._firestore) {
+    // Enable Firestore offline persistence (reduces reads on repeat launches).
+    // This is a no-op if already enabled.
+    _firestore.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  }
 
   final FirebaseFirestore _firestore;
-  static const _pageSize = 500;
+
+  /// Max documents to fetch per query.  2000 is enough for ~500/genre across
+  /// 4+ genres while keeping Firestore read costs manageable.
+  static const _pageSize = 2000;
+
+  final _controller = StreamController<List<Track>>.broadcast();
+  List<Track>? _cached;
+  bool _initialFetchDone = false;
 
   @override
-  Future<void> refresh() async {}
+  Future<void> refresh() async {
+    final tracks = await _fetchOnce();
+    _cached = tracks;
+    _controller.add(tracks);
+  }
 
-  /// Returns a real-time stream backed by Firestore .snapshots().
-  ///
-  /// • Falls back to mock data only while Firestore is truly empty (i.e.
-  ///   ingestion hasn't run yet).
-  /// • Once Firestore has data the stream emits live updates automatically
-  ///   whenever the Cloud Function writes new documents.
   @override
-  Stream<List<Track>> watchTracks() {
-    return _firestore
-        .collection('tracks')
-        .orderBy('trend_score', descending: true)
-        .limit(_pageSize)
-        .snapshots()
-        .map((snapshot) {
-          if (snapshot.docs.isEmpty) {
-            // Ingestion hasn't populated Firestore yet — show mock data
-            // so the UI isn't blank on first launch.
-            return buildMockTracks();
-          }
-          return snapshot.docs
+  Stream<List<Track>> watchTracks() async* {
+    // Yield cached data immediately if available (e.g. from Firestore disk cache)
+    if (_cached != null) {
+      yield _cached!;
+    }
+
+    // Do one network fetch on first subscribe
+    if (!_initialFetchDone) {
+      _initialFetchDone = true;
+      final tracks = await _fetchOnce();
+      _cached = tracks;
+      yield tracks;
+    }
+
+    // Then yield any future refreshes
+    yield* _controller.stream;
+  }
+
+  /// Single `.get()` call — one read per document, no ongoing listener.
+  /// Uses Firestore SDK cache when available (offline / repeat reads).
+  Future<List<Track>> _fetchOnce() async {
+    try {
+      final snapshot = await _firestore
+          .collection('tracks')
+          .orderBy('trend_score', descending: true)
+          .limit(_pageSize)
+          .get();
+
+      if (snapshot.docs.isEmpty) {
+        return buildMockTracks();
+      }
+      return snapshot.docs
+          .map((doc) => Track.fromMap(doc.data(), id: doc.id))
+          .toList();
+    } catch (_) {
+      // If network fails, try cache-only fetch
+      try {
+        final cached = await _firestore
+            .collection('tracks')
+            .orderBy('trend_score', descending: true)
+            .limit(_pageSize)
+            .get(const GetOptions(source: Source.cache));
+        if (cached.docs.isNotEmpty) {
+          return cached.docs
               .map((doc) => Track.fromMap(doc.data(), id: doc.id))
               .toList();
-        });
+        }
+      } catch (_) {}
+      return _cached ?? buildMockTracks();
+    }
   }
 
   /// One-shot fetch of the next page after [lastTrack] for manual pagination.
