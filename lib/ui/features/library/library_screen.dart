@@ -14,6 +14,8 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   String _searchQuery = '';
   String _filterGenre = 'All';
+  int? _yearFrom;
+  int? _yearTo;
 
   @override
   Widget build(BuildContext context) {
@@ -21,13 +23,24 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     final theme = Theme.of(context);
 
     final genres = <String>{'All', ...lib.tracks.map((t) => t.genre)}.toList();
+    // Compute available years from library
+    final availableYears = lib.tracks
+        .map((t) => t.releaseYear)
+        .whereType<int>()
+        .toSet()
+        .toList()
+      ..sort();
+
     final displayTracks = lib.tracks.where((t) {
       final q = _searchQuery.toLowerCase();
       final matchSearch = q.isEmpty ||
           t.title.toLowerCase().contains(q) ||
           t.artist.toLowerCase().contains(q);
       final matchGenre = _filterGenre == 'All' || t.genre == _filterGenre;
-      return matchSearch && matchGenre;
+      final ry = t.releaseYear;
+      final matchYear = (_yearFrom == null || (ry != null && ry >= _yearFrom!)) &&
+          (_yearTo == null || (ry != null && ry <= _yearTo!));
+      return matchSearch && matchGenre && matchYear;
     }).toList();
 
     return Column(
@@ -128,6 +141,33 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 onChanged: (v) =>
                     setState(() => _filterGenre = v ?? 'All'),
               ),
+              if (availableYears.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                _YearDropdown(
+                  label: 'From',
+                  value: _yearFrom,
+                  years: availableYears,
+                  onChanged: (y) => setState(() => _yearFrom = y),
+                ),
+                const SizedBox(width: 6),
+                _YearDropdown(
+                  label: 'To',
+                  value: _yearTo,
+                  years: availableYears,
+                  onChanged: (y) => setState(() => _yearTo = y),
+                ),
+                if (_yearFrom != null || _yearTo != null) ...[
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () => setState(() {
+                      _yearFrom = null;
+                      _yearTo = null;
+                    }),
+                    child: const Icon(Icons.close,
+                        color: AppTheme.textSecondary, size: 16),
+                  ),
+                ],
+              ],
             ]),
           ),
           const SizedBox(height: 12),
@@ -439,6 +479,58 @@ class _ZeroFilesState extends StatelessWidget {
           ),
         ]),
       ),
+    );
+  }
+}
+
+// ── Year filter dropdown ──────────────────────────────────────────────────────
+
+class _YearDropdown extends StatelessWidget {
+  final String label;
+  final int? value;
+  final List<int> years;
+  final ValueChanged<int?> onChanged;
+
+  const _YearDropdown({
+    required this.label,
+    required this.value,
+    required this.years,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.edge),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Text('$label: ',
+            style: const TextStyle(
+                color: AppTheme.textTertiary, fontSize: 11)),
+        DropdownButtonHideUnderline(
+          child: DropdownButton<int?>(
+            value: value,
+            isDense: true,
+            dropdownColor: AppTheme.panel,
+            style: const TextStyle(
+                color: AppTheme.textPrimary, fontSize: 12),
+            hint: const Text('Any',
+                style: TextStyle(
+                    color: AppTheme.textTertiary, fontSize: 11)),
+            items: [
+              const DropdownMenuItem<int?>(
+                  value: null, child: Text('Any')),
+              ...years.map((y) =>
+                  DropdownMenuItem<int?>(value: y, child: Text('$y'))),
+            ],
+            onChanged: onChanged,
+          ),
+        ),
+      ]),
     );
   }
 }

@@ -3,6 +3,41 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+// ── Structured command model ──────────────────────────────────────────────────
+
+enum CopilotIntent {
+  buildSet,
+  findArtist,
+  setReleaseRange,
+  matchLibrary,
+  cleanDuplicates,
+  createCrate,
+  general,
+}
+
+class AiCopilotCommand {
+  const AiCopilotCommand({
+    required this.intent,
+    required this.params,
+    required this.naturalResponse,
+  });
+
+  final CopilotIntent intent;
+
+  /// Structured params extracted by GPT (genre, artist, yearFrom, yearTo,
+  /// region, bpm, etc.)
+  final Map<String, dynamic> params;
+
+  /// The human-readable AI reply to show in the chat bubble.
+  final String naturalResponse;
+
+  @override
+  String toString() =>
+      'AiCopilotCommand(intent: $intent, params: $params)';
+}
+
+// ── AI Copilot service ────────────────────────────────────────────────────────
+
 class AiCopilotService {
   static const _prefKeyApiKey = 'openai_api_key';
   static const _prefKeyModel = 'openai_model';
@@ -27,13 +62,34 @@ class AiCopilotService {
       'artist deep-dives. Be concise, knowledgeable, use DJ/music-industry language.\n\n'
       'AVAILABLE TRACKS IN RADAR (use these when possible):\n';
 
-  /// Returns the effective API key: user-override from SharedPreferences first,
-  /// then falls back to the .env file value.
+  /// System prompt for structured command parsing.
+  static const _parseCommandSystemPrompt =
+      'You are VibeRadar AI Copilot. Parse the user message and return a JSON '
+      'object with two keys:\n'
+      '1. "intent": one of ["buildSet","findArtist","setReleaseRange",'
+      '"matchLibrary","cleanDuplicates","createCrate","general"]\n'
+      '2. "params": an object with any of: genre, artist, yearFrom (int), '
+      'yearTo (int), region, bpm (int), key, energy\n'
+      '3. "naturalResponse": your friendly reply to show the user\n\n'
+      'Examples:\n'
+      '- "Build me an Afrobeats set from 2020-2024" → '
+      '{"intent":"buildSet","params":{"genre":"Afrobeats","yearFrom":2020,"yearTo":2024},'
+      '"naturalResponse":"Sure! Building an Afrobeats set from 2020–2024..."}\n'
+      '- "Find tracks by Burna Boy" → '
+      '{"intent":"findArtist","params":{"artist":"Burna Boy"},'
+      '"naturalResponse":"Searching for Burna Boy in your library..."}\n'
+      '- "Show me tracks from 2019 to 2022" → '
+      '{"intent":"setReleaseRange","params":{"yearFrom":2019,"yearTo":2022},'
+      '"naturalResponse":"Filtering to 2019–2022 releases..."}\n'
+      'ONLY return valid JSON. No extra text outside the JSON object.\n\n'
+      'LIBRARY CONTEXT:\n';
+
+  // ── API key / model helpers ──────────────────────────────────────────────
+
   Future<String?> getApiKey() async {
     final prefs = await SharedPreferences.getInstance();
     final userKey = prefs.getString(_prefKeyApiKey);
     if (userKey != null && userKey.trim().isNotEmpty) return userKey;
-    // Fall back to .env
     final envKey = dotenv.env['OPENAI_API_KEY'];
     if (envKey != null && envKey.trim().isNotEmpty) return envKey;
     return null;
@@ -56,24 +112,96 @@ class AiCopilotService {
     await prefs.setString(_prefKeyModel, model);
   }
 
-  /// Build the system prompt with available track context.
-  String _buildSystemPrompt(List<Map<String, String>>? trackContext) {
+  // ── Prompt builders ──────────────────────────────────────────────────────
+
+  String _buildSystemPrompt(
+    List<Map<String, String>>? trackContext, {
+    int? yearFrom,
+    int? yearTo,
+  }) {
     final buffer = StringBuffer(_baseSystemPrompt);
     if (trackContext != null && trackContext.isNotEmpty) {
-      // Include top 80 tracks as context for crate building
       for (final t in trackContext.take(80)) {
-        buffer.write('${t["title"]} - ${t["artist"]} | ${t["bpm"]} BPM | ${t["key"]} | ${t["genre"]}\n');
+        buffer.write(
+            '${t["title"]} - ${t["artist"]} | ${t["bpm"]} BPM | ${t["key"]} | ${t["genre"]}\n');
       }
     } else {
       buffer.write('(No tracks loaded yet)\n');
     }
+    if (yearFrom != null || yearTo != null) {
+      buffer.write('\nACTIVE YEAR FILTER: ');
+      if (yearFrom != null && yearTo != null) {
+        buffer.write('$yearFrom–$yearTo\n');
+      } else if (yearFrom != null) {
+        buffer.write('from $yearFrom\n');
+      } else {
+        buffer.write('up to $yearTo\n');
+      }
+    }
     return buffer.toString();
   }
+
+  String _buildParseCommandContext(
+    List<Map<String, String>>? trackContext, {
+    int? yearFrom,
+    int? yearTo,
+  }) {
+    final buffer = StringBuffer(_parseCommandSystemPrompt);
+
+    if (trackContext != null && trackContext.isNotEmpty) {
+      // Genre breakdown
+      final genreCounts = <String, int>{};
+      final artists = <String>{};
+      int minYear = 9999, maxYear = 0;
+
+      for (final t in trackContext) {
+        final g = t['genre'] ?? '';
+        if (g.isNotEmpty) genreCounts[g] = (genreCounts[g] ?? 0) + 1;
+        final a = t['artist'] ?? '';
+        if (a.isNotEmpty) artists.add(a);
+        final y = int.tryParse(t['year'] ?? '') ?? 0;
+        if (y > 1900 && y < minYear) minYear = y;
+        if (y > maxYear) maxYear = y;
+      }
+
+      final topGenres = (genreCounts.entries.toList()
+            ..sort((a, b) => b.value.compareTo(a.value)))
+          .take(5)
+          .map((e) => '${e.key}(${e.value})')
+          .join(', ');
+
+      final topArtists = artists.take(10).join(', ');
+
+      buffer.write('Track count: ${trackContext.length}\n');
+      buffer.write('Top genres: $topGenres\n');
+      buffer.write('Sample artists: $topArtists\n');
+
+      if (minYear < 9999 && maxYear > 0) {
+        buffer.write('Year range available: $minYear–$maxYear\n');
+      }
+    } else {
+      buffer.write('(No library tracks loaded)\n');
+    }
+
+    if (yearFrom != null || yearTo != null) {
+      buffer.write('Current active year filter: ');
+      buffer.write(yearFrom != null ? '$yearFrom' : '(any)');
+      buffer.write('–');
+      buffer.write(yearTo != null ? '$yearTo' : '(any)');
+      buffer.write('\n');
+    }
+
+    return buffer.toString();
+  }
+
+  // ── Core chat method ─────────────────────────────────────────────────────
 
   Future<String> chat(
     List<Map<String, String>> history,
     String userMessage, {
     List<Map<String, String>>? trackContext,
+    int? yearFrom,
+    int? yearTo,
   }) async {
     final apiKey = await getApiKey();
     if (apiKey == null || apiKey.trim().isEmpty) {
@@ -82,7 +210,11 @@ class AiCopilotService {
 
     final model = await getModel();
     final messages = [
-      {'role': 'system', 'content': _buildSystemPrompt(trackContext)},
+      {
+        'role': 'system',
+        'content': _buildSystemPrompt(trackContext,
+            yearFrom: yearFrom, yearTo: yearTo)
+      },
       ...history,
       {'role': 'user', 'content': userMessage},
     ];
@@ -109,13 +241,129 @@ class AiCopilotService {
         return json['choices'][0]['message']['content'] as String;
       } else {
         final err = jsonDecode(response.body);
-        final errMsg = err['error']?['message'] ?? 'API error ${response.statusCode}';
+        final errMsg =
+            err['error']?['message'] ?? 'API error ${response.statusCode}';
         return '⚠️ OpenAI error: $errMsg';
       }
     } catch (e) {
       return '⚠️ Network error — check your connection and try again.';
     }
   }
+
+  // ── Structured command parsing ───────────────────────────────────────────
+
+  /// Parses [userMessage] via GPT-5.4 and returns a structured [AiCopilotCommand].
+  ///
+  /// The model returns a JSON object containing `intent`, `params`, and
+  /// `naturalResponse`. Falls back to [CopilotIntent.general] on any error.
+  Future<AiCopilotCommand> parseCommand(
+    String userMessage,
+    List<Map<String, String>>? trackContext, {
+    int? yearFrom,
+    int? yearTo,
+  }) async {
+    final apiKey = await getApiKey();
+    if (apiKey == null || apiKey.trim().isEmpty) {
+      // No API key — return a general intent with simulated text.
+      return AiCopilotCommand(
+        intent: CopilotIntent.general,
+        params: const {},
+        naturalResponse: _simulateResponse(userMessage),
+      );
+    }
+
+    final model = await getModel();
+    final systemPrompt = _buildParseCommandContext(trackContext,
+        yearFrom: yearFrom, yearTo: yearTo);
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse(_endpoint),
+            headers: {
+              'Authorization': 'Bearer $apiKey',
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              'model': model,
+              'messages': [
+                {'role': 'system', 'content': systemPrompt},
+                {'role': 'user', 'content': userMessage},
+              ],
+              'max_tokens': 400,
+              'temperature': 0.3,
+              'response_format': {'type': 'json_object'},
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final json = jsonDecode(response.body) as Map<String, dynamic>;
+        final content = json['choices'][0]['message']['content'] as String;
+        return _parseCommandJson(content, userMessage);
+      } else {
+        final err = jsonDecode(response.body);
+        final errMsg =
+            err['error']?['message'] ?? 'API error ${response.statusCode}';
+        return AiCopilotCommand(
+          intent: CopilotIntent.general,
+          params: const {},
+          naturalResponse: '⚠️ OpenAI error: $errMsg',
+        );
+      }
+    } catch (e) {
+      return AiCopilotCommand(
+        intent: CopilotIntent.general,
+        params: const {},
+        naturalResponse: '⚠️ Network error — check your connection and try again.',
+      );
+    }
+  }
+
+  AiCopilotCommand _parseCommandJson(String raw, String fallback) {
+    try {
+      final data = jsonDecode(raw) as Map<String, dynamic>;
+      final intentStr = data['intent'] as String? ?? 'general';
+      final params =
+          (data['params'] as Map<String, dynamic>?) ?? const {};
+      final naturalResponse =
+          data['naturalResponse'] as String? ?? raw;
+
+      final intent = _intentFromString(intentStr);
+      return AiCopilotCommand(
+        intent: intent,
+        params: params,
+        naturalResponse: naturalResponse,
+      );
+    } catch (_) {
+      return AiCopilotCommand(
+        intent: CopilotIntent.general,
+        params: const {},
+        naturalResponse: raw,
+      );
+    }
+  }
+
+  CopilotIntent _intentFromString(String s) {
+    switch (s) {
+      case 'buildSet':
+        return CopilotIntent.buildSet;
+      case 'findArtist':
+        return CopilotIntent.findArtist;
+      case 'setReleaseRange':
+        return CopilotIntent.setReleaseRange;
+      case 'matchLibrary':
+        return CopilotIntent.matchLibrary;
+      case 'cleanDuplicates':
+        return CopilotIntent.cleanDuplicates;
+      case 'createCrate':
+        return CopilotIntent.createCrate;
+      default:
+        return CopilotIntent.general;
+    }
+  }
+
+  // ── Fallback simulation ──────────────────────────────────────────────────
 
   String _simulateResponse(String query) {
     final q = query.toLowerCase();

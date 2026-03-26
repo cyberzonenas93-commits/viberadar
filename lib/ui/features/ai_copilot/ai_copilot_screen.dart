@@ -7,6 +7,22 @@ import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
 import '../../../services/ai_copilot_service.dart';
 
+// Exposed so parent shell can update year filter state from AI commands.
+// Riverpod 3.x: StateProvider removed → NotifierProvider with same .state API.
+class _CopilotYearFilterNotifier
+    extends Notifier<({int? yearFrom, int? yearTo})> {
+  @override
+  ({int? yearFrom, int? yearTo}) build() => (yearFrom: null, yearTo: null);
+
+  /// Update the year filter from outside the notifier.
+  void update({required int? yearFrom, required int? yearTo}) {
+    state = (yearFrom: yearFrom, yearTo: yearTo);
+  }
+}
+
+final copilotYearFilterProvider = NotifierProvider<_CopilotYearFilterNotifier,
+    ({int? yearFrom, int? yearTo})>(_CopilotYearFilterNotifier.new);
+
 final _aiServiceProvider =
     Provider<AiCopilotService>((_) => AiCopilotService());
 
@@ -35,6 +51,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   bool _showSettings = false;
   String? _apiKey;
   String _model = 'gpt-5.4';
+
+  // Year range context passed to GPT
+  int? _yearFrom;
+  int? _yearTo;
 
   static const _suggestions = [
     'What\'s trending in West Africa right now?',
@@ -316,6 +336,43 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             ),
           ),
 
+        // Active year filter indicator
+        if (_yearFrom != null || _yearTo != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(28, 4, 28, 0),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.cyan.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(8),
+                border:
+                    Border.all(color: AppTheme.cyan.withValues(alpha: 0.2)),
+              ),
+              child: Row(children: [
+                const Icon(Icons.date_range_rounded,
+                    color: AppTheme.cyan, size: 12),
+                const SizedBox(width: 6),
+                Text(
+                  'Year filter: ${_yearFrom ?? "any"} – ${_yearTo ?? "any"}',
+                  style: const TextStyle(color: AppTheme.cyan, fontSize: 11),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _yearFrom = null;
+                      _yearTo = null;
+                    });
+                    ref.read(copilotYearFilterProvider.notifier).update(yearFrom: null, yearTo: null);
+                  },
+                  child: const Icon(Icons.close,
+                      color: AppTheme.cyan, size: 12),
+                ),
+              ]),
+            ),
+          ),
+
         const SizedBox(height: 8),
         Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
 
@@ -440,16 +497,31 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   }
 
   /// Build track context from current radar data for the AI.
+  /// Includes year, genre, and respects active year filter.
   List<Map<String, String>> _getTrackContext() {
     final tracksAsync = ref.read(trackStreamProvider);
     final allTracks = tracksAsync.value ?? <Track>[];
-    final sorted = [...allTracks]..sort((a, b) => b.trendScore.compareTo(a.trendScore));
-    return sorted.take(80).map((t) => {
+    var filtered = [...allTracks];
+
+    // Apply year filter if active
+    if (_yearFrom != null) {
+      filtered =
+          filtered.where((t) => t.createdAt.year >= _yearFrom!).toList();
+    }
+    if (_yearTo != null) {
+      filtered =
+          filtered.where((t) => t.createdAt.year <= _yearTo!).toList();
+    }
+
+    filtered.sort((a, b) => b.trendScore.compareTo(a.trendScore));
+
+    return filtered.take(80).map((t) => {
       'title': t.title,
       'artist': t.artist,
       'bpm': t.bpm.toString(),
       'key': t.keySignature,
       'genre': t.genre,
+      'year': t.createdAt.year.toString(),
     }).toList();
   }
 
@@ -498,15 +570,25 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
     try {
       final trackContext = _getTrackContext();
-      final response = await ref.read(_aiServiceProvider).chat(
-        _history,
+      final svc = ref.read(_aiServiceProvider);
+
+      // Use structured command parsing so we can route the intent.
+      final command = await svc.parseCommand(
         text,
-        trackContext: trackContext,
+        trackContext,
+        yearFrom: _yearFrom,
+        yearTo: _yearTo,
       );
+
+      final response = command.naturalResponse;
+
       _history.add({'role': 'user', 'content': text});
       _history.add({'role': 'assistant', 'content': response});
 
-      // Check if response contains a crate block and save it
+      // Route structured intent to UI actions.
+      _handleCopilotCommand(command);
+
+      // Also parse any inline crate JSON blocks.
       _parseCrateFromResponse(response);
 
       if (mounted) {
@@ -525,6 +607,76 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       }
     } finally {
       if (mounted) _scrollToBottom();
+    }
+  }
+
+  /// Routes a structured [AiCopilotCommand] to the appropriate UI action.
+  void _handleCopilotCommand(AiCopilotCommand command) {
+    if (!mounted) return;
+
+    switch (command.intent) {
+      case CopilotIntent.setReleaseRange:
+        final yf = command.params['yearFrom'] as int?;
+        final yt = command.params['yearTo'] as int?;
+        if (yf != null || yt != null) {
+          setState(() {
+            _yearFrom = yf ?? _yearFrom;
+            _yearTo = yt ?? _yearTo;
+          });
+          // Propagate to shared provider so other screens can react.
+          ref.read(copilotYearFilterProvider.notifier).update(yearFrom: _yearFrom, yearTo: _yearTo);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                'Year filter set: ${_yearFrom ?? "any"} – ${_yearTo ?? "any"}'),
+            backgroundColor: AppTheme.violet,
+          ));
+        }
+
+      case CopilotIntent.buildSet:
+        // The crate will be created from the ```crate``` block in the response
+        // via _parseCrateFromResponse. Show a toast confirming the intent.
+        final genre = command.params['genre'] as String? ?? '';
+        final yf = command.params['yearFrom'] as int?;
+        final yt = command.params['yearTo'] as int?;
+        if (yf != null || yt != null) {
+          setState(() {
+            _yearFrom = yf ?? _yearFrom;
+            _yearTo = yt ?? _yearTo;
+          });
+          ref.read(copilotYearFilterProvider.notifier).update(yearFrom: _yearFrom, yearTo: _yearTo);
+        }
+        if (genre.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Building $genre set${yf != null ? " from $yf" : ""}${yt != null ? "–$yt" : ""}…'),
+            backgroundColor: AppTheme.violet,
+          ));
+        }
+
+      case CopilotIntent.findArtist:
+        final artist = command.params['artist'] as String? ?? '';
+        if (artist.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Tip: Use the Artists screen to find "$artist"'),
+            backgroundColor: AppTheme.cyan,
+            action: SnackBarAction(
+              label: 'OK',
+              textColor: Colors.white,
+              onPressed: () {},
+            ),
+          ));
+        }
+
+      case CopilotIntent.cleanDuplicates:
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Tip: Head to the Duplicates screen to clean up'),
+          backgroundColor: AppTheme.cyan,
+        ));
+
+      case CopilotIntent.createCrate:
+      case CopilotIntent.matchLibrary:
+      case CopilotIntent.general:
+        // General intent — response text is all that's needed.
+        break;
     }
   }
 

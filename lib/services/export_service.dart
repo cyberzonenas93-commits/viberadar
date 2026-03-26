@@ -3,11 +3,32 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/library_track.dart';
 
+// ── Physical crate types ──────────────────────────────────────────────────────
+
+enum CrateType { virtualOnly, copyFiles, aliasLinks }
+
+class PhysicalCrateResult {
+  const PhysicalCrateResult({
+    required this.cratePath,
+    required this.filesCopied,
+    required this.filesSkipped,
+    required this.errors,
+  });
+  final String cratePath;
+  final int filesCopied;
+  final int filesSkipped;
+  final List<String> errors;
+}
+
+// ── Export crate container ────────────────────────────────────────────────────
+
 class ExportCrate {
   const ExportCrate({required this.name, required this.tracks});
   final String name;
   final List<LibraryTrack> tracks;
 }
+
+// ── Export service ────────────────────────────────────────────────────────────
 
 class ExportService {
   Future<String> exportRekordboxXml(ExportCrate crate) async {
@@ -98,6 +119,93 @@ class ExportService {
     buf.writeln('</NML>');
     return _save('${_safeName(crate.name)}_traktor.nml', buf.toString());
   }
+
+  // ── Physical crate creation ───────────────────────────────────────────────
+
+  /// Creates a physical crate on disk.
+  ///
+  /// - [CrateType.virtualOnly]  → writes an M3U playlist only (no file copy).
+  /// - [CrateType.copyFiles]    → copies each source file into `destinationDir/crateName/`.
+  /// - [CrateType.aliasLinks]   → creates macOS symlinks (dart:io Link) to source files.
+  ///
+  /// Returns a [PhysicalCrateResult] with copy counts and any errors.
+  /// The [onProgress] callback reports `(done, total)` as each file is processed.
+  Future<PhysicalCrateResult> createPhysicalCrate({
+    required List<LibraryTrack> tracks,
+    required String crateName,
+    required CrateType type,
+    required String destinationDir,
+    bool overwriteExisting = false,
+    void Function(int done, int total)? onProgress,
+  }) async {
+    // Virtual-only → just write M3U and return immediately.
+    if (type == CrateType.virtualOnly) {
+      final m3uPath =
+          await exportM3u(ExportCrate(name: crateName, tracks: tracks));
+      return PhysicalCrateResult(
+        cratePath: m3uPath,
+        filesCopied: 0,
+        filesSkipped: 0,
+        errors: [],
+      );
+    }
+
+    final safeFolder = _safeName(crateName);
+    final crateDir = Directory(p.join(destinationDir, safeFolder));
+    await crateDir.create(recursive: true);
+
+    int copied = 0;
+    int skipped = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < tracks.length; i++) {
+      onProgress?.call(i, tracks.length);
+
+      final t = tracks[i];
+      final src = File(t.filePath);
+
+      if (!src.existsSync()) {
+        errors.add('Source not found: ${t.filePath}');
+        skipped++;
+        continue;
+      }
+
+      final destName = p.basename(t.filePath);
+      final destPath = p.join(crateDir.path, destName);
+      final destFile = File(destPath);
+
+      if (destFile.existsSync() && !overwriteExisting) {
+        skipped++;
+        continue;
+      }
+
+      try {
+        if (type == CrateType.copyFiles) {
+          await src.copy(destPath);
+          copied++;
+        } else {
+          // aliasLinks — macOS symlink
+          if (destFile.existsSync()) await destFile.delete();
+          await Link(destPath).create(t.filePath, recursive: false);
+          copied++;
+        }
+      } catch (e) {
+        errors.add('${t.fileName}: $e');
+        skipped++;
+      }
+    }
+
+    onProgress?.call(tracks.length, tracks.length);
+
+    return PhysicalCrateResult(
+      cratePath: crateDir.path,
+      filesCopied: copied,
+      filesSkipped: skipped,
+      errors: errors,
+    );
+  }
+
+  // ── Private helpers ───────────────────────────────────────────────────────
 
   Future<String> _save(String filename, String content) async {
     final dir = await getApplicationDocumentsDirectory();
