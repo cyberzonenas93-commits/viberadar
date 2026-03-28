@@ -3,9 +3,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../models/dj_export_result.dart';
 import '../../../models/library_track.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../../providers/dj_export_provider.dart';
 import '../../../providers/library_provider.dart';
 import '../../../services/export_service.dart';
 import '../../../services/local_match_service.dart';
@@ -392,6 +394,22 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                           onTap: () =>
                               _export('traktor', crateLibTracks),
                         ),
+                        const SizedBox(width: 8),
+                        _ExportBtn(
+                          label: '→ VirtualDJ',
+                          icon: Icons.queue_play_next_rounded,
+                          loading: false,
+                          onTap: () => _showVdjExportDialog(
+                              _selectedCrate!, crateLibTracks),
+                        ),
+                        const SizedBox(width: 8),
+                        _ExportBtn(
+                          label: '→ Serato',
+                          icon: Icons.library_add_rounded,
+                          loading: false,
+                          onTap: () => _showSeratoExportDialog(
+                              _selectedCrate!, crateLibTracks),
+                        ),
                       ],
                     ]),
                   ),
@@ -669,6 +687,36 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
               ),
       ),
     ]);
+  }
+
+  // ── DJ Software export helpers ────────────────────────────────────────────
+
+  Future<void> _showVdjExportDialog(
+      String crateName, List<LibraryTrack> tracks) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => _DjExportDialog(
+        target: DjExportTarget.virtualDj,
+        crateName: crateName,
+        tracks: tracks,
+      ),
+    );
+  }
+
+  Future<void> _showSeratoExportDialog(
+      String crateName, List<LibraryTrack> tracks) async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => _DjExportDialog(
+        target: DjExportTarget.serato,
+        crateName: crateName,
+        tracks: tracks,
+      ),
+    );
   }
 
   Future<void> _export(String format, List<LibraryTrack> tracks) async {
@@ -1063,6 +1111,603 @@ class _ExportBtn extends StatelessWidget {
     );
   }
 }
+// ──────────────────────────────────────────────────────────────────────────────
+// _DjExportDialog — handles VirtualDJ / Serato export with root detection
+// ──────────────────────────────────────────────────────────────────────────────
+
+class _DjExportDialog extends ConsumerStatefulWidget {
+  const _DjExportDialog({
+    required this.target,
+    required this.crateName,
+    required this.tracks,
+  });
+
+  final DjExportTarget target;
+  final String crateName;
+  final List<LibraryTrack> tracks;
+
+  @override
+  ConsumerState<_DjExportDialog> createState() => _DjExportDialogState();
+}
+
+class _DjExportDialogState extends ConsumerState<_DjExportDialog> {
+  bool _exporting = false;
+  DjExportResult? _result;
+  String? _error;
+  String? _seratoParentCrate;
+  final _parentController = TextEditingController();
+
+  @override
+  void dispose() {
+    _parentController.dispose();
+    super.dispose();
+  }
+
+  bool get _isVdj => widget.target == DjExportTarget.virtualDj;
+  String get _targetLabel => widget.target.label;
+
+  String? get _currentRoot {
+    final st = ref.read(djExportProvider);
+    return _isVdj ? st.vdjRoot : st.seratoRoot;
+  }
+
+  Future<void> _pickRoot() async {
+    final result = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose $_targetLabel root folder',
+    );
+    if (result == null || !mounted) return;
+    final notifier = ref.read(djExportProvider.notifier);
+    if (_isVdj) {
+      await notifier.forceSetVirtualDjRoot(result);
+    } else {
+      await notifier.forceSetSeratoRoot(result);
+    }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _doExport() async {
+    final root = _currentRoot;
+    if (root == null) {
+      setState(() => _error = 'Please select the $_targetLabel folder first.');
+      return;
+    }
+    setState(() { _exporting = true; _error = null; _result = null; });
+    try {
+      final notifier = ref.read(djExportProvider.notifier);
+      DjExportResult? result;
+      if (_isVdj) {
+        result = await notifier.exportToVirtualDj(
+          crateName: widget.crateName,
+          tracks: widget.tracks,
+        );
+      } else {
+        result = await notifier.exportToSerato(
+          crateName: widget.crateName,
+          tracks: widget.tracks,
+          parentCrateName: _seratoParentCrate?.isNotEmpty == true
+              ? _seratoParentCrate
+              : null,
+        );
+      }
+      if (mounted) setState(() { _exporting = false; _result = result; });
+    } catch (e) {
+      if (mounted) setState(() { _exporting = false; _error = '$e'; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final djState = ref.watch(djExportProvider);
+    final root = _isVdj ? djState.vdjRoot : djState.seratoRoot;
+    final isValidated = _isVdj
+        ? ref.read(djRootDetectionServiceProvider).validateVirtualDjRoot(root ?? '')
+        : ref.read(djRootDetectionServiceProvider).validateSeratoRoot(root ?? '');
+
+    return Dialog(
+      backgroundColor: AppTheme.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: AppTheme.edge),
+      ),
+      child: SizedBox(
+        width: 520,
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(children: [
+                Icon(
+                  _isVdj ? Icons.queue_play_next_rounded : Icons.library_add_rounded,
+                  color: AppTheme.cyan,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Export to $_targetLabel',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: () => Navigator.of(context).pop(),
+                  child: const Icon(Icons.close_rounded,
+                      color: AppTheme.textSecondary, size: 18),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text(
+                '${widget.tracks.length} tracks  ·  ${widget.crateName}',
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 12),
+              ),
+              const SizedBox(height: 20),
+              const Divider(color: AppTheme.edge),
+              const SizedBox(height: 16),
+
+              // Root path section
+              Text(
+                '$_targetLabel Root Folder',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: AppTheme.panelRaised,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: root != null
+                            ? (isValidated
+                                ? AppTheme.lime.withValues(alpha: 0.4)
+                                : AppTheme.amber.withValues(alpha: 0.4))
+                            : AppTheme.edge,
+                      ),
+                    ),
+                    child: Row(children: [
+                      Icon(
+                        root != null
+                            ? (isValidated
+                                ? Icons.check_circle_rounded
+                                : Icons.warning_amber_rounded)
+                            : Icons.folder_off_rounded,
+                        color: root != null
+                            ? (isValidated ? AppTheme.lime : AppTheme.amber)
+                            : AppTheme.textTertiary,
+                        size: 13,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          root ?? 'Not detected — choose folder below',
+                          style: TextStyle(
+                            color: root != null
+                                ? AppTheme.textPrimary
+                                : AppTheme.textTertiary,
+                            fontSize: 11,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: _exporting ? null : _pickRoot,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 9),
+                    decoration: BoxDecoration(
+                      color: AppTheme.cyan.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                          color: AppTheme.cyan.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(mainAxisSize: MainAxisSize.min, children: [
+                      Icon(Icons.folder_open_rounded,
+                          color: AppTheme.cyan, size: 13),
+                      SizedBox(width: 6),
+                      Text('Browse',
+                          style: TextStyle(
+                              color: AppTheme.cyan,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600)),
+                    ]),
+                  ),
+                ),
+              ]),
+              if (!isValidated && root != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '⚠ This folder may not be a valid $_targetLabel root '
+                  '(expected markers not found). Export will still proceed.',
+                  style: const TextStyle(
+                      color: AppTheme.amber, fontSize: 10),
+                ),
+              ],
+
+              // Serato parent crate option
+              if (!_isVdj) ...[
+                const SizedBox(height: 16),
+                Text(
+                  'Parent Crate (optional)',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _parentController,
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. LocalMusic  (leave empty for top-level)',
+                    hintStyle: const TextStyle(
+                        color: AppTheme.textTertiary, fontSize: 11),
+                    filled: true,
+                    fillColor: AppTheme.panelRaised,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide:
+                          const BorderSide(color: AppTheme.edge),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide:
+                          const BorderSide(color: AppTheme.edge),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 9),
+                  ),
+                  onChanged: (v) =>
+                      setState(() => _seratoParentCrate = v.trim()),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Creates Serato crate: '
+                  '${(_seratoParentCrate?.isNotEmpty == true) ? '${_seratoParentCrate}%%' : ''}'
+                  '${widget.crateName}.crate',
+                  style: const TextStyle(
+                      color: AppTheme.textTertiary, fontSize: 10),
+                ),
+              ],
+
+              // VirtualDJ TIDAL note
+              if (_isVdj) ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.panelRaised,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppTheme.violet.withValues(alpha: 0.25)),
+                  ),
+                  child: const Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(Icons.info_outline_rounded,
+                          color: AppTheme.violet, size: 13),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Tracks are exported using their local file paths. '
+                          'If you use TIDAL inside VirtualDJ, enable it under '
+                          'Settings → Audio → TIDAL so VirtualDJ can stream '
+                          'any tracks you discover but don\'t own locally.',
+                          style: TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 11),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 20),
+
+              // Error
+              if (_error != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.pink.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                        color: AppTheme.pink.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(children: [
+                    const Icon(Icons.error_outline_rounded,
+                        color: AppTheme.pink, size: 13),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(_error!,
+                          style: const TextStyle(
+                              color: AppTheme.pink, fontSize: 11)),
+                    ),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // Result summary
+              if (_result != null) ...[
+                _DjResultBanner(result: _result!),
+                const SizedBox(height: 12),
+              ],
+
+              // Action row
+              if (_result == null)
+                Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: AppTheme.panelRaised,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.edge),
+                      ),
+                      child: const Text('Cancel',
+                          style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: (_exporting || root == null) ? null : _doExport,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 9),
+                      decoration: BoxDecoration(
+                        gradient: (_exporting || root == null)
+                            ? null
+                            : const LinearGradient(colors: [
+                                AppTheme.cyan,
+                                Color(0xFF00B4CC)
+                              ]),
+                        color: (_exporting || root == null)
+                            ? AppTheme.edge
+                            : null,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: _exporting
+                          ? const SizedBox(
+                              width: 60,
+                              height: 16,
+                              child: Center(
+                                child: SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2),
+                                ),
+                              ),
+                            )
+                          : Row(mainAxisSize: MainAxisSize.min, children: [
+                              const Icon(Icons.upload_rounded,
+                                  color: Colors.white, size: 14),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Export to $_targetLabel',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700),
+                              ),
+                            ]),
+                    ),
+                  ),
+                ])
+              else
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: GestureDetector(
+                    onTap: () => Navigator.of(context).pop(),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 9),
+                      decoration: BoxDecoration(
+                        color: AppTheme.lime.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: AppTheme.lime.withValues(alpha: 0.4)),
+                      ),
+                      child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_rounded,
+                                color: AppTheme.lime, size: 14),
+                            SizedBox(width: 6),
+                            Text('Done',
+                                style: TextStyle(
+                                    color: AppTheme.lime,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700)),
+                          ]),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── DJ export result banner ───────────────────────────────────────────────────
+
+class _DjResultBanner extends StatelessWidget {
+  const _DjResultBanner({required this.result});
+  final DjExportResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasWarnings = result.warnings.isNotEmpty;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: hasWarnings
+            ? AppTheme.amber.withValues(alpha: 0.08)
+            : AppTheme.lime.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: hasWarnings
+              ? AppTheme.amber.withValues(alpha: 0.3)
+              : AppTheme.lime.withValues(alpha: 0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Icon(
+              hasWarnings
+                  ? Icons.warning_amber_rounded
+                  : Icons.check_circle_rounded,
+              color: hasWarnings ? AppTheme.amber : AppTheme.lime,
+              size: 14,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Exported to ${result.target.label} — ${result.summary}',
+                style: TextStyle(
+                  color: hasWarnings ? AppTheme.amber : AppTheme.lime,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ]),
+          const SizedBox(height: 6),
+          // Stats row
+          Row(children: [
+            _StatChip(
+                label: '${result.localCount}',
+                sublabel: 'local',
+                color: AppTheme.cyan),
+            if (result.tidalCount > 0) ...[
+              const SizedBox(width: 6),
+              _StatChip(
+                  label: '${result.tidalCount}',
+                  sublabel: 'TIDAL',
+                  color: AppTheme.violet),
+            ],
+            if (result.skippedCount > 0) ...[
+              const SizedBox(width: 6),
+              _StatChip(
+                  label: '${result.skippedCount}',
+                  sublabel: 'skipped',
+                  color: AppTheme.textSecondary),
+            ],
+          ]),
+          const SizedBox(height: 6),
+          Text(
+            result.outputPath,
+            style: const TextStyle(
+                color: AppTheme.textTertiary, fontSize: 10),
+            overflow: TextOverflow.ellipsis,
+          ),
+          if (result.target == DjExportTarget.virtualDj) ...[
+            const SizedBox(height: 6),
+            const Text(
+              '↻ Refresh VirtualDJ (Settings → Database → Refresh) to see the new playlist.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+            ),
+          ] else ...[
+            const SizedBox(height: 6),
+            const Text(
+              '↻ Restart Serato DJ Pro or press ⌘R to refresh your crate list.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+            ),
+          ],
+          if (result.warnings.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            ...result.warnings.take(3).map((w) => Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('• ',
+                          style: TextStyle(
+                              color: AppTheme.amber, fontSize: 10)),
+                      Expanded(
+                        child: Text(w,
+                            style: const TextStyle(
+                                color: AppTheme.amber, fontSize: 10)),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  const _StatChip(
+      {required this.label,
+      required this.sublabel,
+      required this.color});
+  final String label;
+  final String sublabel;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(5),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(
+                text: label,
+                style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+            TextSpan(
+                text: ' $sublabel',
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // _MatchPanel — shows VibeRadar → local library match results
 // ──────────────────────────────────────────────────────────────────────────────
