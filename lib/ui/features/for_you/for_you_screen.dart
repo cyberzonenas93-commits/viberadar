@@ -9,7 +9,64 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/user_profile.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/repositories.dart';
+import '../../../providers/streaming_provider.dart';
 import '../../../services/spotify_artist_service.dart';
+
+// ── Persistent For You cache ──────────────────────────────────────────────────
+// Lives in the Riverpod container so it survives screen navigation.
+
+class _ForYouCache {
+  const _ForYouCache({
+    this.profiles = const {},
+    this.topTracks = const {},
+    this.latestRelease = const {},
+    this.recommended = const [],
+    this.loadedRecommended = false,
+  });
+  final Map<String, SpotifyArtistProfile> profiles;
+  final Map<String, List<SpotifyTrackInfo>> topTracks;
+  final Map<String, SpotifyAlbumInfo?> latestRelease;
+  final List<SpotifyArtistProfile> recommended;
+  final bool loadedRecommended;
+}
+
+class _ForYouCacheNotifier extends Notifier<_ForYouCache> {
+  @override
+  _ForYouCache build() => const _ForYouCache();
+
+  bool hasArtist(String name) => state.profiles.containsKey(name);
+
+  void setArtistData({
+    required String name,
+    required SpotifyArtistProfile profile,
+    required List<SpotifyTrackInfo> tracks,
+    required SpotifyAlbumInfo? latestRelease,
+  }) {
+    state = _ForYouCache(
+      profiles: {...state.profiles, name: profile},
+      topTracks: {...state.topTracks, name: tracks},
+      latestRelease: {...state.latestRelease, name: latestRelease},
+      recommended: state.recommended,
+      loadedRecommended: state.loadedRecommended,
+    );
+  }
+
+  void setRecommended(List<SpotifyArtistProfile> artists) {
+    state = _ForYouCache(
+      profiles: state.profiles,
+      topTracks: state.topTracks,
+      latestRelease: state.latestRelease,
+      recommended: artists,
+      loadedRecommended: true,
+    );
+  }
+}
+
+final _forYouCacheProvider = NotifierProvider<_ForYouCacheNotifier, _ForYouCache>(
+  _ForYouCacheNotifier.new,
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 class ForYouScreen extends ConsumerStatefulWidget {
   const ForYouScreen({super.key, required this.onOpenArtist});
@@ -25,20 +82,18 @@ class ForYouScreen extends ConsumerStatefulWidget {
 class _ForYouScreenState extends ConsumerState<ForYouScreen> {
   final _spotify = SpotifyArtistService();
 
-  // artistName → profile
-  final Map<String, SpotifyArtistProfile> _profiles = {};
-  // artistName → top tracks
-  final Map<String, List<SpotifyTrackInfo>> _topTracks = {};
-  // artistName → latest release
-  final Map<String, SpotifyAlbumInfo?> _latestRelease = {};
-  // recommended artists (deduped across all followed)
-  List<SpotifyArtistProfile> _recommended = [];
-  bool _loadedRecommended = false;
-  // Auto-open the artist picker once on first visit when no artists are followed
+  // Only local state that intentionally resets per-session (to avoid re-showing the picker)
   bool _autoPrompted = false;
+  // Tracks in-progress loads to avoid duplicate concurrent fetches (race condition fix)
+  final _loadingArtists = <String>{};
+
+  _ForYouCacheNotifier get _cache => ref.read(_forYouCacheProvider.notifier);
 
   Future<void> _loadArtist(String name) async {
-    if (_profiles.containsKey(name)) return;
+    // Skip if already cached or currently loading
+    if (_cache.hasArtist(name)) return;
+    if (_loadingArtists.contains(name)) return;
+    _loadingArtists.add(name);
     try {
       final artistId = await _spotify.findArtistId(name);
       if (artistId == null || !mounted) return;
@@ -51,37 +106,38 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
 
       if (!mounted) return;
       final catalogue = results[1] as List<SpotifyTrackInfo>;
-      // Sort by popularity descending, keep at least 50
       catalogue.sort((a, b) => b.popularity.compareTo(a.popularity));
-      setState(() {
-        _profiles[name] = results[0] as SpotifyArtistProfile? ??
-            SpotifyArtistProfile(id: artistId, name: name);
-        _topTracks[name] = catalogue.take(50).toList();
-        _latestRelease[name] = results[2] as SpotifyAlbumInfo?;
-      });
+
+      _cache.setArtistData(
+        name: name,
+        profile: results[0] as SpotifyArtistProfile? ??
+            SpotifyArtistProfile(id: artistId, name: name),
+        tracks: catalogue.take(50).toList(),
+        latestRelease: results[2] as SpotifyAlbumInfo?,
+      );
 
       // Load recommendations once we have at least one artist
-      if (!_loadedRecommended) {
-        _loadedRecommended = true;
+      if (!ref.read(_forYouCacheProvider).loadedRecommended) {
         _loadRecommendations(artistId);
       }
-    } catch (_) {}
+    } catch (_) {
+    } finally {
+      _loadingArtists.remove(name);
+    }
   }
 
   Future<void> _loadRecommendations(String seedArtistId) async {
     try {
       final related = await _spotify.getRelatedArtists(seedArtistId);
       if (!mounted) return;
-      // Filter out artists already followed
       final userProfile = ref.read(userProfileProvider).value;
       final followed =
-          userProfile?.followedArtists.map((a) => a.toLowerCase()).toSet() ??
-              {};
+          userProfile?.followedArtists.map((a) => a.toLowerCase()).toSet() ?? {};
       final filtered = related
           .where((a) => !followed.contains(a.name.toLowerCase()))
           .take(12)
           .toList();
-      setState(() => _recommended = filtered);
+      _cache.setRecommended(filtered);
     } catch (_) {}
   }
 
@@ -111,10 +167,12 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
     final userProfileAsync = ref.watch(userProfileProvider);
     final userProfile = userProfileAsync.value;
     final followed = userProfile?.followedArtists ?? [];
+    // Watch the cache so the UI rebuilds when data arrives
+    final cache = ref.watch(_forYouCacheProvider);
 
-    // Kick off loads for newly followed artists
+    // Kick off loads for artists not yet in cache
     for (final name in followed) {
-      if (!_profiles.containsKey(name)) {
+      if (!cache.profiles.containsKey(name)) {
         WidgetsBinding.instance
             .addPostFrameCallback((_) => _loadArtist(name));
       }
@@ -181,9 +239,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
           SliverToBoxAdapter(
             child: _ArtistSection(
               artistName: name,
-              profile: _profiles[name],
-              topTracks: _topTracks[name] ?? [],
-              latestRelease: _latestRelease[name],
+              profile: cache.profiles[name],
+              topTracks: cache.topTracks[name] ?? [],
+              latestRelease: cache.latestRelease[name],
               onOpenCatalog: () => widget.onOpenArtist(name),
               onUnfollow: userProfile != null
                   ? () => _unfollowArtist(userProfile, name)
@@ -193,7 +251,7 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
         ],
 
         // ── Recommendations ───────────────────────────────────────────────────
-        if (_recommended.isNotEmpty) ...[
+        if (cache.recommended.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(28, 32, 28, 12),
@@ -228,7 +286,7 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
             sliver: SliverGrid(
               delegate: SliverChildBuilderDelegate(
                 (context, i) {
-                  final artist = _recommended[i];
+                  final artist = cache.recommended[i];
                   final isFollowed = followed.any(
                       (f) => f.toLowerCase() == artist.name.toLowerCase());
                   return _RecommendedArtistCard(
@@ -239,7 +297,7 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                         : null,
                   );
                 },
-                childCount: _recommended.length,
+                childCount: cache.recommended.length,
               ),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 180,
@@ -477,7 +535,12 @@ class _ArtistSection extends StatelessWidget {
                     separatorBuilder: (context, index) => const SizedBox(width: 10),
                     itemBuilder: (context, i) {
                       final t = topTracks[i];
-                      return _MiniTrackCard(track: t, rank: i + 1);
+                      return _MiniTrackCard(
+                        track: t,
+                        rank: i + 1,
+                        allTracks: topTracks.take(8).toList(),
+                        trackIndex: i,
+                      );
                     },
                   ),
                 ),
@@ -498,60 +561,138 @@ class _ArtistSection extends StatelessWidget {
 
 // ── Mini track card ───────────────────────────────────────────────────────────
 
-class _MiniTrackCard extends StatelessWidget {
-  const _MiniTrackCard({required this.track, required this.rank});
+class _MiniTrackCard extends ConsumerStatefulWidget {
+  const _MiniTrackCard({
+    required this.track,
+    required this.rank,
+    required this.allTracks,
+    required this.trackIndex,
+  });
   final SpotifyTrackInfo track;
   final int rank;
+  final List<SpotifyTrackInfo> allTracks;
+  final int trackIndex;
+
+  @override
+  ConsumerState<_MiniTrackCard> createState() => _MiniTrackCardState();
+}
+
+class _MiniTrackCardState extends ConsumerState<_MiniTrackCard> {
+  bool _hovered = false;
+
+  void _play() async {
+    final queue = widget.allTracks
+        .skip(widget.trackIndex + 1)
+        .map((t) => (t.name, t.artists))
+        .toList();
+    final played = await ref.read(appleMusicProvider.notifier).playByQuery(
+      widget.track.name,
+      widget.track.artists,
+      queue: queue,
+    );
+    if (!played && widget.track.spotifyUrl.isNotEmpty) {
+      final uri = Uri.tryParse(widget.track.spotifyUrl);
+      if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        if (track.spotifyUrl.isNotEmpty) {
-          final uri = Uri.tryParse(track.spotifyUrl);
-          if (uri != null) {
-            await launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
-        }
-      },
-      child: SizedBox(
-        width: 110,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: track.albumArt != null
-                  ? CachedNetworkImage(
-                      imageUrl: track.albumArt!,
-                      width: 110,
-                      height: 110,
-                      fit: BoxFit.cover)
-                  : Container(
-                      width: 110,
-                      height: 110,
-                      color: AppTheme.panelRaised,
-                      child: const Icon(Icons.music_note_rounded,
-                          color: AppTheme.textTertiary, size: 32)),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              track.name,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            Text(
-              track.albumName,
-              style:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+    final am = ref.watch(appleMusicProvider);
+    final isCurrentTrack = am.currentTrack?.title.toLowerCase() == widget.track.name.toLowerCase();
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: _play,
+        child: SizedBox(
+          width: 110,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: widget.track.albumArt != null
+                        ? CachedNetworkImage(
+                            imageUrl: widget.track.albumArt!,
+                            width: 110,
+                            height: 110,
+                            fit: BoxFit.cover)
+                        : Container(
+                            width: 110,
+                            height: 110,
+                            color: AppTheme.panelRaised,
+                            child: const Icon(Icons.music_note_rounded,
+                                color: AppTheme.textTertiary, size: 32)),
+                  ),
+                  // Hover / active overlay (full dark scrim + centered icon)
+                  if (_hovered || isCurrentTrack)
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          color: Colors.black54,
+                          child: Center(
+                            child: am.isLoading && isCurrentTrack
+                                ? const SizedBox(
+                                    width: 28,
+                                    height: 28,
+                                    child: CircularProgressIndicator(
+                                      color: Color(0xFFFC3C44),
+                                      strokeWidth: 2.5,
+                                    ),
+                                  )
+                                : Icon(
+                                    isCurrentTrack && am.isPlaying
+                                        ? Icons.pause_circle_filled_rounded
+                                        : Icons.play_circle_filled_rounded,
+                                    color: Colors.white,
+                                    size: 44,
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  // Persistent small play badge (bottom-right), always visible
+                  if (!_hovered && !isCurrentTrack)
+                    Positioned(
+                      bottom: 6,
+                      right: 6,
+                      child: Container(
+                        width: 28,
+                        height: 28,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFC3C44),
+                          shape: BoxShape.circle,
+                          boxShadow: [BoxShadow(color: Colors.black45, blurRadius: 6)],
+                        ),
+                        child: const Icon(Icons.play_arrow_rounded,
+                            color: Colors.white, size: 18),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                widget.track.name,
+                style: TextStyle(
+                    color: isCurrentTrack ? const Color(0xFFFC3C44) : AppTheme.textPrimary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                widget.track.albumName,
+                style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -29,6 +29,9 @@ enum AppSection {
   // EXPORT
   exports,
 
+  // STREAMING
+  streaming,
+
   // OTHER
   settings,
 }
@@ -56,6 +59,7 @@ extension AppSectionLabel on AppSection {
       case AppSection.savedCrates: return 'Saved Crates';
       case AppSection.watchlist: return 'Watchlist';
       case AppSection.exports: return 'Exports';
+      case AppSection.streaming: return 'Streaming';
       case AppSection.settings: return 'Settings';
     }
   }

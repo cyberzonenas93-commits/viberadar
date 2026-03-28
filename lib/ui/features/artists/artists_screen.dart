@@ -8,6 +8,7 @@ import '../../../models/artist_model.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
+import '../../../providers/streaming_provider.dart';
 import '../../../services/artist_service.dart';
 import '../../../services/set_builder_service.dart';
 import '../../../services/apple_music_artist_service.dart';
@@ -47,6 +48,7 @@ class _ArtistInfo {
 /// A track that may exist on Spotify, Apple Music, or both.
 class _UnifiedTrack {
   final String name;
+  final String artist;
   final String albumName;
   final String? artworkUrl;
   final int durationMs;
@@ -64,6 +66,7 @@ class _UnifiedTrack {
 
   const _UnifiedTrack({
     required this.name,
+    this.artist = '',
     required this.albumName,
     this.artworkUrl,
     this.durationMs = 0,
@@ -1192,16 +1195,16 @@ class _AlbumGroup {
 // Grid card for Spotify catalogue tracks
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _SpotifyTrackCard extends StatefulWidget {
+class _SpotifyTrackCard extends ConsumerStatefulWidget {
   final SpotifyTrackInfo track;
   final int rank;
   const _SpotifyTrackCard({required this.track, required this.rank});
 
   @override
-  State<_SpotifyTrackCard> createState() => _SpotifyTrackCardState();
+  ConsumerState<_SpotifyTrackCard> createState() => _SpotifyTrackCardState();
 }
 
-class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
+class _SpotifyTrackCardState extends ConsumerState<_SpotifyTrackCard> {
   bool _hovered = false;
 
   @override
@@ -1213,7 +1216,8 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () async {
-          if (t.spotifyUrl.isNotEmpty) {
+          final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.name, t.artists);
+          if (!played && t.spotifyUrl.isNotEmpty) {
             final uri = Uri.tryParse(t.spotifyUrl);
             if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
@@ -1330,16 +1334,16 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
 }
 
 // Grid card for radar tracks
-class _RadarTrackCard extends StatefulWidget {
+class _RadarTrackCard extends ConsumerStatefulWidget {
   final Track track;
   final int rank;
   const _RadarTrackCard({required this.track, required this.rank});
 
   @override
-  State<_RadarTrackCard> createState() => _RadarTrackCardState();
+  ConsumerState<_RadarTrackCard> createState() => _RadarTrackCardState();
 }
 
-class _RadarTrackCardState extends State<_RadarTrackCard> {
+class _RadarTrackCardState extends ConsumerState<_RadarTrackCard> {
   bool _hovered = false;
 
   @override
@@ -1351,11 +1355,14 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () {
-          final url = _bestUrl(t);
-          if (url != null) {
-            final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+        onTap: () async {
+          final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.title, t.artist);
+          if (!played) {
+            final url = _bestUrl(t);
+            if (url != null) {
+              final uri = Uri.tryParse(url);
+              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           }
         },
         child: AnimatedContainer(
@@ -1446,7 +1453,7 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
 }
 
 // Keep old _SpotifyTrackRow for compatibility but it's no longer used
-class _SpotifyTrackRow extends StatefulWidget {
+class _SpotifyTrackRow extends ConsumerStatefulWidget {
   final SpotifyTrackInfo track;
   final int rank;
   final bool isSelected;
@@ -1460,10 +1467,10 @@ class _SpotifyTrackRow extends StatefulWidget {
   });
 
   @override
-  State<_SpotifyTrackRow> createState() => _SpotifyTrackRowState();
+  ConsumerState<_SpotifyTrackRow> createState() => _SpotifyTrackRowState();
 }
 
-class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
+class _SpotifyTrackRowState extends ConsumerState<_SpotifyTrackRow> {
   bool _hovered = false;
 
   @override
@@ -1574,12 +1581,15 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
               IconButton(
                 icon: const Icon(Icons.play_circle_filled_rounded, color: Color(0xFF1DB954), size: 22),
                 onPressed: () async {
-                  final uri = Uri.tryParse(t.spotifyUrl);
-                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.name, t.artists);
+                  if (!played) {
+                    final uri = Uri.tryParse(t.spotifyUrl);
+                    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                tooltip: 'Play on Spotify',
+                tooltip: 'Play',
               ),
           ],
         ),
@@ -1650,16 +1660,16 @@ class _BuildSetButton extends StatelessWidget {
   }
 }
 
-class _AppleMusicTrackCard extends StatefulWidget {
+class _AppleMusicTrackCard extends ConsumerStatefulWidget {
   final AppleMusicTrack track;
   final int rank;
   const _AppleMusicTrackCard({required this.track, required this.rank});
 
   @override
-  State<_AppleMusicTrackCard> createState() => _AppleMusicTrackCardState();
+  ConsumerState<_AppleMusicTrackCard> createState() => _AppleMusicTrackCardState();
 }
 
-class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
+class _AppleMusicTrackCardState extends ConsumerState<_AppleMusicTrackCard> {
   bool _hovered = false;
 
   @override
@@ -1673,7 +1683,8 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTap: () async {
-          if (t.appleUrl != null) {
+          final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.name, t.artistName);
+          if (!played && t.appleUrl != null) {
             final uri = Uri.tryParse(t.appleUrl!);
             if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
@@ -1759,129 +1770,185 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
   }
 }
 
-class _UnifiedTrackCard extends StatelessWidget {
+class _UnifiedTrackCard extends ConsumerStatefulWidget {
   const _UnifiedTrackCard({required this.track, required this.rank});
   final _UnifiedTrack track;
   final int rank;
 
   @override
+  ConsumerState<_UnifiedTrackCard> createState() => _UnifiedTrackCardState();
+}
+
+class _UnifiedTrackCardState extends ConsumerState<_UnifiedTrackCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () async {
-        // Prefer Apple Music for preview, Spotify for full track
-        final url = track.appleUrl ?? track.spotifyUrl;
-        if (url != null) {
-          final uri = Uri.tryParse(url);
-          if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      },
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.panel,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.edge.withValues(alpha: 0.6)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Artwork
-            Expanded(
-              child: Stack(
-                children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
-                    child: track.artworkUrl != null
-                        ? CachedNetworkImage(
-                            imageUrl: track.artworkUrl!,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorWidget: (context, error, stack) => _ArtworkPlaceholder(),
-                          )
-                        : _ArtworkPlaceholder(),
-                  ),
-                  // Rank badge
-                  Positioned(
-                    top: 6,
-                    left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        borderRadius: BorderRadius.circular(4),
+    final t = widget.track;
+    final am = ref.watch(appleMusicProvider);
+    final isPlaying = am.currentTrack?.title == t.name &&
+        am.currentTrack?.artist == t.artist &&
+        am.isPlaying;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () async {
+          final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.name, t.artist);
+          if (!played) {
+            final url = t.appleUrl ?? t.spotifyUrl;
+            if (url != null) {
+              final uri = Uri.tryParse(url);
+              if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
+          }
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: isPlaying
+                ? const Color(0xFFFC3C44).withValues(alpha: 0.5)
+                : AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Artwork
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                      child: SizedBox.expand(
+                        child: t.artworkUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (context, error, stack) => _ArtworkPlaceholder(),
+                              )
+                            : _ArtworkPlaceholder(),
                       ),
-                      child: Text('#$rank', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                     ),
-                  ),
-                  // Platform badges
-                  Positioned(
-                    top: 6,
-                    right: 6,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (track.onSpotify)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF1DB954),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: const Text('S', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
-                          ),
-                        if (track.onSpotify && track.onApple) const SizedBox(width: 3),
-                        if (track.onApple)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFC3C44),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: const Text('A', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (track.isTopTrack)
+                    // Rank badge
                     Positioned(
-                      bottom: 6,
+                      top: 6,
                       left: 6,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: AppTheme.amber.withValues(alpha: 0.9),
+                          color: Colors.black54,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('TOP', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.w800)),
+                        child: Text('#${widget.rank}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
                       ),
                     ),
-                ],
+                    // Platform badges
+                    Positioned(
+                      top: 6,
+                      right: 6,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (t.onSpotify)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1DB954),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: const Text('S', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                            ),
+                          if (t.onSpotify && t.onApple) const SizedBox(width: 3),
+                          if (t.onApple)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFC3C44),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: const Text('A', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (t.isTopTrack)
+                      Positioned(
+                        bottom: 6,
+                        left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.amber.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('TOP', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.w800)),
+                        ),
+                      ),
+                    // Play overlay on hover or active
+                    if (_hovered || isPlaying)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 44, height: 44,
+                              decoration: BoxDecoration(
+                                color: isPlaying ? const Color(0xFFFC3C44) : AppTheme.violet,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(
+                                  color: (isPlaying ? const Color(0xFFFC3C44) : AppTheme.violet).withValues(alpha: 0.5),
+                                  blurRadius: 16,
+                                )],
+                              ),
+                              child: Icon(
+                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-            // Info
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    track.name,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    track.albumName,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+              // Info
+              Padding(
+                padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      t.name,
+                      style: TextStyle(
+                        color: isPlaying ? const Color(0xFFFC3C44) : AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      t.albumName,
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
               ),
             ),
           ],
         ),
       ),
+    ),
     );
   }
 }
@@ -1935,7 +2002,7 @@ class _ViewTab extends StatelessWidget {
   }
 }
 
-class _CatalogTrackRow extends StatefulWidget {
+class _CatalogTrackRow extends ConsumerStatefulWidget {
   final Track track;
   final int rank;
   final bool isSelected;
@@ -1949,10 +2016,10 @@ class _CatalogTrackRow extends StatefulWidget {
   });
 
   @override
-  State<_CatalogTrackRow> createState() => _CatalogTrackRowState();
+  ConsumerState<_CatalogTrackRow> createState() => _CatalogTrackRowState();
 }
 
-class _CatalogTrackRowState extends State<_CatalogTrackRow> {
+class _CatalogTrackRowState extends ConsumerState<_CatalogTrackRow> {
   bool _hovered = false;
 
   @override
@@ -2056,8 +2123,11 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
               IconButton(
                 icon: const Icon(Icons.play_circle_filled_rounded, color: AppTheme.cyan, size: 22),
                 onPressed: () async {
-                  final uri = Uri.tryParse(_bestUrl(t)!);
-                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.title, t.artist);
+                  if (!played) {
+                    final uri = Uri.tryParse(_bestUrl(t)!);
+                    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -2294,6 +2364,7 @@ List<_UnifiedTrack> _mergeToUnified(
     final key = t.name.toLowerCase().trim();
     unified[key] = _UnifiedTrack(
       name: t.name,
+      artist: t.artists,
       albumName: t.albumName,
       artworkUrl: t.albumArt,
       durationMs: t.durationMs,
@@ -2314,6 +2385,7 @@ List<_UnifiedTrack> _mergeToUnified(
       // Enrich Spotify entry with Apple data
       unified[key] = _UnifiedTrack(
         name: existing.name,
+        artist: existing.artist.isNotEmpty ? existing.artist : t.artistName,
         albumName: existing.albumName,
         artworkUrl: existing.artworkUrl ?? t.artworkUrl,
         durationMs: existing.durationMs > 0 ? existing.durationMs : t.durationMs,
@@ -2331,6 +2403,7 @@ List<_UnifiedTrack> _mergeToUnified(
       // Apple-only track
       unified[key] = _UnifiedTrack(
         name: t.name,
+        artist: t.artistName,
         albumName: t.albumName,
         artworkUrl: t.artworkUrl,
         durationMs: t.durationMs,

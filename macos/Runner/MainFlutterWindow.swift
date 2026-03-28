@@ -13,6 +13,10 @@ class MainFlutterWindow: NSWindow {
 
     RegisterGeneratedPlugins(registry: flutterViewController)
 
+    if #available(macOS 14.0, *) {
+      MusicKitBridge.setup(binaryMessenger: flutterViewController.engine.binaryMessenger)
+    }
+
     super.awakeFromNib()
   }
 }

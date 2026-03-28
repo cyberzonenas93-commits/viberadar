@@ -35,6 +35,7 @@ class LibraryState {
     this.isLoading = false,
     this.scanProgress = 0,
     this.scanTotal = 0,
+    this.scanLabel = 'Scanning',
     this.scannedPath,
     this.error,
   });
@@ -45,6 +46,8 @@ class LibraryState {
   final bool isLoading;
   final int scanProgress;
   final int scanTotal;
+  /// Label shown in the progress chip (e.g. 'Scanning' or 'Fetching artwork')
+  final String scanLabel;
   final String? scannedPath;
   final String? error;
 
@@ -59,6 +62,7 @@ class LibraryState {
     bool? isLoading,
     int? scanProgress,
     int? scanTotal,
+    String? scanLabel,
     Object? scannedPath = _sentinel,
     Object? error = _sentinel,
   }) {
@@ -69,6 +73,7 @@ class LibraryState {
       isLoading: isLoading ?? this.isLoading,
       scanProgress: scanProgress ?? this.scanProgress,
       scanTotal: scanTotal ?? this.scanTotal,
+      scanLabel: scanLabel ?? this.scanLabel,
       scannedPath: identical(scannedPath, _sentinel)
           ? this.scannedPath
           : scannedPath as String?,
@@ -180,8 +185,8 @@ class LibraryNotifier extends Notifier<LibraryState> {
     }
   }
 
-  /// Fetches album artwork from Spotify and Apple Music for tracks that
-  /// don't have artwork yet. Runs in background, updates state in batches.
+  /// Fetches album artwork from Spotify, Apple Music and YouTube for tracks
+  /// that don't have artwork yet. Runs in background, updates state in batches.
   Future<void> _enrichArtworkAsync(List<LibraryTrack> tracks, {int maxTracks = 100}) async {
     final needsArt = tracks.where((t) => t.artworkUrl == null).toList();
     if (needsArt.isEmpty) return;
@@ -205,41 +210,82 @@ class LibraryNotifier extends Notifier<LibraryState> {
       if (seen.containsKey(key)) {
         enriched[t.id] = seen[key]!;
         updated++;
-        continue;
-      }
+      } else {
+        String? artworkUrl;
 
-      String? artworkUrl;
-      final query = '${t.artist} ${t.title}'.trim();
-      if (query.length < 3) continue;
+        // Build the best possible query:
+        // • Skip generic fallback values ("Unknown Artist", "Unknown Album")
+        //   so they don't pollute the search and return wrong artwork.
+        // • Try "Artist Title" first, then fall back to title-only.
+        final knownArtist = t.artist.isNotEmpty &&
+            t.artist.toLowerCase() != 'unknown artist' &&
+            t.artist.toLowerCase() != 'unknown';
+        final titleQuery = t.title.trim();
+        final artistTitleQuery = knownArtist
+            ? '${t.artist.trim()} $titleQuery'.trim()
+            : titleQuery;
 
-      // Try Spotify first
-      try {
-        final results = await spotify.searchTracks(query, limit: 1)
-            .timeout(const Duration(seconds: 5), onTimeout: () => []);
-        if (results.isNotEmpty && (results.first.albumArt ?? '').isNotEmpty) {
-          artworkUrl = results.first.albumArt;
-        }
-      } catch (_) {}
-
-      // Fallback to Apple Music
-      if (artworkUrl == null) {
-        try {
-          final results = await apple.searchSongs(query, limit: 1)
-              .timeout(const Duration(seconds: 5), onTimeout: () => []);
-          if (results.isNotEmpty && (results.first.artworkUrl ?? '').isNotEmpty) {
-            artworkUrl = results.first.artworkUrl;
+        if (titleQuery.length >= 3) {
+          // Helper: try a query on Spotify, returns artwork URL or null.
+          Future<String?> trySpotify(String q) async {
+            try {
+              final results = await spotify.searchTracks(q, limit: 3)
+                  .timeout(const Duration(seconds: 5), onTimeout: () => []);
+              // Pick the result whose name most closely matches our title
+              for (final r in results) {
+                if ((r.albumArt ?? '').isNotEmpty) return r.albumArt;
+              }
+            } catch (e) {
+              dev.log('Spotify artwork error for "$q": $e', name: 'Library');
+            }
+            return null;
           }
-        } catch (_) {}
+
+          // Helper: try a query on Apple Music, returns artwork URL or null.
+          Future<String?> tryApple(String q) async {
+            try {
+              final results = await apple.searchSongs(q, limit: 3)
+                  .timeout(const Duration(seconds: 5), onTimeout: () => []);
+              for (final r in results) {
+                if ((r.artworkUrl ?? '').isNotEmpty) return r.artworkUrl;
+              }
+            } catch (e) {
+              dev.log('Apple Music artwork error for "$q": $e', name: 'Library');
+            }
+            return null;
+          }
+
+          // 1️⃣ Spotify: artist + title query
+          artworkUrl = await trySpotify(artistTitleQuery);
+
+          // 2️⃣ Spotify: title-only (if artist caused mismatches)
+          if (artworkUrl == null && knownArtist) {
+            artworkUrl = await trySpotify(titleQuery);
+          }
+
+          // 3️⃣ Apple Music: artist + title
+          if (artworkUrl == null) {
+            artworkUrl = await tryApple(artistTitleQuery);
+          }
+
+          // 4️⃣ Apple Music: title-only
+          if (artworkUrl == null && knownArtist) {
+            artworkUrl = await tryApple(titleQuery);
+          }
+
+          // Note: YouTube thumbnails are intentionally skipped — they are
+          // video frames, not album art, and look incorrect in the grid.
+
+          if (artworkUrl != null) {
+            seen[key] = artworkUrl;
+            enriched[t.id] = artworkUrl;
+            updated++;
+          }
+        }
       }
 
-      if (artworkUrl != null) {
-        seen[key] = artworkUrl;
-        enriched[t.id] = artworkUrl;
-        updated++;
-      }
-
-      // Flush updates to UI every 20 tracks
-      if (updated > 0 && (updated % 20 == 0 || i == toEnrich.length - 1)) {
+      // Update progress counter + flush track updates every 10 tracks
+      if (i % 10 == 9 || i == toEnrich.length - 1) {
         final currentTracks = [...state.tracks];
         bool changed = false;
         for (var j = 0; j < currentTracks.length; j++) {
@@ -249,23 +295,26 @@ class LibraryNotifier extends Notifier<LibraryState> {
             changed = true;
           }
         }
-        if (changed) {
-          state = state.copyWith(tracks: currentTracks);
-        }
-        // Yield to event loop
+        state = state.copyWith(
+          tracks: changed ? currentTracks : state.tracks,
+          scanProgress: i + 1,
+        );
+        // Yield to event loop so UI can repaint
         await Future<void>.delayed(Duration.zero);
       }
 
       // Small delay between API calls to avoid rate limiting
       if (i % 5 == 4) {
-        await Future<void>.delayed(const Duration(milliseconds: 200));
+        await Future<void>.delayed(const Duration(milliseconds: 150));
       }
     }
 
     // Final save with enriched artwork
     if (updated > 0) {
       _persistence.save(state.tracks, state.scannedPath);
-      dev.log('Artwork enrichment complete: $updated tracks updated', name: 'Library');
+      dev.log('Artwork enrichment complete: $updated / ${toEnrich.length} tracks updated', name: 'Library');
+    } else {
+      dev.log('Artwork enrichment: no new artwork found for ${toEnrich.length} tracks', name: 'Library');
     }
   }
 
@@ -278,10 +327,14 @@ class LibraryNotifier extends Notifier<LibraryState> {
       return;
     }
     dev.log('Fetching artwork for ${needsArt.length} tracks', name: 'Library');
-    // Show scanning state for UI feedback
-    state = state.copyWith(isScanning: true, scanProgress: 0, scanTotal: needsArt.length);
+    state = state.copyWith(
+      isScanning: true,
+      scanProgress: 0,
+      scanTotal: needsArt.length,
+      scanLabel: 'Fetching artwork',
+    );
     await _enrichArtworkAsync(state.tracks, maxTracks: needsArt.length);
-    state = state.copyWith(isScanning: false);
+    state = state.copyWith(isScanning: false, scanLabel: 'Scanning');
   }
 
   void removeTrack(String id) {

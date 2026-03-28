@@ -7,6 +7,7 @@ import 'package:path/path.dart' as p;
 import '../../../core/theme/app_theme.dart';
 import '../../../models/library_track.dart';
 import '../../../providers/library_provider.dart';
+import '../../../providers/dj_player_provider.dart';
 import '../../../services/platform_search_service.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -142,7 +143,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             ),
           ),
           if (lib.isScanning)
-            _ScanProgressChip(scanned: lib.scanProgress, total: lib.scanTotal)
+            _ScanProgressChip(scanned: lib.scanProgress, total: lib.scanTotal, label: lib.scanLabel)
           else
             ElevatedButton.icon(
               onPressed: () => ref.read(libraryProvider.notifier).fetchAllArtwork(),
@@ -627,19 +628,23 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 // GRID CARD: Library Track (matches trending/search card style)
 // ══════════════════════════════════════════════════════════════════════════════
 
-class _LibraryTrackCard extends StatefulWidget {
+class _LibraryTrackCard extends ConsumerStatefulWidget {
   final LibraryTrack track;
   const _LibraryTrackCard({required this.track});
   @override
-  State<_LibraryTrackCard> createState() => _LibraryTrackCardState();
+  ConsumerState<_LibraryTrackCard> createState() => _LibraryTrackCardState();
 }
 
-class _LibraryTrackCardState extends State<_LibraryTrackCard> {
+class _LibraryTrackCardState extends ConsumerState<_LibraryTrackCard> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final t = widget.track;
+    final dj = ref.watch(djPlayerProvider);
+    final isOnDeckA = dj.deckA.track?.id == t.id;
+    final isOnDeckB = dj.deckB.track?.id == t.id;
+    final isPlaying = isOnDeckA || isOnDeckB;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -649,7 +654,12 @@ class _LibraryTrackCardState extends State<_LibraryTrackCard> {
         decoration: BoxDecoration(
           color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          border: Border.all(
+            color: isPlaying
+                ? AppTheme.cyan.withValues(alpha: 0.7)
+                : AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
+            width: isPlaying ? 1.5 : 1.0,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,19 +715,49 @@ class _LibraryTrackCardState extends State<_LibraryTrackCard> {
                   // Hover play overlay
                   if (_hovered)
                     Positioned.fill(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                        ),
-                        child: Center(child: Container(
-                          width: 44, height: 44,
+                      child: GestureDetector(
+                        onTap: () {
+                          ref.read(djPlayerProvider.notifier).smartLoad(
+                            widget.track,
+                          );
+                        },
+                        child: Container(
                           decoration: BoxDecoration(
-                            color: AppTheme.cyan, shape: BoxShape.circle,
-                            boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)],
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
                           ),
-                          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                        )),
+                          child: Center(child: Container(
+                            width: 44, height: 44,
+                            decoration: BoxDecoration(
+                              color: AppTheme.cyan, shape: BoxShape.circle,
+                              boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)],
+                            ),
+                            child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                          )),
+                        ),
+                      ),
+                    ),
+                  // Deck badge (A = cyan, B = violet)
+                  if ((isOnDeckA || isOnDeckB) && !_hovered)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isOnDeckA
+                              ? AppTheme.cyan.withValues(alpha: 0.85)
+                              : AppTheme.violet.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          isOnDeckA ? 'A' : 'B',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -741,8 +781,10 @@ class _LibraryTrackCardState extends State<_LibraryTrackCard> {
                           decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(3)),
                           child: Text(t.key, style: const TextStyle(color: AppTheme.cyan, fontSize: 8, fontWeight: FontWeight.w700)),
                         ),
-                      const Spacer(),
-                      Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 8), overflow: TextOverflow.ellipsis),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 8), overflow: TextOverflow.ellipsis, textAlign: TextAlign.end),
+                      ),
                     ],
                   ),
                 ],
@@ -910,15 +952,15 @@ class _StatBadge extends StatelessWidget {
 }
 
 class _ScanProgressChip extends StatelessWidget {
-  final int scanned; final int total;
-  const _ScanProgressChip({required this.scanned, required this.total});
+  final int scanned; final int total; final String label;
+  const _ScanProgressChip({required this.scanned, required this.total, this.label = 'Scanning'});
   @override
   Widget build(BuildContext context) {
     final pct = total > 0 ? scanned / total : 0.0;
     return Row(children: [
       SizedBox(width: 120, child: LinearProgressIndicator(value: pct, backgroundColor: AppTheme.edge, valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.cyan))),
       const SizedBox(width: 10),
-      Text('$scanned / $total', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+      Text('$label  $scanned / $total', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
     ]);
   }
 }

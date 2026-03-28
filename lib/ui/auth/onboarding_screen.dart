@@ -3,24 +3,28 @@ import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../providers/streaming_provider.dart';
 import '../../services/spotify_artist_service.dart';
 
-class OnboardingScreen extends StatefulWidget {
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key, required this.onComplete});
 
   final void Function(List<String> artists) onComplete;
 
   @override
-  State<OnboardingScreen> createState() => _OnboardingScreenState();
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
 }
 
-class _OnboardingScreenState extends State<OnboardingScreen>
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen>
     with TickerProviderStateMixin {
   final _pageController = PageController();
   int _currentPage = 0;
   bool _showingArtistPicker = false;
+  bool _showingAppleMusicConnect = false;
+  List<String> _selectedArtists = [];
   late final AnimationController _bgController;
 
   static const _pages = <_OnboardingPage>[
@@ -74,12 +78,32 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    if (_showingAppleMusicConnect) {
+      return Scaffold(
+        backgroundColor: AppTheme.ink,
+        body: _AppleMusicConnectStep(
+          onComplete: () => widget.onComplete(_selectedArtists),
+        ),
+      );
+    }
+
     if (_showingArtistPicker) {
       return Scaffold(
         backgroundColor: AppTheme.ink,
         body: _OnboardingArtistPicker(
-          onComplete: widget.onComplete,
-          onSkip: () => widget.onComplete(const []),
+          onComplete: (artists) {
+            setState(() {
+              _selectedArtists = artists;
+              _showingArtistPicker = false;
+              _showingAppleMusicConnect = true;
+            });
+          },
+          onSkip: () {
+            setState(() {
+              _showingArtistPicker = false;
+              _showingAppleMusicConnect = true;
+            });
+          },
         ),
       );
     }
@@ -598,6 +622,134 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ── Apple Music connect step ──────────────────────────────────────────────────
+
+class _AppleMusicConnectStep extends ConsumerStatefulWidget {
+  const _AppleMusicConnectStep({required this.onComplete});
+  final VoidCallback onComplete;
+
+  @override
+  ConsumerState<_AppleMusicConnectStep> createState() => _AppleMusicConnectStepState();
+}
+
+class _AppleMusicConnectStepState extends ConsumerState<_AppleMusicConnectStep> {
+  bool _connecting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final amState = ref.watch(appleMusicProvider);
+    final isAuthorized = amState.isAuthorized;
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Spacer(),
+            // Icon
+            Container(
+              width: 130,
+              height: 130,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    const Color(0xFFFC3C44).withValues(alpha: 0.2),
+                    const Color(0xFFFF7AB5).withValues(alpha: 0.2),
+                  ],
+                ),
+                border: Border.all(color: const Color(0xFFFC3C44).withValues(alpha: 0.4), width: 2),
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFFFC3C44).withValues(alpha: 0.25), blurRadius: 60, spreadRadius: 10),
+                ],
+              ),
+              child: const Icon(Icons.music_note_rounded, size: 56, color: Color(0xFFFF7AB5)),
+            ),
+            const SizedBox(height: 40),
+            // Title
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Color(0xFFFF7AB5), Color(0xFFFC3C44)],
+              ).createShader(bounds),
+              child: const Text(
+                'Connect Apple Music',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.8),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isAuthorized
+                  ? 'Apple Music is connected. Every track in VibeRadar can now be played instantly.'
+                  : 'Play any track instantly without leaving the app. Connect your Apple Music subscription to unlock in-app streaming.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white60, fontSize: 15, height: 1.6),
+            ),
+            const SizedBox(height: 12),
+            if (amState.error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(amState.error!, textAlign: TextAlign.center,
+                    style: const TextStyle(color: Color(0xFFFF6B6B), fontSize: 12)),
+              ),
+            const Spacer(),
+            // Connect button
+            if (!isAuthorized)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: _connecting ? null : () async {
+                    setState(() => _connecting = true);
+                    await ref.read(appleMusicProvider.notifier).requestAccess();
+                    setState(() => _connecting = false);
+                  },
+                  icon: _connecting
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.music_note_rounded),
+                  label: Text(_connecting ? 'Connecting...' : 'Connect Apple Music'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFFC3C44),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            if (isAuthorized) ...[
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: widget.onComplete,
+                  icon: const Icon(Icons.check_circle_rounded),
+                  label: const Text('Get Started'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.cyan,
+                    foregroundColor: AppTheme.ink,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: widget.onComplete,
+              child: Text(
+                isAuthorized ? 'Continue' : 'Skip for now',
+                style: const TextStyle(color: Colors.white38),
+              ),
+            ),
+            const SizedBox(height: 24),
+          ],
+        ),
       ),
     );
   }

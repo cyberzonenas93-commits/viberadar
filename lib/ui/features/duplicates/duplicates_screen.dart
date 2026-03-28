@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/library_track.dart';
 import '../../../providers/library_provider.dart';
+import '../../../services/duplicate_detector_service.dart';
 
 // Track-level action for a single track within a group.
 enum _TrackAction { keep, discard, undecided }
@@ -27,7 +28,47 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
   // Groups currently being moved to review folder.
   final Set<int> _movingGroupIndexes = {};
 
+  // Groups currently being trashed.
+  final Set<int> _trashingGroupIndexes = {};
+
+  final _dupeService = DuplicateDetectorService();
+
   // ── batch actions ────────────────────────────────────────────────────────
+
+  Future<void> _trashAll() async {
+    final lib = ref.read(libraryProvider);
+    int totalMoved = 0;
+    final errors = <String>[];
+
+    for (var i = 0; i < lib.duplicateGroups.length; i++) {
+      if (_dismissedGroupIndexes.contains(i)) continue;
+      final group = lib.duplicateGroups[i];
+      setState(() => _trashingGroupIndexes.add(i));
+      final result = await _dupeService.trashDuplicates(group);
+      totalMoved += result.movedCount;
+      errors.addAll(result.errors);
+      // Remove trashed tracks from the library index
+      final keeper = group.recommended;
+      for (final t in group.tracks) {
+        if (t.id != keeper?.id) {
+          ref.read(libraryProvider.notifier).removeTrack(t.id);
+        }
+      }
+      if (mounted) setState(() {
+        _trashingGroupIndexes.remove(i);
+        _dismissedGroupIndexes.add(i);
+      });
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(errors.isEmpty
+            ? '$totalMoved duplicate file(s) moved to Trash'
+            : '$totalMoved moved, ${errors.length} errors: ${errors.first}'),
+        backgroundColor: errors.isEmpty ? AppTheme.lime : AppTheme.pink,
+      ));
+    }
+  }
 
   void _keepBestInAllGroups() {
     final lib = ref.read(libraryProvider);
@@ -53,6 +94,68 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
 
   // ── per-group actions ────────────────────────────────────────────────────
 
+  Future<void> _trashGroup(int groupIndex, DuplicateGroup group) async {
+    // Confirm before trashing
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.panel,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        title: const Text('Move to Trash?',
+            style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+        content: Text(
+          'The ${group.tracks.length - 1} duplicate(s) will be moved to the macOS Trash.\n'
+          '"${group.recommended?.fileName ?? group.tracks.first.fileName}" will be kept.\n\n'
+          'You can restore them from Trash if needed.',
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.pink),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Move to Trash', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    setState(() => _trashingGroupIndexes.add(groupIndex));
+    try {
+      final result = await _dupeService.trashDuplicates(group);
+      // Remove trashed tracks from the library index
+      final keeper = group.recommended;
+      for (final t in group.tracks) {
+        if (t.id != keeper?.id) {
+          ref.read(libraryProvider.notifier).removeTrack(t.id);
+        }
+      }
+      if (mounted) {
+        setState(() => _dismissedGroupIndexes.add(groupIndex));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(result.errors.isEmpty
+              ? '${result.movedCount} file(s) moved to Trash'
+              : '${result.movedCount} moved, errors: ${result.errors.join(', ')}'),
+          backgroundColor: result.errors.isEmpty ? AppTheme.lime : AppTheme.pink,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Trash failed: $e'),
+          backgroundColor: AppTheme.pink,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _trashingGroupIndexes.remove(groupIndex));
+    }
+  }
+
   void _keepBestInGroup(int groupIndex, DuplicateGroup group) {
     final rec = group.recommended;
     if (rec != null) _keepTrack(group, rec.id);
@@ -70,20 +173,31 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
       await reviewDir.create(recursive: true);
 
       final rec = group.recommended;
+      int moved = 0;
       for (final t in group.tracks) {
         if (t.id == rec?.id) continue; // keep the recommended one
         final src = File(t.filePath);
         if (!src.existsSync()) continue;
         final dest = p.join(reviewDir.path, t.fileName);
         try {
-          await src.copy(dest);
-        } catch (_) {}
+          await src.rename(dest); // move, not copy
+          ref.read(libraryProvider.notifier).removeTrack(t.id);
+          moved++;
+        } catch (_) {
+          // If rename fails across volumes, fall back to copy+delete
+          try {
+            await src.copy(dest);
+            await src.delete();
+            ref.read(libraryProvider.notifier).removeTrack(t.id);
+            moved++;
+          } catch (_) {}
+        }
       }
 
       if (mounted) {
+        setState(() => _dismissedGroupIndexes.add(groupIndex));
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-              '${group.tracks.length - 1} file(s) copied to DupeReview folder'),
+          content: Text('$moved file(s) moved to DupeReview folder'),
           backgroundColor: AppTheme.cyan,
         ));
       }
@@ -211,12 +325,10 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
           if (allGroups.isNotEmpty) ...[
             const SizedBox(height: 16),
             _BatchToolbar(
-              onKeepBestAll: visibleGroups.isNotEmpty
-                  ? _keepBestInAllGroups
-                  : null,
+              onKeepBestAll: visibleGroups.isNotEmpty ? _keepBestInAllGroups : null,
+              onTrashAll: visibleGroups.isNotEmpty ? _trashAll : null,
               onReviewAll: visibleGroups.isNotEmpty ? _reviewAll : null,
-              onClearDismissed:
-                  dismissedCount > 0 ? _clearDismissed : null,
+              onClearDismissed: dismissedCount > 0 ? _clearDismissed : null,
               dismissedCount: dismissedCount,
             ),
           ],
@@ -262,21 +374,21 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
                   final isMoving =
                       _movingGroupIndexes.contains(groupIndex);
 
+                  final isTrashing = _trashingGroupIndexes.contains(groupIndex);
+
                   return _DuplicateGroupCard(
                     group: group,
                     groupIndex: groupIndex,
                     isManualMode: isManual,
                     isMoving: isMoving,
+                    isTrashing: isTrashing,
                     manualSelections: _manualSelections[groupIndex] ?? {},
-                    onKeepBest: () =>
-                        _keepBestInGroup(groupIndex, group),
-                    onMoveToReview: () =>
-                        _moveGroupToReview(groupIndex, group),
+                    onKeepBest: () => _keepBestInGroup(groupIndex, group),
+                    onTrash: () => _trashGroup(groupIndex, group),
+                    onMoveToReview: () => _moveGroupToReview(groupIndex, group),
                     onIgnore: () => _ignoreGroup(groupIndex),
-                    onEnterManual: () =>
-                        _enterManualMode(groupIndex, group),
-                    onApplyManual: () =>
-                        _applyManualSelections(groupIndex, group),
+                    onEnterManual: () => _enterManualMode(groupIndex, group),
+                    onApplyManual: () => _applyManualSelections(groupIndex, group),
                     onManualToggle: (trackId, action) {
                       setState(() {
                         _manualSelections[groupIndex]![trackId] = action;
@@ -297,12 +409,14 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
 
 class _BatchToolbar extends StatelessWidget {
   final VoidCallback? onKeepBestAll;
+  final VoidCallback? onTrashAll;
   final VoidCallback? onReviewAll;
   final VoidCallback? onClearDismissed;
   final int dismissedCount;
 
   const _BatchToolbar({
     required this.onKeepBestAll,
+    required this.onTrashAll,
     required this.onReviewAll,
     required this.onClearDismissed,
     required this.dismissedCount,
@@ -334,7 +448,13 @@ class _BatchToolbar extends StatelessWidget {
         ),
         const SizedBox(width: 8),
         _BatchBtn(
-          label: 'Review All',
+          label: '🗑  Trash All Duplicates',
+          color: AppTheme.pink,
+          onTap: onTrashAll,
+        ),
+        const SizedBox(width: 8),
+        _BatchBtn(
+          label: 'Move All to Review Folder',
           color: AppTheme.cyan,
           onTap: onReviewAll,
         ),
@@ -348,7 +468,7 @@ class _BatchToolbar extends StatelessWidget {
         ],
         const Spacer(),
         const Text(
-          'Changes take effect immediately. NEVER auto-deletes files.',
+          'Trash moves files to macOS Trash — restore any time.',
           style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 10,
@@ -400,8 +520,10 @@ class _DuplicateGroupCard extends StatelessWidget {
   final int groupIndex;
   final bool isManualMode;
   final bool isMoving;
+  final bool isTrashing;
   final Map<String, _TrackAction> manualSelections;
   final VoidCallback onKeepBest;
+  final VoidCallback onTrash;
   final VoidCallback onMoveToReview;
   final VoidCallback onIgnore;
   final VoidCallback onEnterManual;
@@ -414,8 +536,10 @@ class _DuplicateGroupCard extends StatelessWidget {
     required this.groupIndex,
     required this.isManualMode,
     required this.isMoving,
+    required this.isTrashing,
     required this.manualSelections,
     required this.onKeepBest,
+    required this.onTrash,
     required this.onMoveToReview,
     required this.onIgnore,
     required this.onEnterManual,
@@ -486,6 +610,13 @@ class _DuplicateGroupCard extends StatelessWidget {
                     color: AppTheme.lime,
                     onTap: onKeepBest,
                   ),
+                const SizedBox(width: 6),
+                _GroupActionBtn(
+                  label: isTrashing ? 'Trashing…' : 'Move to Trash',
+                  icon: Icons.delete_outline_rounded,
+                  color: AppTheme.pink,
+                  onTap: isTrashing ? null : onTrash,
+                ),
                 const SizedBox(width: 6),
                 _GroupActionBtn(
                   label: isMoving ? 'Moving…' : 'Review Folder',

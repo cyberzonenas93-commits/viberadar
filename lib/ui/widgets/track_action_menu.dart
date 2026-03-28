@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/track.dart';
 import '../../providers/library_provider.dart';
+import '../../providers/streaming_provider.dart';
 
 /// Shows a context menu when a track card is tapped.
 /// Options: Play (opens in Spotify/Apple/YouTube), Add to Crate, Track Info.
@@ -24,16 +25,15 @@ void showTrackActionMenu(
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     elevation: 8,
     items: [
-      // Individual platform play options
-      for (final entry in track.platformLinks.entries)
-        PopupMenuItem(
-          value: 'play:${entry.key}',
+      // Single Play item — routes through Apple Music in-app player
+      if (track.platformLinks.isNotEmpty)
+        const PopupMenuItem(
+          value: 'play',
           child: Row(
             children: [
-              Icon(_iconForPlatform(entry.key), color: _colorForPlatform(entry.key), size: 18),
-              const SizedBox(width: 10),
-              Text('Play on ${_capitalize(entry.key)}',
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+              Icon(Icons.play_arrow_rounded, color: Color(0xFFFC3C44), size: 20),
+              SizedBox(width: 10),
+              Text('Play', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w600)),
             ],
           ),
         ),
@@ -67,14 +67,17 @@ void showTrackActionMenu(
     ],
   ).then((value) {
     if (value == null) return;
-    if (value.startsWith('play:')) {
-      final platform = value.substring(5);
-      final url = track.platformLinks[platform];
-      if (url != null) _openUrl(url);
+    if (value == 'play') {
+      ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist).then((ok) {
+        if (!ok) {
+          final url = track.platformLinks.values.firstOrNull;
+          if (url != null) _openUrl(url);
+        }
+      });
     } else if (value == 'crate') {
       _showAddToCrateSheet(context, ref, track);
     } else if (value == 'info') {
-      _showTrackInfoSheet(context, track);
+      _showTrackInfoSheet(context, ref, track);
     }
   });
 }
@@ -234,7 +237,7 @@ void _showNewCrateDialog(BuildContext context, WidgetRef ref, Track track) {
   );
 }
 
-void _showTrackInfoSheet(BuildContext context, Track track) {
+void _showTrackInfoSheet(BuildContext context, WidgetRef ref, Track track) {
   showModalBottomSheet(
     context: context,
     backgroundColor: AppTheme.panel,
@@ -271,10 +274,14 @@ void _showTrackInfoSheet(BuildContext context, Track track) {
               spacing: 8,
               children: track.platformLinks.entries.map((e) => ActionChip(
                 label: Text(e.key[0].toUpperCase() + e.key.substring(1), style: const TextStyle(fontSize: 11)),
-                avatar: const Icon(Icons.play_arrow_rounded, size: 14),
-                onPressed: () async {
-                  final uri = Uri.tryParse(e.value);
-                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                avatar: Icon(_iconForPlatform(e.key), color: _colorForPlatform(e.key), size: 14),
+                onPressed: () {
+                  ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist).then((ok) {
+                    if (!ok) {
+                      final uri = Uri.tryParse(e.value);
+                      if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+                    }
+                  });
                 },
               )).toList(),
             ),

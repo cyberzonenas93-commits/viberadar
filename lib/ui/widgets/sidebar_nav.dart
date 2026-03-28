@@ -123,6 +123,9 @@ class _SidebarNavState extends State<SidebarNav> {
                   _SectionHeader('EXPORT'),
                   _NavItem(section: AppSection.exports, icon: Icons.upload_rounded, selected: selectedSection, onSelected: onSelected),
 
+                  _SectionHeader('STREAMING'),
+                  _NavItem(section: AppSection.streaming, icon: Icons.stream_rounded, selected: selectedSection, onSelected: onSelected),
+
                   const SizedBox(height: 8),
                 ],
               ),

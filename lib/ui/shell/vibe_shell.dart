@@ -20,6 +20,7 @@ import '../../models/user_profile.dart';
 import '../../providers/app_state.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/repositories.dart';
+import '../../providers/streaming_provider.dart';
 import 'dart:async';
 import '../../models/library_track.dart';
 import '../../services/export_service.dart';
@@ -47,6 +48,10 @@ import '../features/exports/exports_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/trending/trending_screen.dart';
 import '../features/search/search_screen.dart';
+import '../features/streaming/streaming_screen.dart';
+import '../widgets/apple_music_player_bar.dart';
+import '../widgets/dj_player_bar.dart';
+import '../../providers/dj_player_provider.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
   const VibeShell({super.key, required this.statusMessage});
@@ -130,79 +135,98 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       );
     }
 
+    final dj = ref.watch(djPlayerProvider);
+
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 262,
-                child: SidebarNav(
-                  selectedSection: workspace.section,
-                  statusMessage: widget.statusMessage,
-                  onSelected: (section) => ref
-                      .read(workspaceControllerProvider.notifier)
-                      .setSection(section),
-                  onRefreshComplete: () =>
-                      ref.read(trackRepositoryProvider).refresh(),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: _showDetailPanel(workspace.section)
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: _buildMainPanel(
-                              context: context,
-                              workspace: workspace,
-                              allTracks: allTracks,
-                              visibleTracks: visibleTracks,
-                              tracksAsync: tracksAsync,
-                              session: session,
-                              userProfile: userProfile,
-                              genres: genres,
-                              vibes: vibes,
-                              regions: regions,
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          SizedBox(
-                            width: workspace.detailExpanded ? 420 : 360,
-                            child: TrackDetailPanel(
-                              selectedTrack: selectedTrack,
-                              allTracks: allTracks,
-                              watchlist: userProfile.watchlist,
-                              expanded: workspace.detailExpanded,
-                              onToggleExpanded: () => ref
-                                  .read(workspaceControllerProvider.notifier)
-                                  .toggleDetailExpanded(),
-                              onToggleWatchlist: (trackId) => _toggleWatchlist(
-                                session: session,
-                                userProfile: userProfile,
-                                trackId: trackId,
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  20, 20, 20, dj.isVisible ? 210 : 20),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 262,
+                    child: SidebarNav(
+                      selectedSection: workspace.section,
+                      statusMessage: widget.statusMessage,
+                      onSelected: (section) => ref
+                          .read(workspaceControllerProvider.notifier)
+                          .setSection(section),
+                      onRefreshComplete: () =>
+                          ref.read(trackRepositoryProvider).refresh(),
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    child: _showDetailPanel(workspace.section)
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: _buildMainPanel(
+                                  context: context,
+                                  workspace: workspace,
+                                  allTracks: allTracks,
+                                  visibleTracks: visibleTracks,
+                                  tracksAsync: tracksAsync,
+                                  session: session,
+                                  userProfile: userProfile,
+                                  genres: genres,
+                                  vibes: vibes,
+                                  regions: regions,
+                                ),
                               ),
-                            ),
+                              const SizedBox(width: 20),
+                              SizedBox(
+                                width: workspace.detailExpanded ? 420 : 360,
+                                child: TrackDetailPanel(
+                                  selectedTrack: selectedTrack,
+                                  allTracks: allTracks,
+                                  watchlist: userProfile.watchlist,
+                                  expanded: workspace.detailExpanded,
+                                  onToggleExpanded: () => ref
+                                      .read(workspaceControllerProvider.notifier)
+                                      .toggleDetailExpanded(),
+                                  onToggleWatchlist: (trackId) => _toggleWatchlist(
+                                    session: session,
+                                    userProfile: userProfile,
+                                    trackId: trackId,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : _buildMainPanel(
+                            context: context,
+                            workspace: workspace,
+                            allTracks: allTracks,
+                            visibleTracks: visibleTracks,
+                            tracksAsync: tracksAsync,
+                            session: session,
+                            userProfile: userProfile,
+                            genres: genres,
+                            vibes: vibes,
+                            regions: regions,
                           ),
-                        ],
-                      )
-                    : _buildMainPanel(
-                        context: context,
-                        workspace: workspace,
-                        allTracks: allTracks,
-                        visibleTracks: visibleTracks,
-                        tracksAsync: tracksAsync,
-                        session: session,
-                        userProfile: userProfile,
-                        genres: genres,
-                        vibes: vibes,
-                        regions: regions,
-                      ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                AppleMusicPlayerBar(),
+                DjPlayerBar(),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -316,6 +340,8 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         return const DuplicatesScreen();
       case AppSection.exports:
         return const ExportsScreen();
+      case AppSection.streaming:
+        return const StreamingScreen();
       case AppSection.settings:
         return _SettingsView(
           session: session,
@@ -1612,13 +1638,13 @@ class _AiCrateCard extends StatelessWidget {
   }
 }
 
-class _AiTrackRow extends StatelessWidget {
+class _AiTrackRow extends ConsumerWidget {
   const _AiTrackRow({required this.track, required this.index});
   final AiCrateTrack track;
   final int index;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -1672,9 +1698,11 @@ class _AiTrackRow extends StatelessWidget {
             ),
           // Play buttons
           if (track.spotifyUrl != null)
-            _PlatformPlayBtn(icon: Icons.graphic_eq_rounded, color: const Color(0xFF1ED760), url: track.spotifyUrl!, tooltip: 'Play on Spotify'),
+            _PlatformPlayBtn(icon: Icons.graphic_eq_rounded, color: const Color(0xFF1ED760), url: track.spotifyUrl!, tooltip: 'Play',
+              onTap: () => ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist)),
           if (track.appleUrl != null)
-            _PlatformPlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: track.appleUrl!, tooltip: 'Play on Apple Music'),
+            _PlatformPlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: track.appleUrl!, tooltip: 'Play',
+              onTap: () => ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist)),
           if (!track.resolved)
             const Tooltip(
               message: 'Not found on platforms',
@@ -1687,11 +1715,12 @@ class _AiTrackRow extends StatelessWidget {
 }
 
 class _PlatformPlayBtn extends StatelessWidget {
-  const _PlatformPlayBtn({required this.icon, required this.color, required this.url, required this.tooltip});
+  const _PlatformPlayBtn({required this.icon, required this.color, required this.url, required this.tooltip, this.onTap});
   final IconData icon;
   final Color color;
   final String url;
   final String tooltip;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1701,7 +1730,7 @@ class _PlatformPlayBtn extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
-          onTap: () {
+          onTap: onTap ?? () {
             final uri = Uri.tryParse(url);
             if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
           },
@@ -1880,13 +1909,13 @@ class _RegularCrateCard extends StatelessWidget {
   }
 }
 
-class _CrateTrackRow extends StatelessWidget {
+class _CrateTrackRow extends ConsumerWidget {
   const _CrateTrackRow({required this.track, required this.index});
   final Track track;
   final int index;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -1938,15 +1967,16 @@ class _CrateTrackRow extends StatelessWidget {
           // Genre
           Text(track.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.6), fontSize: 10)),
           const SizedBox(width: 8),
-          // Play buttons per platform
-          for (final entry in track.platformLinks.entries.take(3))
+          // Play button — routes through Apple Music
+          if (track.platformLinks.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(left: 2),
               child: _PlatformPlayBtn(
-                icon: _platformIcon(entry.key),
-                color: _platformColor(entry.key),
-                url: entry.value,
-                tooltip: 'Play on ${entry.key[0].toUpperCase()}${entry.key.substring(1)}',
+                icon: Icons.play_arrow_rounded,
+                color: const Color(0xFFFC3C44),
+                url: track.platformLinks.values.first,
+                tooltip: 'Play',
+                onTap: () => ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist),
               ),
             ),
         ],
@@ -2152,16 +2182,16 @@ class _PlaylistCard extends StatelessWidget {
 
 // ── Platform result card (for set builder) ──────────────────────────────────
 
-class _PlatformResultCard extends StatefulWidget {
+class _PlatformResultCard extends ConsumerStatefulWidget {
   const _PlatformResultCard({required this.track, required this.index});
   final AiCrateTrack track;
   final int index;
 
   @override
-  State<_PlatformResultCard> createState() => _PlatformResultCardState();
+  ConsumerState<_PlatformResultCard> createState() => _PlatformResultCardState();
 }
 
-class _PlatformResultCardState extends State<_PlatformResultCard> {
+class _PlatformResultCardState extends ConsumerState<_PlatformResultCard> {
   bool _hovered = false;
 
   @override
@@ -2172,11 +2202,11 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () {
-          final url = t.bestUrl;
-          if (url.isNotEmpty) {
-            final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+        onTap: () async {
+          final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.title, t.artist);
+          if (!played && t.bestUrl.isNotEmpty) {
+            final uri = Uri.tryParse(t.bestUrl);
+            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
         },
         child: AnimatedContainer(
@@ -2274,15 +2304,15 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
   }
 }
 
-class _PlaylistTrackCard extends StatefulWidget {
+class _PlaylistTrackCard extends ConsumerStatefulWidget {
   const _PlaylistTrackCard({required this.track});
   final PlatformTrackResult track;
 
   @override
-  State<_PlaylistTrackCard> createState() => _PlaylistTrackCardState();
+  ConsumerState<_PlaylistTrackCard> createState() => _PlaylistTrackCardState();
 }
 
-class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
+class _PlaylistTrackCardState extends ConsumerState<_PlaylistTrackCard> {
   bool _hovered = false;
 
   @override
@@ -2293,11 +2323,11 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () {
-          final url = t.bestUrl;
-          if (url.isNotEmpty) {
-            final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+        onTap: () async {
+          final played = await ref.read(appleMusicProvider.notifier).playByQuery(t.title, t.artist);
+          if (!played && t.bestUrl.isNotEmpty) {
+            final uri = Uri.tryParse(t.bestUrl);
+            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
         },
         child: Container(
@@ -2754,11 +2784,14 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
           if (widget.onTap != null) {
             widget.onTap!();
           } else {
-            // Direct play — open the best platform URL
-            _openShellTrack(t);
-            // Also activate in detail panel if ref available
+            // Direct play via Apple Music, fall back to best platform URL
             if (widget.ref != null) {
+              widget.ref!.read(appleMusicProvider.notifier).playByQuery(t.title, t.artist).then((played) {
+                if (!played) _openShellTrack(t);
+              });
               widget.ref!.read(workspaceControllerProvider.notifier).activateTrack(t.id);
+            } else {
+              _openShellTrack(t);
             }
           }
         },

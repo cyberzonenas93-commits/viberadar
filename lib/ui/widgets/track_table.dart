@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/track.dart';
 import '../../providers/app_state.dart';
+import '../../providers/streaming_provider.dart';
 import 'source_badges.dart';
 
 class TrackTable extends StatefulWidget {
@@ -273,7 +275,13 @@ class _TrackDataSource extends DataTableSource {
           SourceBadges(sources: track.effectiveSources, compact: true),
           onTap: () => onActivateTrack(track.id),
         ),
-        DataCell(_PlayButton(platformLinks: track.platformLinks)),
+        DataCell(_PlayButton(
+          platformLinks: track.platformLinks,
+          title: track.title,
+          artist: track.artist,
+          allTracks: tracks,
+          trackIndex: index,
+        )),
       ],
     );
   }
@@ -297,39 +305,45 @@ String? _bestPlatformUrl(Map<String, String> platformLinks) {
   return platformLinks.values.firstOrNull;
 }
 
-class _PlayButton extends StatelessWidget {
-  const _PlayButton({required this.platformLinks});
+class _PlayButton extends ConsumerWidget {
+  const _PlayButton({
+    required this.platformLinks,
+    required this.title,
+    required this.artist,
+    required this.allTracks,
+    required this.trackIndex,
+  });
 
   final Map<String, String> platformLinks;
+  final String title;
+  final String artist;
+  final List<Track> allTracks;
+  final int trackIndex;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final url = _bestPlatformUrl(platformLinks);
-    if (url == null) return const SizedBox.shrink();
+    if (url == null && platformLinks.isEmpty) return const SizedBox.shrink();
+
+    final am = ref.watch(appleMusicProvider);
+    final isCurrentTrack = am.currentTrack?.title.toLowerCase() == title.toLowerCase();
 
     return IconButton(
-      onPressed: () async {
-        final uri = Uri.tryParse(url);
-        if (uri != null) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
+      onPressed: () {
+        final queue = allTracks
+            .skip(trackIndex + 1)
+            .map((t) => (t.title, t.artist))
+            .toList();
+        ref.read(appleMusicProvider.notifier).playByQuery(title, artist, queue: queue);
       },
-      icon: const Icon(Icons.play_circle_filled_rounded),
-      color: AppTheme.cyan,
+      icon: isCurrentTrack && am.isPlaying
+          ? const Icon(Icons.pause_circle_filled_rounded)
+          : const Icon(Icons.play_circle_filled_rounded),
+      color: isCurrentTrack ? const Color(0xFFFC3C44) : AppTheme.cyan,
       iconSize: 28,
-      tooltip: 'Play in ${_platformLabel(platformLinks)}',
+      tooltip: 'Play',
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
     );
-  }
-
-  String _platformLabel(Map<String, String> links) {
-    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
-    for (final key in priority) {
-      if (links.containsKey(key)) {
-        return key[0].toUpperCase() + key.substring(1);
-      }
-    }
-    return 'browser';
   }
 }

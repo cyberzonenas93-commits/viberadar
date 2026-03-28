@@ -41,5 +41,7 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>927344201419-7daqi4nk04m84f3de0677eti4lmo15ll.apps.googleusercontent.com</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>VibeRadar uses Apple Music to stream tracks and search the catalog.</string>
 </dict>
 </plist>

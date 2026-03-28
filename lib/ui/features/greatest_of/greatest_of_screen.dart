@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../../providers/streaming_provider.dart';
 import '../../../services/greatest_of_service.dart';
 import '../../../services/platform_search_service.dart';
 import '../../widgets/source_badges.dart';
@@ -751,6 +752,7 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(
                       children: [
@@ -773,7 +775,7 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 4),
                     Text(
                       t.title,
                       style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
@@ -787,7 +789,7 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Row(
                       children: [
                         Text('${t.bpm} BPM', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
@@ -1208,16 +1210,16 @@ Future<void> _openTrack(Track track) async {
 // Platform track row (for Spotify/Apple Music results)
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _PlatformTrackRow extends StatefulWidget {
+class _PlatformTrackRow extends ConsumerStatefulWidget {
   const _PlatformTrackRow({required this.track, required this.index});
   final PlatformTrackResult track;
   final int index;
 
   @override
-  State<_PlatformTrackRow> createState() => _PlatformTrackRowState();
+  ConsumerState<_PlatformTrackRow> createState() => _PlatformTrackRowState();
 }
 
-class _PlatformTrackRowState extends State<_PlatformTrackRow> {
+class _PlatformTrackRowState extends ConsumerState<_PlatformTrackRow> {
   bool _hovered = false;
 
   @override
@@ -1269,7 +1271,8 @@ class _PlatformTrackRowState extends State<_PlatformTrackRow> {
             if (t.spotifyUrl != null)
               _PlayBtn(icon: Icons.graphic_eq_rounded, color: const Color(0xFF1ED760), url: t.spotifyUrl!, tip: 'Spotify'),
             if (t.appleUrl != null)
-              _PlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: t.appleUrl!, tip: 'Apple Music'),
+              _PlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: t.appleUrl!, tip: 'Apple Music',
+                onTap: () => ref.read(appleMusicProvider.notifier).playByQuery(t.title, t.artist)),
           ],
         ),
       ),
@@ -1278,21 +1281,22 @@ class _PlatformTrackRowState extends State<_PlatformTrackRow> {
 }
 
 class _PlayBtn extends StatelessWidget {
-  const _PlayBtn({required this.icon, required this.color, required this.url, required this.tip});
+  const _PlayBtn({required this.icon, required this.color, required this.url, required this.tip, this.onTap});
   final IconData icon;
   final Color color;
   final String url;
   final String tip;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
-      message: 'Play on $tip',
+      message: 'Play',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(6),
-          onTap: () {
+          onTap: onTap ?? () {
             final uri = Uri.tryParse(url);
             if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
           },

@@ -9,6 +9,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
+import '../../../providers/streaming_provider.dart';
 import '../../../services/apple_music_artist_service.dart';
 import '../../../services/spotify_artist_service.dart';
 import '../../../services/youtube_search_service.dart';
@@ -267,7 +268,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         // ── Body ─────────────────────────────────────────────────────────────
         Expanded(
           child: _query.isEmpty
-              ? _DiscoveryView(topTracks: topTracks.take(200).toList())
+              ? _DiscoveryView(
+                  topTracks: topTracks.take(200).toList(),
+                  onSearch: (q) {
+                    _controller.text = q;
+                    _onQueryChanged(q);
+                  },
+                )
               : _searching && _results.isEmpty && _youtubeResults.isEmpty
                   ? const Center(
                       child: Column(
@@ -307,8 +314,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 // ── Discovery (no query) ──────────────────────────────────────────────────────
 
 class _DiscoveryView extends StatelessWidget {
-  const _DiscoveryView({required this.topTracks});
+  const _DiscoveryView({required this.topTracks, required this.onSearch});
   final List<Track> topTracks;
+  final ValueChanged<String> onSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -330,7 +338,7 @@ class _DiscoveryView extends StatelessWidget {
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: genres.map((g) => _GenreChip(label: g)).toList(),
+              children: genres.map((g) => _GenreChip(label: g, onTap: () => onSearch(g))).toList(),
             ),
           ),
         ),
@@ -426,8 +434,9 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _GenreChip extends StatelessWidget {
-  const _GenreChip({required this.label});
+  const _GenreChip({required this.label, required this.onTap});
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -435,9 +444,7 @@ class _GenreChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          // TODO: trigger search with genre
-        },
+        onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
@@ -452,68 +459,132 @@ class _GenreChip extends StatelessWidget {
   }
 }
 
-class _FirestoreTrackCard extends StatelessWidget {
+class _FirestoreTrackCard extends ConsumerStatefulWidget {
   const _FirestoreTrackCard({required this.track, this.rank});
   final Track track;
   final int? rank;
 
   @override
+  ConsumerState<_FirestoreTrackCard> createState() => _FirestoreTrackCardState();
+}
+
+class _FirestoreTrackCardState extends ConsumerState<_FirestoreTrackCard> {
+  bool _hovered = false;
+
+  void _play() {
+    ref.read(appleMusicProvider.notifier).playByQuery(widget.track.title, widget.track.artist);
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 130,
-      decoration: BoxDecoration(
-        color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.4)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-                  child: SizedBox.expand(
-                    child: track.artworkUrl.isNotEmpty
-                        ? CachedNetworkImage(imageUrl: track.artworkUrl, fit: BoxFit.cover)
-                        : Container(
-                            decoration: const BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [AppTheme.edge, AppTheme.panelRaised],
+    final am = ref.watch(appleMusicProvider);
+    final isPlaying = am.currentTrack?.title == widget.track.title &&
+        am.currentTrack?.artist == widget.track.artist &&
+        am.isPlaying;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: _play,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 130,
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                      child: SizedBox.expand(
+                        child: widget.track.artworkUrl.isNotEmpty
+                            ? CachedNetworkImage(imageUrl: widget.track.artworkUrl, fit: BoxFit.cover)
+                            : Container(
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [AppTheme.edge, AppTheme.panelRaised],
+                                  ),
+                                ),
+                                child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 28),
+                              ),
+                      ),
+                    ),
+                    if (widget.rank != null)
+                      Positioned(
+                        top: 6, left: 6,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.7),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text('#${widget.rank}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                        ),
+                      ),
+                    // Play overlay on hover
+                    if (_hovered || isPlaying)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.35),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 40, height: 40,
+                              decoration: BoxDecoration(
+                                color: isPlaying ? const Color(0xFFFC3C44) : AppTheme.cyan,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: (isPlaying ? const Color(0xFFFC3C44) : AppTheme.cyan).withValues(alpha: 0.5),
+                                    blurRadius: 14,
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 22,
                               ),
                             ),
-                            child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 28),
                           ),
-                  ),
-                ),
-                if (rank != null)
-                  Positioned(
-                    top: 6, left: 6,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.7),
-                        borderRadius: BorderRadius.circular(5),
+                        ),
                       ),
-                      child: Text('#$rank', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.track.title,
+                      style: TextStyle(
+                        color: isPlaying ? const Color(0xFFFC3C44) : AppTheme.textPrimary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  ),
-              ],
-            ),
+                    const SizedBox(height: 2),
+                    Text(widget.track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ],
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -647,21 +718,38 @@ class _ResultCard extends ConsumerStatefulWidget {
 class _ResultCardState extends ConsumerState<_ResultCard> {
   bool _hovered = false;
 
+  void _play(_SearchResult r) async {
+    final played = await ref.read(appleMusicProvider.notifier).playByQuery(r.title, r.artist);
+    if (!played && mounted) {
+      final url = r.bestUrl;
+      if (url.isEmpty) return;
+      final uri = Uri.tryParse(url);
+      if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final r = widget.result;
+    final am = ref.watch(appleMusicProvider);
+    final isPlaying = am.currentTrack?.title == r.title &&
+        am.currentTrack?.artist == r.artist &&
+        am.isPlaying;
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () => _showTrackDetail(context, r),
+        onTap: () => _play(r),
+        onLongPress: () => _showTrackDetail(context, r),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
             color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+            border: Border.all(color: isPlaying
+                ? const Color(0xFFFC3C44).withValues(alpha: 0.5)
+                : AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,8 +793,8 @@ class _ResultCardState extends ConsumerState<_ResultCard> {
                           child: Text('${r.bpm}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10)),
                         ),
                       ),
-                    // Play overlay on hover
-                    if (_hovered)
+                    // Play overlay on hover or active
+                    if (_hovered || isPlaying)
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(
@@ -717,10 +805,18 @@ class _ResultCardState extends ConsumerState<_ResultCard> {
                             child: Container(
                               width: 44, height: 44,
                               decoration: BoxDecoration(
-                                color: AppTheme.cyan, shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)],
+                                color: isPlaying ? const Color(0xFFFC3C44) : AppTheme.cyan,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(
+                                  color: (isPlaying ? const Color(0xFFFC3C44) : AppTheme.cyan).withValues(alpha: 0.5),
+                                  blurRadius: 16,
+                                )],
                               ),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                              child: Icon(
+                                isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -734,7 +830,10 @@ class _ResultCardState extends ConsumerState<_ResultCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(r.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
+                    Text(r.title, style: TextStyle(
+                        color: isPlaying ? const Color(0xFFFC3C44) : AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12),
                         maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 2),
                     Text(r.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
@@ -753,8 +852,10 @@ class _ResultCardState extends ConsumerState<_ResultCard> {
                           ),
                         const Spacer(),
                         if (r.albumName.isNotEmpty)
-                          Text(r.albumName, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.6), fontSize: 9),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          Flexible(
+                            child: Text(r.albumName, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.6), fontSize: 9),
+                                maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
                       ],
                     ),
                   ],
@@ -1022,10 +1123,13 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
   );
 
   void _play(_SearchResult r) async {
-    final url = r.bestUrl;
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    final played = await ref.read(appleMusicProvider.notifier).playByQuery(r.title, r.artist);
+    if (!played) {
+      final url = r.bestUrl;
+      if (url.isEmpty) return;
+      final uri = Uri.tryParse(url);
+      if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
   }
 
   void _showAddToCrate(_SearchResult r) {
@@ -1241,12 +1345,12 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
 
 // ── Track Detail Dialog ─────────────────────────────────────────────────────
 
-class _TrackDetailDialog extends StatelessWidget {
+class _TrackDetailDialog extends ConsumerWidget {
   const _TrackDetailDialog({required this.result});
   final _SearchResult result;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final r = result;
     return Dialog(
       backgroundColor: AppTheme.panel,
@@ -1302,7 +1406,8 @@ class _TrackDetailDialog extends StatelessWidget {
                         _PlatformButton(label: 'Spotify', color: const Color(0xFF1ED760), icon: Icons.graphic_eq_rounded, url: r.spotifyUrl!),
                       if (r.hasSpotify && r.hasApple) const SizedBox(width: 8),
                       if (r.hasApple)
-                        _PlatformButton(label: 'Apple Music', color: const Color(0xFFFF7AB5), icon: Icons.music_note_rounded, url: r.appleUrl!),
+                        _PlatformButton(label: 'Apple Music', color: const Color(0xFFFF7AB5), icon: Icons.music_note_rounded, url: r.appleUrl!,
+                          onTap: () => ref.read(appleMusicProvider.notifier).playByQuery(r.title, r.artist)),
                       if ((r.hasSpotify || r.hasApple) && r.hasYoutube) const SizedBox(width: 8),
                       if (r.hasYoutube)
                         _PlatformButton(label: 'YouTube', color: const Color(0xFFFF0000), icon: Icons.play_circle_fill_rounded, url: r.youtubeUrl!),
@@ -1353,11 +1458,12 @@ class _Pill extends StatelessWidget {
 }
 
 class _PlatformButton extends StatelessWidget {
-  const _PlatformButton({required this.label, required this.color, required this.icon, required this.url});
+  const _PlatformButton({required this.label, required this.color, required this.icon, required this.url, this.onTap});
   final String label;
   final Color color;
   final IconData icon;
   final String url;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1366,7 +1472,7 @@ class _PlatformButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () {
+          onTap: onTap ?? () {
             final uri = Uri.tryParse(url);
             if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
           },

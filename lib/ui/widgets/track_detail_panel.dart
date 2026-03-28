@@ -1,14 +1,16 @@
 import 'package:collection/collection.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/track.dart';
+import '../../providers/streaming_provider.dart';
 import 'source_badges.dart';
 
-class TrackDetailPanel extends StatelessWidget {
+class TrackDetailPanel extends ConsumerWidget {
   const TrackDetailPanel({
     super.key,
     required this.selectedTrack,
@@ -27,7 +29,7 @@ class TrackDetailPanel extends StatelessWidget {
   final ValueChanged<String> onToggleWatchlist;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final track = selectedTrack;
     final theme = Theme.of(context);
 
@@ -165,9 +167,13 @@ class TrackDetailPanel extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(
-                      onPressed: () => _openLink(
-                        _bestPlatformUrl(track.platformLinks)!,
-                      ),
+                      onPressed: () {
+                        if (_bestPlatformKey(track.platformLinks) == 'apple') {
+                          ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist);
+                        } else {
+                          _openLink(_bestPlatformUrl(track.platformLinks)!);
+                        }
+                      },
                       icon: const Icon(Icons.play_circle_filled_rounded),
                       label: Text(
                         'Listen on ${_bestPlatformLabel(track.platformLinks)}',
@@ -346,7 +352,13 @@ class TrackDetailPanel extends StatelessWidget {
                   children: track.platformLinks.entries
                       .map(
                         (entry) => FilledButton.tonalIcon(
-                          onPressed: () => _openLink(entry.value),
+                          onPressed: () {
+                            if (entry.key == 'apple') {
+                              ref.read(appleMusicProvider.notifier).playByQuery(track.title, track.artist);
+                            } else {
+                              _openLink(entry.value);
+                            }
+                          },
                           icon: const Icon(Icons.open_in_new_rounded),
                           label: Text(entry.key.toUpperCase()),
                         ),
@@ -432,6 +444,14 @@ class TrackDetailPanel extends StatelessWidget {
       if (url != null && url.isNotEmpty) return url;
     }
     return links.values.firstOrNull;
+  }
+
+  static String? _bestPlatformKey(Map<String, String> links) {
+    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
+    for (final key in priority) {
+      if (links.containsKey(key) && links[key]!.isNotEmpty) return key;
+    }
+    return links.keys.firstOrNull;
   }
 
   static String _bestPlatformLabel(Map<String, String> links) {
