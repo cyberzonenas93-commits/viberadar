@@ -176,7 +176,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       final results = await Future.wait([
         _spotify.searchTracks(q, limit: 20).catchError((_) => <SpotifyTrackInfo>[]),
         _apple.searchSongs(q, limit: 20).catchError((_) => <AppleMusicTrack>[]),
-        _youtube.searchMusic(q, limit: 25).catchError((_) => <YoutubeVideoResult>[]),
+        _youtube.searchMusic(q, limit: 5).catchError((_) => <YoutubeVideoResult>[]),
       ]);
       if (!mounted) return;
       setState(() {

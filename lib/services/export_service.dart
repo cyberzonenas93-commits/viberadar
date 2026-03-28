@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
 import '../models/library_track.dart';
 import 'action_log_service.dart';
@@ -299,7 +298,14 @@ class ExportService {
 
   /// Returns the default exports directory path (Desktop/VibeRadar Exports).
   static Future<String> getExportsPath() async {
-    final home = Platform.environment['HOME'] ?? '/tmp';
+    // Use NSHomeDirectory-equivalent via path_provider to get the real home,
+    // then write to Desktop. If sandbox rewrites HOME, extract the real user.
+    var home = Platform.environment['HOME'] ?? '';
+    final containerMatch = RegExp(r'/Users/([^/]+)/Library/Containers/').firstMatch(home);
+    if (containerMatch != null) {
+      home = '/Users/${containerMatch.group(1)!}';
+    }
+    if (home.isEmpty) home = '/tmp';
     return p.join(home, 'Desktop', 'VibeRadar Exports');
   }
 
@@ -374,6 +380,92 @@ class ExportService {
           '"${(t.resolved as bool) ? 'found' : 'missing'}"');
     }
     return _save('${_safeName(crateName)}_ai.csv', buf.toString());
+  }
+
+  /// Export an AI-generated crate as Rekordbox XML.
+  Future<String> exportAiCrateRekordbox(String crateName, List<dynamic> tracks) async {
+    final buf = StringBuffer();
+    buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
+    buf.writeln('<DJ_PLAYLISTS Version="1.0.0">');
+    buf.writeln('  <PRODUCT Name="VibeRadar" Version="1.0"/>');
+    buf.writeln('  <COLLECTION Entries="${tracks.length}">');
+    for (var i = 0; i < tracks.length; i++) {
+      final t = tracks[i];
+      final title = t.title as String;
+      final artist = t.artist as String;
+      final bpm = t.bpm;
+      final key = t.key as String;
+      final url = t.bestUrl as String;
+      buf.writeln('    <TRACK TrackID="${i + 1}" Name="${_esc(title)}" '
+          'Artist="${_esc(artist)}" AverageBpm="$bpm" Tonality="$key" '
+          'Location="${_esc(url.isNotEmpty ? url : 'vibradar://$title')}" />');
+    }
+    buf.writeln('  </COLLECTION>');
+    buf.writeln('  <PLAYLISTS>');
+    buf.writeln('    <NODE Type="0" Name="ROOT" Count="1">');
+    buf.writeln('      <NODE Name="${_esc(crateName)}" Type="1" Entries="${tracks.length}">');
+    for (var i = 0; i < tracks.length; i++) {
+      buf.writeln('        <TRACK Key="${i + 1}"/>');
+    }
+    buf.writeln('      </NODE>');
+    buf.writeln('    </NODE>');
+    buf.writeln('  </PLAYLISTS>');
+    buf.writeln('</DJ_PLAYLISTS>');
+    return _save('${_safeName(crateName)}_ai_rekordbox.xml', buf.toString());
+  }
+
+  /// Export an AI-generated crate as VirtualDJ XML.
+  Future<String> exportAiCrateVirtualDj(String crateName, List<dynamic> tracks) async {
+    final buf = StringBuffer();
+    buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
+    buf.writeln('<VirtualDJ_Database Version="8">');
+    for (final t in tracks) {
+      final title = t.title as String;
+      final artist = t.artist as String;
+      final bpm = t.bpm;
+      final key = t.key as String;
+      buf.writeln('  <Song Title="${_esc(title)}" '
+          'Artist="${_esc(artist)}" '
+          'Bpm="$bpm" '
+          'Key="$key"/>');
+    }
+    buf.writeln('</VirtualDJ_Database>');
+    return _save('${_safeName(crateName)}_ai_virtualdj.xml', buf.toString());
+  }
+
+  /// Export an AI-generated crate as Traktor NML.
+  Future<String> exportAiCrateTraktor(String crateName, List<dynamic> tracks) async {
+    final buf = StringBuffer();
+    buf.writeln('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>');
+    buf.writeln('<NML VERSION="19">');
+    buf.writeln('  <COLLECTION ENTRIES="${tracks.length}">');
+    for (final t in tracks) {
+      final title = t.title as String;
+      final artist = t.artist as String;
+      final bpm = t.bpm;
+      final key = t.key as String;
+      buf.writeln('    <ENTRY TITLE="${_esc(title)}" ARTIST="${_esc(artist)}">');
+      buf.writeln('      <INFO KEY="$key"/>');
+      buf.writeln('      <TEMPO BPM="${(bpm as num).toStringAsFixed(6)}" BPM_QUALITY="100"/>');
+      buf.writeln('    </ENTRY>');
+    }
+    buf.writeln('  </COLLECTION>');
+    buf.writeln('  <PLAYLISTS>');
+    buf.writeln('    <NODE TYPE="FOLDER" NAME="\$ROOT">');
+    buf.writeln('      <SUBNODES COUNT="1">');
+    buf.writeln('        <NODE TYPE="PLAYLIST" NAME="${_esc(crateName)}">');
+    buf.writeln('          <PLAYLIST ENTRIES="${tracks.length}" TYPE="LIST">');
+    for (var i = 0; i < tracks.length; i++) {
+      final t = tracks[i];
+      buf.writeln('            <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="${_esc(t.title as String)} - ${_esc(t.artist as String)}"/></ENTRY>');
+    }
+    buf.writeln('          </PLAYLIST>');
+    buf.writeln('        </NODE>');
+    buf.writeln('      </SUBNODES>');
+    buf.writeln('    </NODE>');
+    buf.writeln('  </PLAYLISTS>');
+    buf.writeln('</NML>');
+    return _save('${_safeName(crateName)}_ai_traktor.nml', buf.toString());
   }
 
   /// Export an AI crate as a text manifest (human-readable).

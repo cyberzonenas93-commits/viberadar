@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/track.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/streaming_provider.dart';
+import '../../providers/video_player_provider.dart';
 import '../features/cues/cue_preview_panel.dart';
 
 /// Shows a context menu when a track card is tapped.
@@ -38,6 +39,17 @@ void showTrackActionMenu(
             ],
           ),
         ),
+      // Play Video — resolves YouTube match and opens embedded player
+      const PopupMenuItem(
+        value: 'video',
+        child: Row(
+          children: [
+            Icon(Icons.videocam_rounded, color: Color(0xFFFF4B4B), size: 20),
+            SizedBox(width: 10),
+            Text('Play Video', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+          ],
+        ),
+      ),
       // Divider between play and actions
       if (track.platformLinks.isNotEmpty)
         const PopupMenuDivider(),
@@ -87,6 +99,8 @@ void showTrackActionMenu(
           if (url != null) _openUrl(url);
         }
       });
+    } else if (value == 'video') {
+      ref.read(videoPlayerProvider.notifier).playYouTube(track);
     } else if (value == 'crate') {
       _showAddToCrateSheet(context, ref, track);
     } else if (value == 'info') {

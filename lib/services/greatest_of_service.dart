@@ -1,3 +1,8 @@
+import 'dart:convert';
+import 'dart:developer' as dev;
+
+import 'package:http/http.dart' as http;
+
 import '../models/track.dart';
 
 /// Computes a [greatestScore] (0.0–1.0) for each [Track] that weighs
@@ -13,6 +18,9 @@ import '../models/track.dart';
 ///  familiarity            0.10  (mainstream crossover appeal)
 ///  artist_influence       0.08  (regional + source breadth)
 ///  cross_source           0.10  (how many sources carry it)
+///
+/// Supports an optional AI-enhanced mode where GPT ranks the top candidates
+/// by cultural significance, giving a more nuanced ordering than pure metrics.
 class GreatestOfService {
   // ─── public API ────────────────────────────────────────────────────────────
 
@@ -204,4 +212,104 @@ class GreatestOfService {
     '2020s': (2020, 2029),
     'All Time': (null, null),
   };
+
+  // ─── AI-enhanced greatest-of ──────────────────────────────────────────────
+
+  /// Uses GPT to re-rank the top algorithmically-scored tracks by cultural
+  /// significance and DJ impact. Falls back to algorithmic ranking on failure.
+  ///
+  /// The AI only re-ranks the top candidates — it does NOT invent new tracks.
+  Future<List<Track>> buildGreatestOfSetAiEnhanced({
+    required List<Track> tracks,
+    String? genre,
+    String? artist,
+    String? region,
+    int? yearFrom,
+    int? yearTo,
+    int limit = 50,
+    required String apiKey,
+    String model = 'gpt-4o-mini',
+  }) async {
+    // Step 1: Get algorithmic top candidates (2x limit for AI to pick from)
+    final candidates = buildGreatestOfSet(
+      tracks: tracks,
+      genre: genre,
+      artist: artist,
+      region: region,
+      yearFrom: yearFrom,
+      yearTo: yearTo,
+      limit: (limit * 2).clamp(limit, 200),
+    );
+
+    if (candidates.length <= 5) return candidates.take(limit).toList();
+
+    try {
+      // Step 2: Ask AI to rank candidates by cultural impact
+      final trackList = candidates.asMap().entries.map((e) {
+        final t = e.value;
+        return '${e.key}: ${t.artist} - ${t.title} (${t.bpm} BPM, ${t.genre}, ${t.effectiveReleaseYear})';
+      }).join('\n');
+
+      final genreContext = genre != null && genre != 'All' ? ' in $genre' : '';
+      final regionContext = region != null && region != 'All' ? ' from $region' : '';
+      final eraContext = yearFrom != null ? ' (${yearFrom}–${yearTo ?? 'now'})' : '';
+
+      final response = await http.post(
+        Uri.parse('https://api.openai.com/v1/chat/completions'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $apiKey',
+        },
+        body: jsonEncode({
+          'model': model,
+          'messages': [
+            {
+              'role': 'system',
+              'content':
+                  'You are a music historian and DJ expert. Given a list of tracks, rank the top $limit '
+                  'by cultural significance$genreContext$regionContext$eraContext.\n\n'
+                  'Consider: chart legacy, cultural impact, DJ utility, crowd recognition, '
+                  'replay value, and lasting influence.\n\n'
+                  'Return ONLY a JSON array of track indices in ranked order (most significant first).\n'
+                  'Example: [5, 0, 12, 3, ...]\n'
+                  'No explanation, just the JSON array.',
+            },
+            {
+              'role': 'user',
+              'content': 'Rank these ${candidates.length} tracks:\n\n$trackList',
+            },
+          ],
+          'temperature': 0.3,
+          'max_tokens': 800,
+        }),
+      );
+
+      if (response.statusCode != 200) {
+        dev.log('[GreatestOf] GPT returned ${response.statusCode}', name: 'GreatestOf');
+        return candidates.take(limit).toList();
+      }
+
+      final data = jsonDecode(response.body);
+      final content = data['choices']?[0]?['message']?['content'] as String? ?? '';
+      final match = RegExp(r'\[[\d\s,]+\]').firstMatch(content);
+      if (match == null) return candidates.take(limit).toList();
+
+      final indices = (jsonDecode(match.group(0)!) as List).cast<int>();
+      final valid = indices.where((i) => i >= 0 && i < candidates.length).toSet();
+      final result = valid.map((i) => candidates[i]).take(limit).toList();
+
+      // Fill remaining slots with algorithmic picks not already included
+      if (result.length < limit) {
+        for (final t in candidates) {
+          if (result.length >= limit) break;
+          if (!result.contains(t)) result.add(t);
+        }
+      }
+
+      return result;
+    } catch (e) {
+      dev.log('[GreatestOf] AI ranking failed, using algorithmic: $e', name: 'GreatestOf');
+      return candidates.take(limit).toList();
+    }
+  }
 }

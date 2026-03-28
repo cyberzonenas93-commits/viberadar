@@ -51,6 +51,7 @@ import '../features/search/search_screen.dart';
 import '../features/streaming/streaming_screen.dart';
 import '../widgets/apple_music_player_bar.dart';
 import '../widgets/dj_player_bar.dart';
+import '../widgets/video_player_overlay.dart';
 import '../../providers/dj_player_provider.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
@@ -226,6 +227,8 @@ class _VibeShellState extends ConsumerState<VibeShell> {
               ],
             ),
           ),
+          // Video player overlay (floating, draggable)
+          const VideoPlayerOverlay(),
         ],
       ),
     );
@@ -1322,39 +1325,88 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
 
       try {
         List<PlatformTrackResult> results;
+        final yearHint = slot.yearFrom != null ? '${slot.yearFrom}s' : null;
 
         if (slot.artist.isNotEmpty) {
-          results = await _platformSearch.searchByArtist(
-            '${slot.artist} $bpmHint'.trim(),
-            limit: slot.count + 50,
-          );
-        } else if (slot.mode == _SortMode.all) {
-          // "All Best" mode: run multiple search strategies for maximum coverage
-          final yearHint = slot.yearFrom != null ? '${slot.yearFrom}s' : null;
+          // For artist searches with high counts, run multiple query variations
+          // to get maximum coverage (platforms typically cap at ~50-100 per call)
           final allResults = <PlatformTrackResult>[];
           final allSeen = <String>{};
-          for (final hint in ['best top popular', 'trending hit', 'classic essential', 'new hot', 'playlist']) {
+
+          final artistQueries = [
+            '${slot.artist} $bpmHint'.trim(),
+            '${slot.artist} best songs',
+            '${slot.artist} top tracks',
+            '${slot.artist} hits',
+            '${slot.artist} popular',
+            '${slot.artist} essential',
+            '${slot.artist} discography',
+          ];
+
+          for (final q in artistQueries) {
+            final batch = await _platformSearch.searchByArtist(
+              q,
+              limit: 50,
+            );
+            for (final r in batch) {
+              final k = '${r.title.toLowerCase()}::${r.artist.toLowerCase()}';
+              if (allSeen.add(k)) allResults.add(r);
+            }
+            // Stop querying once we have enough (or close to enough)
+            if (allResults.length >= slot.count) break;
+          }
+          results = allResults;
+        } else if (slot.mode == _SortMode.all) {
+          // "All Best" mode: run multiple search strategies for maximum coverage
+          final allResults = <PlatformTrackResult>[];
+          final allSeen = <String>{};
+          for (final hint in [
+            'best top popular', 'trending hit', 'classic essential',
+            'new hot', 'playlist', 'top 100', 'greatest', 'chart',
+            'viral', 'dance party',
+          ]) {
             final batch = await _platformSearch.searchByGenre(
               '$hint $genre $bpmHint'.trim(),
-              limit: (slot.count ~/ 3).clamp(20, 200),
+              limit: 50,
               era: yearHint,
             );
             for (final r in batch) {
               final k = '${r.title.toLowerCase()}::${r.artist.toLowerCase()}';
               if (allSeen.add(k)) allResults.add(r);
             }
-            if (allResults.length >= slot.count + 50) break;
+            if (allResults.length >= slot.count) break;
           }
           results = allResults;
         } else {
-          final yearHint = slot.yearFrom != null ? '${slot.yearFrom}s' : null;
-          results = await _platformSearch.searchByGenre(
+          // For other modes with high counts, also run varied queries
+          final allResults = <PlatformTrackResult>[];
+          final allSeen = <String>{};
+
+          final queries = [
             '$modeHint $genre $bpmHint'.trim(),
-            limit: slot.count + 50,
-            era: yearHint,
-          );
+            '$modeHint $genre top songs',
+            '$genre best ${slot.mode == _SortMode.trending ? 'new' : 'popular'}',
+            '$genre playlist ${slot.mode.name}',
+          ];
+
+          for (final q in queries) {
+            final batch = await _platformSearch.searchByGenre(
+              q,
+              limit: 50,
+              era: yearHint,
+            );
+            for (final r in batch) {
+              final k = '${r.title.toLowerCase()}::${r.artist.toLowerCase()}';
+              if (allSeen.add(k)) allResults.add(r);
+            }
+            if (allResults.length >= slot.count) break;
+          }
+          results = allResults;
         }
 
+        // Add all unique results up to slot.count.
+        // If fewer results exist than requested, add whatever is available
+        // (never return 0 when there ARE results).
         int added = 0;
         for (final r in results) {
           if (added >= slot.count) break;
@@ -1539,42 +1591,89 @@ class _SavedCratesView extends ConsumerWidget {
   }
 }
 
-class _AiCrateCard extends StatelessWidget {
+class _AiCrateCard extends ConsumerWidget {
   const _AiCrateCard({required this.name, required this.tracks});
   final String name;
   final List<AiCrateTrack> tracks;
 
   Future<void> _export(BuildContext context, String format) async {
-    final svc = ExportService();
-    String path;
-    switch (format) {
-      case 'm3u':
-        path = await svc.exportAiCrateM3u(name, tracks);
-      case 'csv':
-        path = await svc.exportAiCrateCsv(name, tracks);
-      case 'manifest':
-        path = await svc.exportAiCrateManifest(name, tracks);
-      default:
-        return;
-    }
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Exported to $path'),
-          backgroundColor: AppTheme.lime,
-          duration: const Duration(seconds: 5),
-          action: SnackBarAction(
-            label: 'Show in Finder',
-            textColor: Colors.white,
-            onPressed: () => ExportService.revealInFinder(path),
+    try {
+      final svc = ExportService();
+      String path;
+      switch (format) {
+        case 'm3u':
+          path = await svc.exportAiCrateM3u(name, tracks);
+        case 'csv':
+          path = await svc.exportAiCrateCsv(name, tracks);
+        case 'rekordbox':
+          path = await svc.exportAiCrateRekordbox(name, tracks);
+        case 'virtualdj':
+          path = await svc.exportAiCrateVirtualDj(name, tracks);
+        case 'traktor':
+          path = await svc.exportAiCrateTraktor(name, tracks);
+        case 'manifest':
+          path = await svc.exportAiCrateManifest(name, tracks);
+        default:
+          return;
+      }
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Exported to $path'),
+            backgroundColor: AppTheme.lime,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Show in Finder',
+              textColor: Colors.white,
+              onPressed: () => ExportService.revealInFinder(path),
+            ),
           ),
-        ),
-      );
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.panel,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete "$name"?', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: Text('This will permanently remove this AI crate and its ${tracks.length} tracks.',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      ref.read(aiCrateProvider.notifier).deleteCrate(name);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "$name"'), backgroundColor: AppTheme.pink, duration: const Duration(seconds: 2)),
+        );
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final resolved = tracks.where((t) => t.resolved).length;
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1614,22 +1713,47 @@ class _AiCrateCard extends StatelessWidget {
               ),
               Text('$resolved/${tracks.length} playable',
                   style: TextStyle(color: resolved == tracks.length ? AppTheme.lime : AppTheme.amber, fontSize: 11)),
+              const SizedBox(width: 8),
+              // ── Delete button ──
+              Tooltip(
+                message: 'Delete crate',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => _confirmDelete(context, ref),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.delete_outline_rounded, color: Colors.red.withValues(alpha: 0.6), size: 18),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
           // Export buttons
-          Row(
-            children: [
-              _ExportBtn(label: 'Export M3U', icon: Icons.queue_music_rounded, onTap: () => _export(context, 'm3u')),
-              const SizedBox(width: 8),
-              _ExportBtn(label: 'Export CSV', icon: Icons.table_chart_rounded, onTap: () => _export(context, 'csv')),
-              const SizedBox(width: 8),
-              _ExportBtn(label: 'Manifest', icon: Icons.description_rounded, onTap: () => _export(context, 'manifest')),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ExportBtn(label: 'M3U', icon: Icons.queue_music_rounded, onTap: () => _export(context, 'm3u')),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'CSV', icon: Icons.table_chart_rounded, onTap: () => _export(context, 'csv')),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Rekordbox', icon: Icons.album_rounded, onTap: () => _export(context, 'rekordbox')),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'VirtualDJ', icon: Icons.surround_sound_rounded, onTap: () => _export(context, 'virtualdj')),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Traktor', icon: Icons.speaker_rounded, onTap: () => _export(context, 'traktor')),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Manifest', icon: Icons.description_rounded, onTap: () => _export(context, 'manifest')),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           for (var i = 0; i < tracks.length; i++) ...[
-            _AiTrackRow(track: tracks[i], index: i),
+            _AiTrackRow(track: tracks[i], index: i, crateName: name),
             if (i < tracks.length - 1) Divider(color: AppTheme.edge.withValues(alpha: 0.3), height: 1),
           ],
         ],
@@ -1639,9 +1763,10 @@ class _AiCrateCard extends StatelessWidget {
 }
 
 class _AiTrackRow extends ConsumerWidget {
-  const _AiTrackRow({required this.track, required this.index});
+  const _AiTrackRow({required this.track, required this.index, required this.crateName});
   final AiCrateTrack track;
   final int index;
+  final String crateName;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1708,6 +1833,31 @@ class _AiTrackRow extends ConsumerWidget {
               message: 'Not found on platforms',
               child: Icon(Icons.cloud_off_rounded, color: AppTheme.textTertiary, size: 16),
             ),
+          // ── Remove track button ──
+          const SizedBox(width: 4),
+          Tooltip(
+            message: 'Remove from crate',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(4),
+                onTap: () {
+                  ref.read(aiCrateProvider.notifier).removeTrackFromCrate(crateName, index);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Removed "${track.title}" from $crateName'),
+                      backgroundColor: AppTheme.pink,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.close_rounded, color: AppTheme.textTertiary.withValues(alpha: 0.5), size: 14),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1778,7 +1928,7 @@ class _ExportBtn extends StatelessWidget {
   }
 }
 
-class _RegularCrateCard extends StatelessWidget {
+class _RegularCrateCard extends ConsumerWidget {
   const _RegularCrateCard({required this.crate, required this.allTracks});
   final Crate crate;
   final List<Track> allTracks;
@@ -1835,8 +1985,37 @@ class _RegularCrateCard extends StatelessWidget {
     }
   }
 
+  Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.panel,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text('Delete "${crate.name}"?', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        content: Text('This will permanently remove this crate and its ${crate.trackIds.length} tracks.',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete', style: TextStyle(color: Colors.red, fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      ref.read(crateProvider.notifier).deleteCrate(crate.name);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Deleted "${crate.name}"'), backgroundColor: AppTheme.pink, duration: const Duration(seconds: 2)),
+        );
+      }
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tracks = crate.trackIds
         .map((id) => allTracks.firstWhereOrNull((t) => t.id == id))
         .whereType<Track>()
@@ -1875,6 +2054,22 @@ class _RegularCrateCard extends StatelessWidget {
               ),
               Text('${tracks.length} tracks',
                   style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              const SizedBox(width: 8),
+              // ── Delete button ──
+              Tooltip(
+                message: 'Delete crate',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () => _confirmDelete(context, ref),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.delete_outline_rounded, color: Colors.red.withValues(alpha: 0.6), size: 18),
+                    ),
+                  ),
+                ),
+              ),
             ],
           ),
           if (crate.context.isNotEmpty) ...[
@@ -1883,20 +2078,23 @@ class _RegularCrateCard extends StatelessWidget {
           ],
           const SizedBox(height: 10),
           // Export buttons
-          Row(
-            children: [
-              _ExportBtn(label: 'M3U', icon: Icons.queue_music_rounded, onTap: () => _export(context, 'm3u', tracks)),
-              const SizedBox(width: 6),
-              _ExportBtn(label: 'Serato', icon: Icons.table_chart_rounded, onTap: () => _export(context, 'csv', tracks)),
-              const SizedBox(width: 6),
-              _ExportBtn(label: 'Rekordbox', icon: Icons.album_rounded, onTap: () => _export(context, 'rekordbox', tracks)),
-              const SizedBox(width: 6),
-              _ExportBtn(label: 'VirtualDJ', icon: Icons.surround_sound_rounded, onTap: () => _export(context, 'virtualdj', tracks)),
-              const SizedBox(width: 6),
-              _ExportBtn(label: 'Traktor', icon: Icons.speaker_rounded, onTap: () => _export(context, 'traktor', tracks)),
-              const SizedBox(width: 6),
-              _ExportBtn(label: 'Manifest', icon: Icons.description_rounded, onTap: () => _export(context, 'manifest', tracks)),
-            ],
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _ExportBtn(label: 'M3U', icon: Icons.queue_music_rounded, onTap: () => _export(context, 'm3u', tracks)),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Serato', icon: Icons.table_chart_rounded, onTap: () => _export(context, 'csv', tracks)),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Rekordbox', icon: Icons.album_rounded, onTap: () => _export(context, 'rekordbox', tracks)),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'VirtualDJ', icon: Icons.surround_sound_rounded, onTap: () => _export(context, 'virtualdj', tracks)),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Traktor', icon: Icons.speaker_rounded, onTap: () => _export(context, 'traktor', tracks)),
+                const SizedBox(width: 6),
+                _ExportBtn(label: 'Manifest', icon: Icons.description_rounded, onTap: () => _export(context, 'manifest', tracks)),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           for (var i = 0; i < tracks.length; i++) ...[

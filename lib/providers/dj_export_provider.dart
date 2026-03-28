@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/dj_export_result.dart';
+import '../models/library_track.dart';
 import '../services/dj_root_detection_service.dart';
 import '../services/virtual_dj_export_service.dart';
 import '../services/serato_export_service.dart';
@@ -79,6 +81,9 @@ class DjExportNotifier extends Notifier<DjExportState> {
   Future<void> _init() async {
     final vdjRoot = await _detection.resolveVirtualDjRoot();
     final seratoRoot = await _detection.resolveSeratoRoot();
+    // Persist auto-detected roots so subsequent launches skip re-detection.
+    if (vdjRoot != null) await _detection.persistVirtualDjRoot(vdjRoot);
+    if (seratoRoot != null) await _detection.persistSeratoRoot(seratoRoot);
     state = state.copyWith(vdjRoot: vdjRoot, seratoRoot: seratoRoot);
   }
 
@@ -114,11 +119,16 @@ class DjExportNotifier extends Notifier<DjExportState> {
 
   Future<DjExportResult?> exportToVirtualDj({
     required String crateName,
-    required List<dynamic> tracks, // List<LibraryTrack>
+    required List<LibraryTrack> tracks,
   }) async {
     final root = state.vdjRoot;
     if (root == null) {
-      state = state.copyWith(error: 'VirtualDJ root not set');
+      state = state.copyWith(error: 'VirtualDJ root not set. '
+          'Auto-detection failed — choose the folder manually.');
+      return null;
+    }
+    if (!Directory(root).existsSync()) {
+      state = state.copyWith(error: 'VirtualDJ folder no longer exists: $root');
       return null;
     }
     state = state.copyWith(isExporting: true, error: null, lastResult: null);
@@ -126,7 +136,7 @@ class DjExportNotifier extends Notifier<DjExportState> {
       final result = await _vdj.exportCrate(
         vdjRoot: root,
         playlistName: crateName,
-        tracks: List.from(tracks),
+        tracks: tracks,
       );
       state = state.copyWith(isExporting: false, lastResult: result);
       return result;
@@ -139,12 +149,17 @@ class DjExportNotifier extends Notifier<DjExportState> {
 
   Future<DjExportResult?> exportToSerato({
     required String crateName,
-    required List<dynamic> tracks, // List<LibraryTrack>
+    required List<LibraryTrack> tracks,
     String? parentCrateName,
   }) async {
     final root = state.seratoRoot;
     if (root == null) {
-      state = state.copyWith(error: 'Serato root not set');
+      state = state.copyWith(error: 'Serato root not set. '
+          'Auto-detection failed — choose the folder manually.');
+      return null;
+    }
+    if (!Directory(root).existsSync()) {
+      state = state.copyWith(error: 'Serato folder no longer exists: $root');
       return null;
     }
     state = state.copyWith(isExporting: true, error: null, lastResult: null);
@@ -152,7 +167,7 @@ class DjExportNotifier extends Notifier<DjExportState> {
       final result = await _serato.exportCrate(
         seratoRoot: root,
         crateName: crateName,
-        tracks: List.from(tracks),
+        tracks: tracks,
         parentCrateName: parentCrateName,
       );
       state = state.copyWith(isExporting: false, lastResult: result);

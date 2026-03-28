@@ -43,6 +43,12 @@ class LibraryTrack {
   /// Release year — alias for [year], used for client-side year-range filtering.
   int? get releaseYear => year;
 
+  /// Video file extensions recognized by the library scanner.
+  static const videoExtensions = {'.mp4', '.mov', '.m4v'};
+
+  /// True if this file is a video (mp4, mov, m4v) rather than audio-only.
+  bool get isVideoFile => videoExtensions.contains(fileExtension.toLowerCase());
+
   String get durationFormatted {
     final m = (durationSeconds / 60).floor();
     final s = (durationSeconds % 60).floor();

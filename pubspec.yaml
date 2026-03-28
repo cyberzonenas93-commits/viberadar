@@ -45,6 +45,10 @@ dependencies:
   just_audio: ^0.9.42
   xml: ^6.5.0
 
+  # Video playback
+  webview_flutter: ^4.10.0
+  video_player: ^2.9.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

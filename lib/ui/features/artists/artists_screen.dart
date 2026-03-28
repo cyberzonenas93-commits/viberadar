@@ -1618,7 +1618,7 @@ class _BuildSetButton extends StatelessWidget {
           ...artistModel.trendingTracks,
         }.toList();
         // Build a 12-track set from artist's tracks using existing logic
-        final set = svc.buildSet(
+        final set = svc.buildSetSync(
           tracks: allForArtist,
           durationMinutes: 48,
           genre: 'All',

@@ -171,6 +171,8 @@ class LibraryScannerService {
   static const _uuid = Uuid();
   static const _supportedExtensions = {
     '.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.aiff',
+    // Video files (also contain audio metadata — BPM, key, duration)
+    '.mp4', '.mov', '.m4v',
   };
 
   static const _camelotKeys = [

@@ -9,7 +9,7 @@ void main() {
       final service = SetBuilderService();
       final tracks = buildMockTracks();
 
-      final generated = service.buildSet(
+      final generated = service.buildSetSync(
         tracks: tracks,
         durationMinutes: 60,
         genre: 'All',

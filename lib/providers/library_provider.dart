@@ -531,6 +531,21 @@ class AiCrateNotifier extends Notifier<AiCrateState> {
     _saveToDisk(updated);
   }
 
+  /// Remove a single track by index from an AI crate.
+  void removeTrackFromCrate(String crateName, int trackIndex) {
+    final current = {...state.crates};
+    final tracks = current[crateName];
+    if (tracks == null || trackIndex < 0 || trackIndex >= tracks.length) return;
+    final updated = List<AiCrateTrack>.from(tracks)..removeAt(trackIndex);
+    if (updated.isEmpty) {
+      current.remove(crateName);
+    } else {
+      current[crateName] = updated;
+    }
+    state = state.copyWith(crates: current);
+    _saveToDisk(current);
+  }
+
   Future<void> _loadFromDisk() async {
     try {
       final dir = await getApplicationDocumentsDirectory();

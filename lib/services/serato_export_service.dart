@@ -130,10 +130,10 @@ class SeratoExportService {
     for (final path in absolutePaths) {
       final inner = BytesBuilder(copy: false);
       _writeChunk(inner, 'ptrk', _encodeUtf16Be(path));
-      _writeChunk(out, 'otrk', inner.toBytes() as Uint8List);
+      _writeChunk(out, 'otrk', Uint8List.fromList(inner.toBytes()));
     }
 
-    return out.toBytes() as Uint8List;
+    return Uint8List.fromList(out.toBytes());
   }
 
   // ── TLV helpers ──────────────────────────────────────────────────────────
