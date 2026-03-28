@@ -7,10 +7,12 @@ import '../../../models/dj_export_result.dart';
 import '../../../models/library_track.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
+import '../../../providers/cue_provider.dart';
 import '../../../providers/dj_export_provider.dart';
 import '../../../providers/library_provider.dart';
 import '../../../services/export_service.dart';
 import '../../../services/local_match_service.dart';
+import '../cues/cue_preview_panel.dart';
 
 class ExportsScreen extends ConsumerStatefulWidget {
   const ExportsScreen({super.key});
@@ -410,6 +412,13 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                           onTap: () => _showSeratoExportDialog(
                               _selectedCrate!, crateLibTracks),
                         ),
+                        const SizedBox(width: 8),
+                        _ExportBtn(
+                          label: '🎯 Auto Cue',
+                          icon: Icons.flag_rounded,
+                          loading: ref.watch(cueProvider).isGenerating,
+                          onTap: () => _autoCueCrate(crateLibTracks),
+                        ),
                       ],
                     ]),
                   ),
@@ -687,6 +696,75 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
               ),
       ),
     ]);
+  }
+
+  // ── Auto Cue helpers ──────────────────────────────────────────────────────
+
+  Future<void> _autoCueCrate(List<LibraryTrack> tracks) async {
+    if (tracks.isEmpty) return;
+    final notifier = ref.read(cueProvider.notifier);
+    final results = await notifier.generateForTracks(tracks);
+    if (!mounted) return;
+    final succeeded = results.values.where((r) => r.isSuccess).length;
+    final failed = results.length - succeeded;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(
+        failed == 0
+            ? 'Cues generated for $succeeded track${succeeded == 1 ? '' : 's'}'
+            : 'Cues generated for $succeeded/${results.length} tracks ($failed failed)',
+      ),
+      backgroundColor: failed == 0 ? AppTheme.lime : AppTheme.amber,
+      duration: const Duration(seconds: 3),
+      action: succeeded > 0
+          ? SnackBarAction(
+              label: 'View',
+              textColor: AppTheme.panel,
+              onPressed: () => _showCueSummarySheet(results.keys.toList()),
+            )
+          : null,
+    ));
+  }
+
+  void _showCueSummarySheet(List<String> trackIds) {
+    final lib = ref.read(libraryProvider);
+    final tracks = trackIds
+        .map((id) => lib.tracks.where((t) => t.id == id).firstOrNull)
+        .whereType<LibraryTrack>()
+        .toList();
+    if (tracks.isEmpty || !mounted) return;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollCtrl) => ListView(
+          controller: scrollCtrl,
+          padding: const EdgeInsets.all(20),
+          children: [
+            const Text('Generated Cues',
+                style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            ...tracks.map((t) => Padding(
+                  padding: const EdgeInsets.only(bottom: 16),
+                  child: CuePreviewPanel(
+                    track: t,
+                    showWriteToVdjButton: true,
+                  ),
+                )),
+          ],
+        ),
+      ),
+    );
   }
 
   // ── DJ Software export helpers ────────────────────────────────────────────

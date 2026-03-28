@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/track.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/streaming_provider.dart';
+import '../features/cues/cue_preview_panel.dart';
 
 /// Shows a context menu when a track card is tapped.
 /// Options: Play (opens in Spotify/Apple/YouTube), Add to Crate, Track Info.
@@ -64,6 +65,18 @@ void showTrackActionMenu(
           ],
         ),
       ),
+      // Generate hot cues (only shown when track is in local library)
+      PopupMenuItem(
+        value: 'cues',
+        child: Row(
+          children: [
+            Icon(Icons.flag_rounded, color: AppTheme.violet, size: 18),
+            const SizedBox(width: 10),
+            const Text('Generate Cue Points',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+          ],
+        ),
+      ),
     ],
   ).then((value) {
     if (value == null) return;
@@ -78,6 +91,8 @@ void showTrackActionMenu(
       _showAddToCrateSheet(context, ref, track);
     } else if (value == 'info') {
       _showTrackInfoSheet(context, ref, track);
+    } else if (value == 'cues') {
+      _showCuePointsForTrack(context, ref, track);
     }
   });
 }
@@ -90,6 +105,34 @@ void showTrackActionMenuFromCard(
   TapDownDetails details,
 ) {
   showTrackActionMenu(context, ref, track, position: details.globalPosition);
+}
+
+/// Finds the matching LibraryTrack and shows the cue preview sheet.
+/// If the track is not in the local library, generates from title/artist/BPM metadata.
+void _showCuePointsForTrack(
+    BuildContext context, WidgetRef ref, Track track) {
+  final lib = ref.read(libraryProvider);
+
+  // Try to find exact match by title + artist in local library.
+  final localTrack = lib.tracks
+      .where((t) =>
+          t.title.toLowerCase() == track.title.toLowerCase() &&
+          t.artist.toLowerCase() == track.artist.toLowerCase())
+      .firstOrNull;
+
+  if (localTrack != null) {
+    showCuePreviewSheet(context, ref, localTrack, showWriteToVdjButton: true);
+    return;
+  }
+
+  // Track not in local library — show an info snackbar.
+  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+    content: Text(
+        'Track not found in your local library. '
+        'Scan your music folder first to generate cue points.'),
+    backgroundColor: AppTheme.amber,
+    duration: Duration(seconds: 4),
+  ));
 }
 
 void _openUrl(String url) async {
