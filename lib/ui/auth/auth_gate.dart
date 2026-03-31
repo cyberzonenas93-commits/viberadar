@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'dart:io';
 import '../../core/theme/app_theme.dart';
 import '../../models/session_state.dart';
 import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
 import '../shell/vibe_shell.dart';
+import '../shell/mobile_shell.dart';
 import 'onboarding_screen.dart';
 import 'splash_screen.dart';
 
@@ -102,6 +104,10 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
     if (session?.isAuthenticated == true) {
       _syncPendingArtists(session!);
+      // Use mobile shell on phones, desktop shell on macOS/tablets
+      if (Platform.isIOS || Platform.isAndroid) {
+        return MobileShell(statusMessage: widget.statusMessage);
+      }
       return VibeShell(statusMessage: widget.statusMessage);
     }
 
@@ -126,6 +132,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   bool _isLoading = false;
   String? _error;
   bool _rememberMe = true;
+  int _failCount = 0;
 
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
@@ -325,6 +332,26 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
 
       if (_error != null) ...[const SizedBox(height: 16), _errorBanner(theme)],
 
+      // Show demo mode option after any sign-in failure
+      if (_failCount > 0) ...[
+        const SizedBox(height: 16),
+        const Divider(color: AppTheme.edge),
+        const SizedBox(height: 8),
+        Text('Having trouble signing in?', style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _enterDemoMode,
+          icon: const Icon(Icons.explore_rounded, size: 18),
+          label: const Text('Continue in Demo Mode', style: TextStyle(fontWeight: FontWeight.w600)),
+          style: TextButton.styleFrom(foregroundColor: AppTheme.pink),
+        ),
+        Text(
+          'Explore the app without an account.\nSome features may be limited.',
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppTheme.textTertiary, fontSize: 10),
+        ),
+      ],
+
       const SizedBox(height: 16),
       Text(
         'Built by Angelo Nartey.',
@@ -469,7 +496,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       await ref.read(sessionRepositoryProvider).signInWithGoogle();
       await _saveRememberMe();
     } catch (e) {
-      if (mounted) setState(() => _error = _friendly(e));
+      if (mounted) setState(() { _error = _friendly(e); _failCount++; });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -481,10 +508,22 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       await ref.read(sessionRepositoryProvider).signInAnonymously();
       await _saveRememberMe();
     } catch (e) {
-      if (mounted) setState(() => _error = _friendly(e));
+      if (mounted) setState(() { _error = _friendly(e); _failCount++; });
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Bypass Firebase entirely — enter demo mode by navigating directly to the shell
+  void _enterDemoMode() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => (Platform.isIOS || Platform.isAndroid)
+            ? MobileShell(statusMessage: 'Running in demo mode (offline).')
+            : VibeShell(statusMessage: 'Running in demo mode (offline).'),
+      ),
+      (_) => false,
+    );
   }
 
   Future<void> _signInWithEmail() async {

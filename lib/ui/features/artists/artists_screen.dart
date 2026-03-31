@@ -302,6 +302,7 @@ class _ArtistGridScreen extends StatelessWidget {
                   Text(
                     '${artists.length} artists from ${allTracks.length} tracks  ·  Tap an artist to see their full catalog',
                     style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    maxLines: 1, overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
@@ -499,8 +500,8 @@ class _ArtistCardState extends State<_ArtistCard> {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Text(a.topGenre, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-                        const Spacer(),
+                        Flexible(child: Text(a.topGenre, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        const SizedBox(width: 4),
                         Text('${(a.avgTrendScore * 100).toInt()}', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 12)),
                       ],
                     ),
@@ -717,16 +718,15 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(a.name, style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
+                    Text(a.name, style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary), maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
                       children: [
                         _InfoChip(text: a.topGenre, color: AppTheme.violet),
-                        const SizedBox(width: 8),
                         _InfoChip(text: a.topRegion, color: AppTheme.cyan),
-                        const SizedBox(width: 8),
                         _InfoChip(text: '${a.trackCount} tracks', color: AppTheme.textSecondary),
-                        const SizedBox(width: 8),
                         _InfoChip(text: 'Score: ${(a.avgTrendScore * 100).toInt()}', color: AppTheme.amber),
                       ],
                     ),
@@ -1438,7 +1438,7 @@ class _RadarTrackCardState extends ConsumerState<_RadarTrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        Flexible(child: SourceBadges(sources: t.effectiveSources, compact: true)),
                       ],
                     ),
                   ],
@@ -2092,7 +2092,7 @@ class _CatalogTrackRowState extends ConsumerState<_CatalogTrackRow> {
                 children: [
                   Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 2),
-                  Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 11)),
+                  Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ],
               ),
             ),

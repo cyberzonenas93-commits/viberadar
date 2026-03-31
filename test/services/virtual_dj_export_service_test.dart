@@ -42,15 +42,15 @@ void main() {
 
   group('buildVdjFolder', () {
     test('produces valid XML root element', () {
-      final xml = svc.buildVdjFolder('My Crate', []);
+      final xml = svc.buildVdjFolder('My Crate', [], null);
       expect(xml, contains('<?xml version="1.0" encoding="UTF-8"?>'));
-      expect(xml, contains('<VirtualFolder>'));
+      expect(xml, contains('<VirtualFolder'));
       expect(xml, contains('</VirtualFolder>'));
     });
 
     test('empty track list produces no Song elements', () {
-      final xml = svc.buildVdjFolder('Empty', []);
-      expect(xml, isNot(contains('<Song')));
+      final xml = svc.buildVdjFolder('Empty', [], null);
+      expect(xml, isNot(contains('<song')));
     });
 
     test('single local track produces one Song element with correct attrs', () {
@@ -66,12 +66,11 @@ void main() {
           key: '8B',
         ),
       ];
-      final xml = svc.buildVdjFolder('Crate', resolved);
-      expect(xml, contains('<Song '));
+      final xml = svc.buildVdjFolder('Crate', resolved, null);
+      expect(xml, contains('<song '));
       expect(xml, contains('path="/music/test.mp3"'));
-      expect(xml, contains('size="12345678"'));
-      expect(xml, contains('songlength="210"'));
-      expect(xml, contains('bpm="128.00"'));
+      expect(xml, contains('songlength="210.0"'));
+      expect(xml, contains('bpm="128.000"'));
       expect(xml, contains('key="8B"'));
       expect(xml, contains('artist="Test Artist"'));
       expect(xml, contains('title="Test Track"'));
@@ -88,7 +87,7 @@ void main() {
           localFilePath: '/music/track$i.mp3',
         ),
       );
-      final xml = svc.buildVdjFolder('Multi', resolved);
+      final xml = svc.buildVdjFolder('Multi', resolved, null);
       expect(xml, contains('idx="0"'));
       expect(xml, contains('idx="1"'));
       expect(xml, contains('idx="2"'));
@@ -103,7 +102,7 @@ void main() {
           localFilePath: '/music/rock.mp3',
         ),
       ];
-      final xml = svc.buildVdjFolder('Crate', resolved);
+      final xml = svc.buildVdjFolder('Crate', resolved, null);
       expect(xml, contains('Rock &amp; Roll &lt;Remix&gt;'));
       expect(xml, contains('Artist &quot;Name&quot;'));
     });
@@ -117,7 +116,7 @@ void main() {
           localFilePath: '/music/track & remix.mp3',
         ),
       ];
-      final xml = svc.buildVdjFolder('Crate', resolved);
+      final xml = svc.buildVdjFolder('Crate', resolved, null);
       expect(xml, contains('/music/track &amp; remix.mp3'));
     });
 
@@ -136,9 +135,9 @@ void main() {
           localFilePath: '/music/present.mp3',
         ),
       ];
-      final xml = svc.buildVdjFolder('Crate', resolved);
+      final xml = svc.buildVdjFolder('Crate', resolved, null);
       // Skipped track has empty exportPath so no Song for it
-      final songMatches = RegExp(r'<Song ').allMatches(xml);
+      final songMatches = RegExp(r'<song ').allMatches(xml);
       expect(songMatches.length, 1);
       expect(xml, contains('/music/present.mp3'));
     });

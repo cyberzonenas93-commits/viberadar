@@ -531,14 +531,14 @@ class _ArtistSection extends StatelessWidget {
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.only(right: 20),
-                    itemCount: topTracks.take(8).length,
+                    itemCount: topTracks.take(30).length,
                     separatorBuilder: (context, index) => const SizedBox(width: 10),
                     itemBuilder: (context, i) {
                       final t = topTracks[i];
                       return _MiniTrackCard(
                         track: t,
                         rank: i + 1,
-                        allTracks: topTracks.take(8).toList(),
+                        allTracks: topTracks.take(30).toList(),
                         trackIndex: i,
                       );
                     },

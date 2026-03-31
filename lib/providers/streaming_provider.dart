@@ -114,9 +114,13 @@ class AppleMusicNotifier extends Notifier<AppleMusicState> {
       if (!_userStopped && _autoQueue.isNotEmpty) {
         // Natural end of track — advance to next in queue.
         final (nextTitle, nextArtist) = _autoQueue.removeAt(0);
-        // Small delay to avoid hammering the API at the exact end-of-track moment.
         await Future.delayed(const Duration(milliseconds: 300));
         await playByQuery(nextTitle, nextArtist);
+      } else if (!_userStopped && state.currentTrack != null) {
+        // Queue is empty but track ended naturally — find a similar track
+        // via Apple Music search and auto-advance.
+        state = state.copyWith(isPlaying: false, positionSeconds: 0.0);
+        await _autoAdvance();
       } else {
         state = state.copyWith(isPlaying: false, positionSeconds: 0.0);
       }
@@ -125,6 +129,39 @@ class AppleMusicNotifier extends Notifier<AppleMusicState> {
         isPlaying: status == 'playing',
         positionSeconds: currentTime,
       );
+    }
+  }
+
+  /// Auto-advance: search for a similar track and play it.
+  Future<void> _autoAdvance() async {
+    final current = state.currentTrack;
+    if (current == null) return;
+
+    try {
+      // Search for more tracks by the same artist or similar genre
+      final queries = [
+        current.artist,
+        '${current.artist} ${current.genre}',
+        current.genre.isNotEmpty ? current.genre : current.artist,
+      ];
+
+      for (final q in queries) {
+        if (q.isEmpty) continue;
+        final results = await _svc.search(q);
+        // Filter out the track that just played
+        final candidates = results.where((t) => t.id != current.id).toList();
+        if (candidates.isNotEmpty) {
+          // Pick a random track from top results for variety
+          candidates.shuffle();
+          final next = candidates.first;
+          dev.log('Apple Music auto-advance: "${next.title}" by ${next.artist}', name: 'AppleMusic');
+          await play(next);
+          return;
+        }
+      }
+      dev.log('Apple Music auto-advance: no candidates found', name: 'AppleMusic');
+    } catch (e) {
+      dev.log('Apple Music auto-advance error: $e', name: 'AppleMusic');
     }
   }
 

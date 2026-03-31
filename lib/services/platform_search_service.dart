@@ -1,6 +1,41 @@
+import 'dart:convert';
+import 'dart:developer' as dev;
+
+import 'package:http/http.dart' as http;
+
 import '../services/spotify_artist_service.dart';
 import '../services/apple_music_artist_service.dart';
 import '../services/youtube_search_service.dart';
+
+/// A lightweight album result from platform search.
+class PlatformAlbumResult {
+  final String id;
+  final String name;
+  final String artist;
+  final String? artworkUrl;
+  final String? releaseDate;
+  final int trackCount;
+  final String? spotifyId;
+  final String? appleMusicId;
+  final String platform; // 'spotify' or 'apple'
+
+  const PlatformAlbumResult({
+    required this.id,
+    required this.name,
+    required this.artist,
+    this.artworkUrl,
+    this.releaseDate,
+    this.trackCount = 0,
+    this.spotifyId,
+    this.appleMusicId,
+    this.platform = 'spotify',
+  });
+
+  String get year {
+    if (releaseDate == null || releaseDate!.isEmpty) return '';
+    return releaseDate!.length >= 4 ? releaseDate!.substring(0, 4) : releaseDate!;
+  }
+}
 
 /// A lightweight track result from platform search (not a full Firestore Track).
 class PlatformTrackResult {
@@ -134,6 +169,152 @@ class PlatformSearchService {
     }).toList();
     return filtered.isEmpty ? results.take(limit).toList() : filtered.take(limit).toList();
   }
+
+  // ── Album search ──────────────────────────────────────────────────────────
+
+  /// Search both Spotify and Apple Music for albums matching [query].
+  Future<List<PlatformAlbumResult>> searchAlbums(
+    String query, {
+    int limit = 20,
+  }) async {
+    final results = await Future.wait([
+      _searchSpotifyAlbums(query, limit: limit),
+      _searchAppleAlbums(query, limit: limit),
+    ]);
+
+    final spotifyAlbums = results[0];
+    final appleAlbums = results[1];
+
+    // Deduplicate by normalised name+artist
+    final map = <String, PlatformAlbumResult>{};
+    for (final a in spotifyAlbums) {
+      map[_normalizeKey(a.name, a.artist)] = a;
+    }
+    for (final a in appleAlbums) {
+      final key = _normalizeKey(a.name, a.artist);
+      if (!map.containsKey(key)) {
+        map[key] = a;
+      }
+    }
+
+    return map.values.take(limit).toList();
+  }
+
+  Future<List<PlatformAlbumResult>> _searchSpotifyAlbums(String query, {int limit = 20}) async {
+    try {
+      final token = await _spotify.getAccessToken();
+      if (token == null) return [];
+      final response = await http.get(
+        Uri.parse('https://api.spotify.com/v1/search?q=${Uri.encodeComponent(query)}&type=album&limit=$limit&market=US'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body);
+      final items = data['albums']?['items'] as List? ?? [];
+      return items.map((a) => PlatformAlbumResult(
+        id: a['id'] ?? '',
+        name: a['name'] ?? 'Unknown',
+        artist: (a['artists'] as List?)?.map((ar) => ar['name'].toString()).join(', ') ?? '',
+        artworkUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
+        releaseDate: a['release_date'] as String?,
+        trackCount: a['total_tracks'] as int? ?? 0,
+        spotifyId: a['id'] as String?,
+        platform: 'spotify',
+      )).toList();
+    } catch (e) {
+      dev.log('[PlatformSearch] Spotify album search error: $e', name: 'PlatformSearch');
+      return [];
+    }
+  }
+
+  Future<List<PlatformAlbumResult>> _searchAppleAlbums(String query, {int limit = 20}) async {
+    try {
+      final results = await _apple.searchAlbums(query, limit: limit);
+      return results.map((a) => PlatformAlbumResult(
+        id: a.id,
+        name: a.name,
+        artist: a.artistName ?? '',
+        artworkUrl: a.artworkUrl,
+        releaseDate: a.releaseDate,
+        trackCount: a.trackCount,
+        appleMusicId: a.id,
+        platform: 'apple',
+      )).toList();
+    } catch (e) {
+      dev.log('[PlatformSearch] Apple album search error: $e', name: 'PlatformSearch');
+      return [];
+    }
+  }
+
+  /// Fetch all tracks for a given album.
+  Future<List<PlatformTrackResult>> getAlbumTracks(String albumId, String platform) async {
+    if (platform == 'spotify') {
+      return _getSpotifyAlbumTracks(albumId);
+    } else {
+      return _getAppleAlbumTracks(albumId);
+    }
+  }
+
+  Future<List<PlatformTrackResult>> _getSpotifyAlbumTracks(String albumId) async {
+    try {
+      final tracks = await _spotify.getAlbumTracks(albumId);
+      return tracks.map((t) => PlatformTrackResult(
+        title: t.name,
+        artist: t.artists,
+        artworkUrl: t.albumArt,
+        spotifyUrl: t.spotifyUrl,
+        durationMs: t.durationMs,
+        popularity: t.popularity,
+      )).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<List<PlatformTrackResult>> _getAppleAlbumTracks(String albumId) async {
+    try {
+      final tracks = await _apple.getAlbumTracks(albumId);
+      return tracks.map((t) => PlatformTrackResult(
+        title: t.name,
+        artist: t.artistName,
+        artworkUrl: t.artworkUrl,
+        appleUrl: t.appleUrl,
+        durationMs: t.durationMs,
+      )).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Fetch new album releases from Spotify.
+  Future<List<PlatformAlbumResult>> getNewReleases({int limit = 20}) async {
+    try {
+      final token = await _spotify.getAccessToken();
+      if (token == null) return [];
+      final response = await http.get(
+        Uri.parse('https://api.spotify.com/v1/browse/new-releases?limit=$limit&country=US'),
+        headers: {'Authorization': 'Bearer $token'},
+      );
+      if (response.statusCode != 200) return [];
+      final data = jsonDecode(response.body);
+      final items = data['albums']?['items'] as List? ?? [];
+      return items.map((a) => PlatformAlbumResult(
+        id: a['id'] ?? '',
+        name: a['name'] ?? 'Unknown',
+        artist: (a['artists'] as List?)?.map((ar) => ar['name'].toString()).join(', ') ?? '',
+        artworkUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
+        releaseDate: a['release_date'] as String?,
+        trackCount: a['total_tracks'] as int? ?? 0,
+        spotifyId: a['id'] as String?,
+        platform: 'spotify',
+      )).toList();
+    } catch (e) {
+      dev.log('[PlatformSearch] New releases error: $e', name: 'PlatformSearch');
+      return [];
+    }
+  }
+
+  // ── Track search ────────────────────────────────────────────────────────────
 
   Future<List<PlatformTrackResult>> _searchSpotify(String query, {int limit = 50}) async {
     try {

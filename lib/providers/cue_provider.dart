@@ -21,6 +21,8 @@ class CueState {
     this.results = const {},
     this.error,
     this.lastVdjWriteResult,
+    this.batchProgress = 0,
+    this.batchTotal = 0,
   });
 
   /// True while a generation task is in progress.
@@ -38,12 +40,18 @@ class CueState {
   /// Result of the most recent VDJ database write.
   final VdjCueWriteResult? lastVdjWriteResult;
 
+  /// Batch generation progress counters.
+  final int batchProgress;
+  final int batchTotal;
+
   CueState copyWith({
     bool? isGenerating,
     String? generatingTrackId,
     Map<String, CueGenerationResult>? results,
     String? error,
     VdjCueWriteResult? lastVdjWriteResult,
+    int? batchProgress,
+    int? batchTotal,
     bool clearGeneratingTrackId = false,
     bool clearError = false,
     bool clearVdjWriteResult = false,
@@ -58,6 +66,8 @@ class CueState {
       lastVdjWriteResult: clearVdjWriteResult
           ? null
           : (lastVdjWriteResult ?? this.lastVdjWriteResult),
+      batchProgress: batchProgress ?? this.batchProgress,
+      batchTotal: batchTotal ?? this.batchTotal,
     );
   }
 
@@ -125,22 +135,34 @@ class CueNotifier extends Notifier<CueState> {
   /// Results are merged into [state.results] as they complete.
   Future<Map<String, CueGenerationResult>> generateForTracks(
       List<LibraryTrack> tracks) async {
-    state = state.copyWith(isGenerating: true, clearError: true);
+    state = state.copyWith(
+      isGenerating: true,
+      clearError: true,
+      batchProgress: 0,
+      batchTotal: tracks.length,
+    );
     final out = <String, CueGenerationResult>{};
     try {
-      for (final track in tracks) {
+      for (var i = 0; i < tracks.length; i++) {
+        final track = tracks[i];
+        state = state.copyWith(
+          batchProgress: i,
+          generatingTrackId: track.id,
+        );
         final result = await _analysis.generateCues(track);
         if (result.isSuccess) {
           await _export.saveCues(result);
         }
         out[track.id] = result;
+        // Merge incrementally so UI updates live
+        final updated = Map<String, CueGenerationResult>.from(state.results)
+          ..addAll(out);
+        state = state.copyWith(results: updated, batchProgress: i + 1);
       }
-      final updated = Map<String, CueGenerationResult>.from(state.results)
-        ..addAll(out);
       state = state.copyWith(
         isGenerating: false,
-        results: updated,
         clearGeneratingTrackId: true,
+        batchProgress: tracks.length,
       );
     } catch (e) {
       state = state.copyWith(

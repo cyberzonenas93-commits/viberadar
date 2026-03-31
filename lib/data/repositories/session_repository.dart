@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -27,31 +29,86 @@ abstract class SessionRepository {
 }
 
 class DemoSessionRepository implements SessionRepository {
+  final _controller = StreamController<SessionState>.broadcast();
+  SessionState _current = const SessionState.demo();
+
   @override
-  Stream<SessionState> sessionChanges() =>
-      Stream<SessionState>.value(const SessionState.demo());
+  Stream<SessionState> sessionChanges() async* {
+    yield _current;
+    yield* _controller.stream;
+  }
+
+  void _emit(SessionState state) {
+    _current = state;
+    _controller.add(state);
+  }
 
   @override
   Future<void> createAccount({
     required String email,
     required String password,
     required String displayName,
-  }) async {}
+  }) async {
+    _emit(SessionState(
+      userId: 'demo-${email.hashCode}',
+      displayName: displayName.isNotEmpty ? displayName : 'VibeRadar DJ',
+      email: email,
+      providerLabel: 'Email (Demo)',
+      isAuthenticated: true,
+      isDemo: true,
+    ));
+  }
 
   @override
   Future<void> signInWithEmail({
     required String email,
     required String password,
-  }) async {}
+  }) async {
+    _emit(SessionState(
+      userId: 'demo-${email.hashCode}',
+      displayName: 'VibeRadar DJ',
+      email: email,
+      providerLabel: 'Email (Demo)',
+      isAuthenticated: true,
+      isDemo: true,
+    ));
+  }
 
   @override
-  Future<void> signInWithGoogle() async {}
+  Future<void> signInWithGoogle() async {
+    _emit(const SessionState(
+      userId: 'demo-google',
+      displayName: 'Google DJ',
+      email: 'demo@google.com',
+      providerLabel: 'Google (Demo)',
+      isAuthenticated: true,
+      isDemo: true,
+    ));
+  }
 
   @override
-  Future<void> signInAnonymously() async {}
+  Future<void> signInAnonymously() async {
+    _emit(const SessionState(
+      userId: 'demo-guest',
+      displayName: 'Guest DJ',
+      email: '',
+      providerLabel: 'Guest',
+      isAuthenticated: true,
+      isDemo: true,
+    ));
+  }
 
   @override
-  Future<void> signOut() async {}
+  Future<void> signOut() async {
+    _emit(const SessionState(
+      userId: '',
+      displayName: '',
+      email: '',
+      providerLabel: '',
+      isAuthenticated: false,
+      isDemo: true,
+    ));
+  }
 }
 
 class FirebaseSessionRepository implements SessionRepository {
@@ -165,8 +222,14 @@ class FirebaseSessionRepository implements SessionRepository {
   @override
   Future<void> signInAnonymously() async {
     debugPrint('VIBERADAR: Signing in anonymously...');
-    await _auth.signInAnonymously();
-    debugPrint('VIBERADAR: Anonymous sign-in complete.');
+    try {
+      await _auth.signInAnonymously();
+      debugPrint('VIBERADAR: Anonymous sign-in complete.');
+    } catch (e) {
+      debugPrint('VIBERADAR: Firebase anonymous sign-in failed: $e');
+      // Rethrow so the UI can show the error and offer alternatives
+      rethrow;
+    }
   }
 
   @override

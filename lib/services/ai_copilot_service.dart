@@ -239,11 +239,11 @@ class AiCopilotService {
             body: jsonEncode({
               'model': model,
               'messages': messages,
-              'max_completion_tokens': 1500,
+              'max_completion_tokens': 16384,
               'temperature': 0.7,
             }),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
@@ -294,7 +294,7 @@ class AiCopilotService {
     request.body = jsonEncode({
       'model': model,
       'messages': messages,
-      'max_completion_tokens': 1500,
+      'max_completion_tokens': 4096,
       'temperature': 0.7,
       'stream': true,
     });

@@ -79,685 +79,215 @@ class DjPlayerBar extends ConsumerWidget {
     final dj = ref.watch(djPlayerProvider);
     if (!dj.isVisible) return const SizedBox.shrink();
 
-    return Container(
-      height: 200,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0A0A0F),
-        border: Border(
-          top: BorderSide(color: AppTheme.cyan, width: 1),
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Deck A (38%)
-          Expanded(
-            flex: 38,
-            child: _DeckPanel(deckIndex: 0, accent: AppTheme.cyan),
-          ),
-
-          // Divider
-          Container(width: 1, color: AppTheme.edge),
-
-          // Center mixer (24%)
-          Expanded(
-            flex: 24,
-            child: _CenterMixer(),
-          ),
-
-          // Divider
-          Container(width: 1, color: AppTheme.edge),
-
-          // Deck B (38%)
-          Expanded(
-            flex: 38,
-            child: _DeckPanel(deckIndex: 1, accent: AppTheme.violet),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Deck Panel ────────────────────────────────────────────────────────────────
-
-class _DeckPanel extends ConsumerWidget {
-  const _DeckPanel({required this.deckIndex, required this.accent});
-
-  final int deckIndex;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dj = ref.watch(djPlayerProvider);
-    final deck = deckIndex == 0 ? dj.deckA : dj.deckB;
+    // Show the active playing deck
+    final activeDeck = dj.activeDeck == 0 ? dj.deckA : dj.deckB;
+    final activeIdx = dj.activeDeck;
     final notifier = ref.read(djPlayerProvider.notifier);
-
-    if (!deck.hasTrack) {
-      return _EmptyDeckPanel(deckIndex: deckIndex, accent: accent);
-    }
-
-    final track = deck.track!;
-    final label = deckIndex == 0 ? 'A' : 'B';
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: artwork + info + close
-          Row(
-            children: [
-              // Deck label badge
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: accent, width: 1),
-                ),
-                child: Center(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: accent,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Artwork
-              _ArtworkWidget(artworkUrl: track.artworkUrl, accent: accent, size: 44),
-              const SizedBox(width: 8),
-              // Track info
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      track.title,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      track.artist,
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 10,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Row(
-                      children: [
-                        if (track.bpm > 0) ...[
-                          Text(
-                            '${_fmtBpm(deck.effectiveBpm)} BPM',
-                            style: TextStyle(
-                              color: accent,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                        ],
-                        if (track.key.isNotEmpty && track.key != '--')
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: Text(
-                              track.key,
-                              style: TextStyle(
-                                color: accent,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        if (deck.isNearEnd) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: AppTheme.amber.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(3),
-                            ),
-                            child: const Text(
-                              'ENDING',
-                              style: TextStyle(
-                                color: AppTheme.amber,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              // Close button
-              GestureDetector(
-                onTap: () => notifier.hide(),
-                child: const Icon(
-                  Icons.close_rounded,
-                  color: AppTheme.textTertiary,
-                  size: 14,
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 3),
-
-          // Waveform
-          GestureDetector(
-            onTapDown: (details) {
-              final box = context.findRenderObject() as RenderBox?;
-              if (box == null) return;
-              final local = details.localPosition;
-              final frac = (local.dx / box.size.width).clamp(0.0, 1.0);
-              notifier.seek(deckIndex, frac);
-            },
-            child: SizedBox(
-              height: 28,
-              child: CustomPaint(
-                painter: _WaveformPainter(
-                  progress: deck.progress,
-                  color: accent,
-                  trackId: track.id,
-                ),
-                size: Size.infinite,
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 2),
-
-          // Time row
-          Row(
-            children: [
-              Text(
-                _fmt(deck.position),
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                ),
-              ),
-              const Spacer(),
-              Text(
-                '-${_fmt(deck.remaining)}',
-                style: TextStyle(
-                  color: deck.isNearEnd ? AppTheme.amber : AppTheme.textTertiary,
-                  fontSize: 10,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 2),
-
-          // Transport buttons
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // CUE
-              _DjButton(
-                label: 'CUE',
-                color: AppTheme.amber,
-                active: deck.isCued,
-                onTap: () => deck.isCued
-                    ? notifier.jumpToCue(deckIndex)
-                    : notifier.setCue(deckIndex),
-              ),
-              const SizedBox(width: 4),
-              // Skip back
-              _IconBtn(
-                icon: Icons.skip_previous_rounded,
-                onTap: () => notifier.seek(deckIndex, 0.0),
-                color: AppTheme.textSecondary,
-              ),
-              const SizedBox(width: 4),
-              // Play/Pause
-              _PlayBtn(
-                isPlaying: deck.isPlaying,
-                isLoading: deck.isLoading,
-                accent: accent,
-                onTap: () => notifier.togglePlayPause(deckIndex),
-              ),
-              const SizedBox(width: 4),
-              // Skip forward 15s
-              _IconBtn(
-                icon: Icons.forward_10_rounded,
-                onTap: () {
-                  final pos = deck.position + const Duration(seconds: 15);
-                  final frac = pos.inMilliseconds / (deck.duration.inMilliseconds > 0 ? deck.duration.inMilliseconds : 1);
-                  notifier.seek(deckIndex, frac.clamp(0.0, 1.0));
-                },
-                color: AppTheme.textSecondary,
-              ),
-              const SizedBox(width: 4),
-              // LOOP
-              _DjButton(
-                label: 'LOOP',
-                color: AppTheme.lime,
-                active: deck.isLooping,
-                onTap: () => notifier.toggleLoop(deckIndex),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 2),
-
-          // Pitch slider row
-          Row(
-            children: [
-              const Text(
-                'PITCH',
-                style: TextStyle(
-                  color: AppTheme.textTertiary,
-                  fontSize: 8,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: accent,
-                    inactiveTrackColor: AppTheme.edge,
-                    thumbColor: accent,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                    trackHeight: 2,
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-                  ),
-                  child: Slider(
-                    value: deck.pitch,
-                    min: -8.0,
-                    max: 8.0,
-                    onChanged: (v) => notifier.setPitch(deckIndex, v),
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 38,
-                child: Text(
-                  '${deck.pitch >= 0 ? '+' : ''}${deck.pitch.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: deck.pitch == 0 ? AppTheme.textTertiary : accent,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  textAlign: TextAlign.right,
-                ),
-              ),
-            ],
-          ),
-
-          // EQ row
-          Row(
-            children: [
-              _EqSlider(
-                label: 'HI',
-                value: deck.eqHigh,
-                onChanged: (v) => notifier.setEq(deckIndex, high: v),
-                color: accent,
-              ),
-              const SizedBox(width: 4),
-              _EqSlider(
-                label: 'MID',
-                value: deck.eqMid,
-                onChanged: (v) => notifier.setEq(deckIndex, mid: v),
-                color: accent,
-              ),
-              const SizedBox(width: 4),
-              _EqSlider(
-                label: 'LOW',
-                value: deck.eqLow,
-                onChanged: (v) => notifier.setEq(deckIndex, low: v),
-                color: accent,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Empty deck placeholder ────────────────────────────────────────────────────
-
-class _EmptyDeckPanel extends StatelessWidget {
-  const _EmptyDeckPanel({required this.deckIndex, required this.accent});
-
-  final int deckIndex;
-  final Color accent;
-
-  @override
-  Widget build(BuildContext context) {
-    final label = deckIndex == 0 ? 'A' : 'B';
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-              border: Border.all(color: accent.withValues(alpha: 0.3), width: 1.5),
-            ),
-            child: Center(
-              child: Text(
-                label,
-                style: TextStyle(
-                  color: accent.withValues(alpha: 0.6),
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Deck $label — Drop track here',
-            style: TextStyle(
-              color: accent.withValues(alpha: 0.4),
-              fontSize: 11,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Center Mixer Panel ────────────────────────────────────────────────────────
-
-class _CenterMixer extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final dj = ref.watch(djPlayerProvider);
-    final notifier = ref.read(djPlayerProvider.notifier);
-
-    final bpmA = dj.deckA.effectiveBpm;
-    final bpmB = dj.deckB.effectiveBpm;
     final suggestion = notifier.nextSuggestion;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // BPM sync info
-          if (dj.deckA.hasTrack && dj.deckB.hasTrack) ...[
+    if (!activeDeck.hasTrack) return const SizedBox.shrink();
+    final track = activeDeck.track!;
+
+    return Container(
+      height: 80,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0A0F),
+        border: const Border(top: BorderSide(color: AppTheme.cyan, width: 1)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 20, offset: const Offset(0, -4))],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+        child: Row(
+          children: [
+            // Artwork
+            _ArtworkWidget(artworkUrl: track.artworkUrl, accent: AppTheme.cyan, size: 56),
+            const SizedBox(width: 12),
+
+            // Track info + waveform
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Title + artist row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(track.title,
+                              style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 13),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(track.artist,
+                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                              maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                      // Metadata badges
+                      if (track.bpm > 0)
+                        Container(
+                          margin: const EdgeInsets.only(left: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                          child: Text('${track.bpm.toStringAsFixed(0)} BPM',
+                            style: const TextStyle(color: AppTheme.amber, fontSize: 9, fontWeight: FontWeight.w700)),
+                        ),
+                      if (track.key.isNotEmpty && track.key != '--')
+                        Container(
+                          margin: const EdgeInsets.only(left: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
+                          child: Text(track.key,
+                            style: const TextStyle(color: AppTheme.cyan, fontSize: 9, fontWeight: FontWeight.w700)),
+                        ),
+                      if (activeDeck.isNearEnd)
+                        Container(
+                          margin: const EdgeInsets.only(left: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(color: AppTheme.amber.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(4)),
+                          child: const Text('ENDING', style: TextStyle(color: AppTheme.amber, fontSize: 8, fontWeight: FontWeight.w800)),
+                        ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  // Waveform + time
+                  Row(
+                    children: [
+                      Text(_fmt(activeDeck.position),
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontFamily: 'monospace')),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTapDown: (details) {
+                            final box = context.findRenderObject() as RenderBox?;
+                            if (box == null) return;
+                            // Calculate fraction within the waveform area
+                            final frac = (details.localPosition.dx / (box.size.width - 280)).clamp(0.0, 1.0);
+                            notifier.seek(activeIdx, frac);
+                          },
+                          child: SizedBox(
+                            height: 20,
+                            child: CustomPaint(
+                              painter: _WaveformPainter(progress: activeDeck.progress, color: AppTheme.cyan, trackId: track.id),
+                              size: Size.infinite,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text('-${_fmt(activeDeck.remaining)}',
+                        style: TextStyle(
+                          color: activeDeck.isNearEnd ? AppTheme.amber : AppTheme.textTertiary,
+                          fontSize: 10, fontFamily: 'monospace')),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(width: 12),
+
+            // Transport controls
             Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  _fmtBpm(bpmA),
-                  style: TextStyle(
-                    color: dj.bpmSynced ? AppTheme.lime : AppTheme.cyan,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
+                _IconBtn(icon: Icons.skip_previous_rounded, onTap: () => notifier.seek(activeIdx, 0.0), color: AppTheme.textSecondary),
+                const SizedBox(width: 6),
+                _PlayBtn(
+                  isPlaying: activeDeck.isPlaying,
+                  isLoading: activeDeck.isLoading,
+                  accent: AppTheme.cyan,
+                  onTap: () => notifier.togglePlayPause(activeIdx),
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4),
-                  child: Text(
-                    '→',
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
-                  ),
-                ),
-                Text(
-                  _fmtBpm(bpmB),
-                  style: TextStyle(
-                    color: dj.bpmSynced ? AppTheme.lime : AppTheme.violet,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                  ),
+                const SizedBox(width: 6),
+                _IconBtn(
+                  icon: Icons.skip_next_rounded,
+                  onTap: () {
+                    // Skip to next track
+                    if (suggestion != null) notifier.loadTrack(suggestion);
+                  },
+                  color: AppTheme.textSecondary,
                 ),
               ],
             ),
-            const SizedBox(height: 4),
-            // SYNC button
-            GestureDetector(
-              onTap: () => notifier.syncBpm(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+
+            const SizedBox(width: 12),
+
+            // Volume
+            SizedBox(
+              width: 80,
+              child: Row(
+                children: [
+                  const Icon(Icons.volume_up_rounded, color: AppTheme.textTertiary, size: 14),
+                  Expanded(
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        activeTrackColor: AppTheme.textSecondary,
+                        inactiveTrackColor: AppTheme.edge,
+                        thumbColor: Colors.white,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 4),
+                        trackHeight: 2,
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 8),
+                      ),
+                      child: Slider(value: dj.masterVolume, onChanged: (v) => notifier.setMasterVolume(v)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Next up chip + queue count
+            if (suggestion != null || dj.hasQueue)
+              Container(
+                width: 130,
+                margin: const EdgeInsets.only(left: 8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: dj.bpmSynced
-                      ? AppTheme.lime.withValues(alpha: 0.15)
-                      : AppTheme.edge,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: dj.bpmSynced ? AppTheme.lime : AppTheme.textTertiary,
-                    width: 1,
-                  ),
+                  color: AppTheme.panelRaised,
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: dj.hasQueue ? AppTheme.violet.withValues(alpha: 0.4) : AppTheme.edge),
                 ),
-                child: Text(
-                  dj.bpmSynced ? 'SYNCED' : 'SYNC BPM',
-                  style: TextStyle(
-                    color: dj.bpmSynced ? AppTheme.lime : AppTheme.textSecondary,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 3),
-          ] else
-            const SizedBox(height: 8),
-
-          // Crossfader label
-          Row(
-            children: [
-              const Text('A', style: TextStyle(color: AppTheme.cyan, fontSize: 10, fontWeight: FontWeight.w700)),
-              const Expanded(
-                child: Center(
-                  child: Text('CROSSFADER', style: TextStyle(color: AppTheme.textTertiary, fontSize: 8, fontWeight: FontWeight.w600)),
-                ),
-              ),
-              const Text('B', style: TextStyle(color: AppTheme.violet, fontSize: 10, fontWeight: FontWeight.w700)),
-            ],
-          ),
-
-          // Crossfader slider
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: AppTheme.violet,
-              inactiveTrackColor: AppTheme.cyan,
-              thumbColor: Colors.white,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
-              trackHeight: 4,
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
-            ),
-            child: Slider(
-              value: dj.crossfader,
-              onChanged: (v) => notifier.setCrossfader(v),
-            ),
-          ),
-
-          const SizedBox(height: 3),
-
-          // Auto-mix button
-          GestureDetector(
-            onTap: () => notifier.toggleAutoMix(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: dj.autoMix
-                    ? AppTheme.lime.withValues(alpha: 0.2)
-                    : AppTheme.edge,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: dj.autoMix ? AppTheme.lime : AppTheme.edge,
-                  width: 1,
-                ),
-                boxShadow: dj.autoMix
-                    ? [BoxShadow(color: AppTheme.lime.withValues(alpha: 0.25), blurRadius: 8)]
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.autorenew_rounded,
-                    color: dj.autoMix ? AppTheme.lime : AppTheme.textSecondary,
-                    size: 12,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    dj.autoMix ? 'AUTO-MIX ON' : 'AUTO-MIX',
-                    style: TextStyle(
-                      color: dj.autoMix ? AppTheme.lime : AppTheme.textSecondary,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 3),
-
-          // AUTO-QUEUE button
-          GestureDetector(
-            onTap: () => notifier.toggleAutoQueue(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: dj.autoQueue
-                    ? AppTheme.cyan.withValues(alpha: 0.2)
-                    : AppTheme.edge,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: dj.autoQueue ? AppTheme.cyan : AppTheme.edge,
-                  width: 1,
-                ),
-                boxShadow: dj.autoQueue
-                    ? [BoxShadow(
-                        color: AppTheme.cyan.withValues(alpha: 0.2),
-                        blurRadius: 6,
-                      )]
-                    : null,
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.queue_music_rounded,
-                    color: dj.autoQueue
-                        ? AppTheme.cyan
-                        : AppTheme.textSecondary,
-                    size: 12,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    dj.autoQueue ? 'AUTO-QUEUE ON' : 'AUTO-QUEUE',
-                    style: TextStyle(
-                      color: dj.autoQueue
-                          ? AppTheme.cyan
-                          : AppTheme.textSecondary,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 3),
-
-          // Master volume
-          Row(
-            children: [
-              const Icon(Icons.volume_up_rounded, color: AppTheme.textTertiary, size: 12),
-              const SizedBox(width: 4),
-              Expanded(
-                child: SliderTheme(
-                  data: SliderTheme.of(context).copyWith(
-                    activeTrackColor: AppTheme.textSecondary,
-                    inactiveTrackColor: AppTheme.edge,
-                    thumbColor: Colors.white,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
-                    trackHeight: 2,
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-                  ),
-                  child: Slider(
-                    value: dj.masterVolume,
-                    onChanged: (v) => notifier.setMasterVolume(v),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(children: [
+                      Text(
+                        dj.hasQueue ? 'QUEUE (${dj.queue.length})' : 'NEXT UP',
+                        style: TextStyle(
+                          color: dj.hasQueue ? AppTheme.violet : AppTheme.textTertiary,
+                          fontSize: 7, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                      ),
+                      const Spacer(),
+                      if (dj.hasQueue)
+                        GestureDetector(
+                          onTap: () => notifier.clearQueue(),
+                          child: const Text('CLEAR', style: TextStyle(color: AppTheme.textTertiary, fontSize: 7, fontWeight: FontWeight.w600)),
+                        ),
+                    ]),
+                    const SizedBox(height: 2),
+                    if (suggestion != null) ...[
+                      Text(suggestion.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Text(suggestion.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 8),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    ],
+                  ],
                 ),
               ),
-            ],
-          ),
 
-          const SizedBox(height: 4),
-
-          // Next suggestion chip — only when both decks aren't both active
-          // (saves vertical space when the BPM sync row is shown)
-          if (suggestion != null && (!dj.deckA.hasTrack || !dj.deckB.hasTrack || dj.autoQueue))
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(5),
-              decoration: BoxDecoration(
-                color: AppTheme.panelRaised,
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: AppTheme.edge, width: 1),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'NEXT UP',
-                    style: TextStyle(
-                      color: AppTheme.textTertiary,
-                      fontSize: 7,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    '${suggestion.artist} – ${suggestion.title}',
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  if (suggestion.bpm > 0)
-                    Text(
-                      '${suggestion.bpm.toStringAsFixed(0)} BPM'
-                      '${suggestion.key.isNotEmpty && suggestion.key != '--' ? ' · ${suggestion.key}' : ''}',
-                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 8),
-                    ),
-                ],
-              ),
+            // Close
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => notifier.hide(),
+              child: const Icon(Icons.close_rounded, color: AppTheme.textTertiary, size: 16),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

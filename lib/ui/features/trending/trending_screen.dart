@@ -257,7 +257,7 @@ class _TrackCardState extends State<_TrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        Flexible(child: SourceBadges(sources: t.effectiveSources, compact: true)),
                       ],
                     ),
                   ],

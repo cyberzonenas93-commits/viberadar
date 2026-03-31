@@ -8,6 +8,11 @@ import '../../../core/theme/app_theme.dart';
 import '../../../models/library_track.dart';
 import '../../../providers/library_provider.dart';
 import '../../../providers/dj_player_provider.dart';
+import '../../../providers/cue_provider.dart';
+import '../../../providers/smart_crate_provider.dart';
+import '../../../services/smart_crate_generator_service.dart';
+import '../../../models/cue_generation_result.dart';
+import '../../../models/hot_cue.dart';
 import '../../../services/platform_search_service.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -37,7 +42,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this);
   }
 
   @override
@@ -145,27 +150,33 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           if (lib.isScanning)
             _ScanProgressChip(scanned: lib.scanProgress, total: lib.scanTotal, label: lib.scanLabel)
           else
-            ElevatedButton.icon(
-              onPressed: () => ref.read(libraryProvider.notifier).fetchAllArtwork(),
-              icon: const Icon(Icons.image_rounded, size: 16),
-              label: const Text('Fetch Artwork'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.cyan.withValues(alpha: 0.2),
-                foregroundColor: AppTheme.cyan,
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton.icon(
-              onPressed: _pickAndScan,
-              icon: const Icon(Icons.refresh_rounded, size: 16),
-              label: const Text('Rescan'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.violet,
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _GenerateAllCuesButton(tracks: lib.tracks),
+                ElevatedButton.icon(
+                  onPressed: () => ref.read(libraryProvider.notifier).fetchAllArtwork(),
+                  icon: const Icon(Icons.image_rounded, size: 16),
+                  label: const Text('Fetch Artwork'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.cyan.withValues(alpha: 0.2),
+                    foregroundColor: AppTheme.cyan,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  onPressed: _pickAndScan,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Rescan'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.violet,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
             ),
         ],
       ),
@@ -190,6 +201,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           Tab(text: 'Create Crate'),
           Tab(text: 'Duplicates'),
           Tab(text: 'Stats'),
+          Tab(text: 'AI Crates'),
         ],
       ),
     );
@@ -204,6 +216,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         _buildCreateCrateTab(lib),
         _buildDuplicatesTab(lib),
         _buildStatsTab(lib),
+        _buildAiCratesTab(lib),
       ],
     );
   }
@@ -452,7 +465,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 const SizedBox(width: 10),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text('Crate created: $_crateCopied files copied', style: const TextStyle(color: AppTheme.lime, fontWeight: FontWeight.w600, fontSize: 12)),
-                  Text(_crateResultPath!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                  Text(_crateResultPath!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
                 ])),
                 TextButton(
                   onPressed: () => Process.run('open', [_crateResultPath!]),
@@ -540,16 +553,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             Row(children: [
               Icon(Icons.copy_rounded, size: 14, color: group.confidence >= 0.9 ? AppTheme.pink : AppTheme.amber),
               const SizedBox(width: 6),
-              Text(group.reasonLabel, style: TextStyle(
-                color: group.confidence >= 0.9 ? AppTheme.pink : AppTheme.amber,
-                fontSize: 11, fontWeight: FontWeight.w600)),
+              Flexible(
+                child: Text(group.reasonLabel, style: TextStyle(
+                  color: group.confidence >= 0.9 ? AppTheme.pink : AppTheme.amber,
+                  fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
               const SizedBox(width: 8),
               Text('${group.tracks.length} files · ${(group.confidence * 100).toStringAsFixed(0)}% confidence',
                   style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
               const Spacer(),
               if (group.recommended != null)
-                Text('Keep: ${group.recommended!.fileName}',
-                    style: const TextStyle(color: AppTheme.lime, fontSize: 10, fontWeight: FontWeight.w500)),
+                Flexible(
+                  child: Text('Keep: ${group.recommended!.fileName}',
+                      style: const TextStyle(color: AppTheme.lime, fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
             ]),
             const SizedBox(height: 8),
             ...group.tracks.map((t) => Padding(
@@ -616,6 +633,290 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 6: AI SMART CRATES
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildAiCratesTab(LibraryState lib) {
+    final sc = ref.watch(smartCrateProvider);
+    final scNotifier = ref.read(smartCrateProvider.notifier);
+
+    // Gather unique genres from library
+    final libraryGenres = lib.tracks
+        .map((t) => t.genre)
+        .where((g) => g.isNotEmpty && g != 'Unknown')
+        .toSet()
+        .toList()
+      ..sort();
+
+    // BPM range from library
+    final bpms = lib.tracks.where((t) => t.bpm > 0).map((t) => t.bpm);
+    final libMinBpm = bpms.isEmpty ? 60.0 : bpms.reduce((a, b) => a < b ? a : b);
+    final libMaxBpm = bpms.isEmpty ? 200.0 : bpms.reduce((a, b) => a > b ? a : b);
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
+      children: [
+        // ── Header ──────────────────────────────────────────────────────
+        Row(children: [
+          const Icon(Icons.auto_awesome_rounded, color: AppTheme.violet, size: 20),
+          const SizedBox(width: 8),
+          const Text('AI Smart Crate Generator',
+              style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 16)),
+        ]),
+        const SizedBox(height: 4),
+        const Text(
+          'Let AI analyze your library and create perfectly curated crates based on BPM, key, genre, and energy flow.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Preferences Panel ───────────────────────────────────────────
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.panel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.edge),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Genre chips
+              const Text('Genres', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: libraryGenres.take(20).map((genre) {
+                  final selected = sc.preferences.genres.contains(genre);
+                  return FilterChip(
+                    label: Text(genre, style: TextStyle(
+                      color: selected ? Colors.white : AppTheme.textSecondary,
+                      fontSize: 11,
+                    )),
+                    selected: selected,
+                    onSelected: (_) => scNotifier.toggleGenre(genre),
+                    selectedColor: AppTheme.violet,
+                    backgroundColor: AppTheme.surface,
+                    side: BorderSide(color: selected ? AppTheme.violet : AppTheme.edge),
+                    checkmarkColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                  );
+                }).toList(),
+              ),
+              if (sc.preferences.genres.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text('${sc.preferences.genres.length} selected',
+                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                ),
+
+              const SizedBox(height: 16),
+
+              // BPM range slider
+              Row(children: [
+                const Text('BPM Range', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text(
+                  '${(sc.preferences.minBpm ?? libMinBpm).toStringAsFixed(0)} - ${(sc.preferences.maxBpm ?? libMaxBpm).toStringAsFixed(0)}',
+                  style: const TextStyle(color: AppTheme.cyan, fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: AppTheme.violet,
+                  inactiveTrackColor: AppTheme.edge,
+                  thumbColor: AppTheme.violet,
+                  overlayColor: AppTheme.violet.withValues(alpha: 0.15),
+                  trackHeight: 3,
+                ),
+                child: RangeSlider(
+                  values: RangeValues(
+                    (sc.preferences.minBpm ?? libMinBpm).clamp(libMinBpm, libMaxBpm),
+                    (sc.preferences.maxBpm ?? libMaxBpm).clamp(libMinBpm, libMaxBpm),
+                  ),
+                  min: libMinBpm.floorToDouble(),
+                  max: libMaxBpm.ceilToDouble(),
+                  divisions: ((libMaxBpm - libMinBpm) / 5).round().clamp(1, 100),
+                  onChanged: (range) => scNotifier.setBpmRange(range.start, range.end),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Mood + Energy dropdowns
+              Row(children: [
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Mood', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    _AiCrateDropdown(
+                      value: sc.preferences.mood,
+                      items: const ['Chill', 'Warm-Up', 'Peak Hour', 'Cool Down', 'Eclectic'],
+                      onChanged: scNotifier.setMood,
+                    ),
+                  ],
+                )),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Energy', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 4),
+                    _AiCrateDropdown(
+                      value: sc.preferences.energyLevel,
+                      items: const ['Low', 'Medium', 'High', 'Building'],
+                      onChanged: scNotifier.setEnergyLevel,
+                    ),
+                  ],
+                )),
+              ]),
+
+              const SizedBox(height: 12),
+
+              // Crate count slider
+              Row(children: [
+                const Text('Number of Crates', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+                const Spacer(),
+                Text('${sc.preferences.crateCount}',
+                    style: const TextStyle(color: AppTheme.cyan, fontSize: 11, fontWeight: FontWeight.w600)),
+              ]),
+              SliderTheme(
+                data: SliderThemeData(
+                  activeTrackColor: AppTheme.violet,
+                  inactiveTrackColor: AppTheme.edge,
+                  thumbColor: AppTheme.violet,
+                  overlayColor: AppTheme.violet.withValues(alpha: 0.15),
+                  trackHeight: 3,
+                ),
+                child: Slider(
+                  value: sc.preferences.crateCount.toDouble(),
+                  min: 1,
+                  max: 10,
+                  divisions: 9,
+                  onChanged: (v) => scNotifier.setCrateCount(v.round()),
+                ),
+              ),
+
+              const SizedBox(height: 8),
+
+              // Custom instructions
+              const Text('Custom Instructions (optional)',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              TextField(
+                onChanged: (v) => scNotifier.setCustomPrompt(v.isEmpty ? null : v),
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'e.g. "Focus on tracks good for wedding receptions" or "Group by Camelot key zones"',
+                  hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                  filled: true,
+                  fillColor: AppTheme.surface,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.edge)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.edge)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: AppTheme.violet)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Generate button
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  gradient: sc.isGenerating
+                      ? null
+                      : const LinearGradient(colors: [AppTheme.violet, Color(0xFF6C4CFF)]),
+                  color: sc.isGenerating ? AppTheme.violet.withValues(alpha: 0.3) : null,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ElevatedButton.icon(
+                  onPressed: sc.isGenerating ? null : () => scNotifier.generate(),
+                  icon: sc.isGenerating
+                      ? const SizedBox(
+                          width: 16, height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: Text(sc.isGenerating ? 'Generating...' : 'Generate Smart Crates'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    backgroundColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    shadowColor: Colors.transparent,
+                    disabledBackgroundColor: Colors.transparent,
+                    disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // ── Progress ────────────────────────────────────────────────────
+        if (sc.isGenerating && sc.progress.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.violet.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              const SizedBox(
+                width: 18, height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.violet),
+              ),
+              const SizedBox(width: 12),
+              Expanded(child: Text(sc.progress,
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12))),
+            ]),
+          ),
+        ],
+
+        // ── Error ───────────────────────────────────────────────────────
+        if (sc.error != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.pink.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.pink.withValues(alpha: 0.3)),
+            ),
+            child: Row(children: [
+              const Icon(Icons.error_outline_rounded, color: AppTheme.pink, size: 18),
+              const SizedBox(width: 10),
+              Expanded(child: Text(sc.error!,
+                  style: const TextStyle(color: AppTheme.pink, fontSize: 12))),
+            ]),
+          ),
+        ],
+
+        // ── Generated Crate Results ─────────────────────────────────────
+        if (sc.crates.isNotEmpty) ...[
+          const SizedBox(height: 20),
+          Text('Generated ${sc.crates.length} Crates',
+              style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+          const SizedBox(height: 12),
+          ...sc.crates.asMap().entries.map((entry) => _AiCrateCard(
+            index: entry.key,
+            crate: entry.value,
+          )),
+        ],
+      ],
+    );
+  }
+
   Future<void> _pickAndScan() async {
     final result = await FilePicker.platform.getDirectoryPath(dialogTitle: 'Select your music folder');
     if (result != null && mounted) {
@@ -645,7 +946,9 @@ class _LibraryTrackCardState extends ConsumerState<_LibraryTrackCard> {
     final isOnDeckA = dj.deckA.track?.id == t.id;
     final isOnDeckB = dj.deckB.track?.id == t.id;
     final isPlaying = isOnDeckA || isOnDeckB;
-    return MouseRegion(
+    return GestureDetector(
+      onSecondaryTapUp: (details) => _showContextMenu(context, details.globalPosition, t),
+      child: MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
@@ -792,6 +1095,320 @@ class _LibraryTrackCardState extends ConsumerState<_LibraryTrackCard> {
             ),
           ],
         ),
+      ),
+    ));
+  }
+
+  void _showContextMenu(BuildContext context, Offset position, LibraryTrack track) {
+    final cueState = ref.read(cueProvider);
+    final hasCues = cueState.results.containsKey(track.id);
+
+    showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(position.dx, position.dy, position.dx, position.dy),
+      color: AppTheme.panel,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      items: [
+        const PopupMenuItem(value: 'play', child: Row(children: [
+          Icon(Icons.play_arrow_rounded, size: 16, color: AppTheme.cyan),
+          SizedBox(width: 8),
+          Text('Play', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+        ])),
+        const PopupMenuItem(value: 'play_next', child: Row(children: [
+          Icon(Icons.playlist_play_rounded, size: 16, color: AppTheme.violet),
+          SizedBox(width: 8),
+          Text('Play Next', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+        ])),
+        const PopupMenuItem(value: 'add_queue', child: Row(children: [
+          Icon(Icons.queue_music_rounded, size: 16, color: AppTheme.textSecondary),
+          SizedBox(width: 8),
+          Text('Add to Queue', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+        ])),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: 'cues', child: Row(children: [
+          Icon(Icons.flag_rounded, size: 16, color: AppTheme.amber),
+          SizedBox(width: 8),
+          Text('Generate Hot Cues', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+        ])),
+        if (hasCues)
+          PopupMenuItem(value: 'view_cues', child: Row(children: [
+            const Icon(Icons.view_list_rounded, size: 16, color: AppTheme.lime),
+            const SizedBox(width: 8),
+            Text('View Cues (${cueState.results[track.id]!.cues.length})',
+                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+          ])),
+        const PopupMenuItem(value: 'info', child: Row(children: [
+          Icon(Icons.info_outline_rounded, size: 16, color: AppTheme.textSecondary),
+          SizedBox(width: 8),
+          Text('Track Info', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
+        ])),
+      ],
+    ).then((value) {
+      if (value == null || !context.mounted) return;
+      switch (value) {
+        case 'play':
+          ref.read(djPlayerProvider.notifier).smartLoad(track);
+        case 'play_next':
+          ref.read(djPlayerProvider.notifier).playNext(track);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('"${track.title}" will play next'),
+            backgroundColor: AppTheme.violet.withValues(alpha: 0.9),
+            duration: const Duration(seconds: 2),
+          ));
+        case 'add_queue':
+          ref.read(djPlayerProvider.notifier).addToQueue(track);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('"${track.title}" added to queue'),
+            backgroundColor: AppTheme.cyan.withValues(alpha: 0.9),
+            duration: const Duration(seconds: 2),
+          ));
+        case 'cues':
+          _generateCuesForTrack(track);
+        case 'view_cues':
+          _showCueDialog(context, track, cueState.results[track.id]!);
+        case 'info':
+          _showTrackInfo(context, track);
+      }
+    });
+  }
+
+  Future<void> _generateCuesForTrack(LibraryTrack track) async {
+    try {
+      final result = await ref.read(cueProvider.notifier).generateForTrack(track);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Generated ${result.cues.length} cue points for "${track.title}"'),
+          backgroundColor: AppTheme.lime.withValues(alpha: 0.9),
+          duration: const Duration(seconds: 2),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Cue generation failed: $e'),
+          backgroundColor: AppTheme.pink,
+        ));
+      }
+    }
+  }
+
+  void _showCueDialog(BuildContext ctx, LibraryTrack track, CueGenerationResult result) {
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.panelRaised,
+        title: Text('Hot Cues: ${track.title}',
+            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('${result.cues.length} cues · ${result.highConfidenceCount} high-confidence',
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              const SizedBox(height: 12),
+              ...result.cues.map((cue) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(children: [
+                  Container(
+                    width: 12, height: 12,
+                    decoration: BoxDecoration(
+                      color: _parseHexColor(cue.cueType.vdjColor),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(cue.label,
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11))),
+                  Text(_formatSec(cue.timeSeconds),
+                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10, fontFamily: 'monospace')),
+                  const SizedBox(width: 8),
+                  Text('${(cue.confidence * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        color: cue.confidence >= 0.75 ? AppTheme.lime : AppTheme.amber,
+                        fontSize: 9, fontWeight: FontWeight.w600)),
+                ]),
+              )),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close', style: TextStyle(color: AppTheme.cyan)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatSec(double seconds) {
+    final s = seconds.toInt();
+    final m = s ~/ 60;
+    final frac = ((seconds - s) * 10).toInt();
+    return '${m.toString().padLeft(2, '0')}:${(s % 60).toString().padLeft(2, '0')}.$frac';
+  }
+
+  Color _parseHexColor(String hex) {
+    final h = hex.replaceFirst('#', '');
+    return Color(int.parse('FF$h', radix: 16));
+  }
+
+  void _showTrackInfo(BuildContext ctx, LibraryTrack track) {
+    showDialog(
+      context: ctx,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.panelRaised,
+        title: Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14)),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _infoRow('Artist', track.artist),
+              _infoRow('Album', track.album),
+              _infoRow('Genre', track.genre),
+              _infoRow('BPM', track.bpm > 0 ? track.bpm.toStringAsFixed(1) : 'Unknown'),
+              _infoRow('Key', track.key.isNotEmpty && track.key != '--' ? track.key : 'Unknown'),
+              _infoRow('Duration', '${(track.durationSeconds / 60).toStringAsFixed(1)} min'),
+              _infoRow('Format', track.fileExtension.replaceFirst('.', '').toUpperCase()),
+              _infoRow('Bitrate', '${track.bitrate} kbps'),
+              _infoRow('Size', track.fileSizeFormatted),
+              _infoRow('Path', track.filePath),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close', style: TextStyle(color: AppTheme.cyan)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 80, child: Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600))),
+        Expanded(child: Text(value, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11), overflow: TextOverflow.ellipsis, maxLines: 2)),
+      ],
+    ),
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Generate All Cues Button (with progress)
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _GenerateAllCuesButton extends ConsumerStatefulWidget {
+  final List<LibraryTrack> tracks;
+  const _GenerateAllCuesButton({required this.tracks});
+  @override
+  ConsumerState<_GenerateAllCuesButton> createState() => _GenerateAllCuesButtonState();
+}
+
+class _GenerateAllCuesButtonState extends ConsumerState<_GenerateAllCuesButton> {
+  bool _running = false;
+  String? _resultMessage;
+
+  Future<void> _run() async {
+    setState(() { _running = true; _resultMessage = null; });
+    try {
+      final results = await ref.read(cueProvider.notifier).generateForTracks(widget.tracks);
+      final success = results.values.where((r) => r.isSuccess).length;
+      final failed = results.values.where((r) => r.hasError).length;
+      final noMeta = results.values.where((r) => r.status == CueGenerationStatus.insufficientMetadata).length;
+      final total = results.length;
+
+      String msg;
+      if (success == total) {
+        msg = '$success tracks — cues generated';
+      } else if (success > 0) {
+        msg = '$success cues OK, $noMeta missing metadata, $failed failed';
+      } else {
+        msg = 'No cues generated — $noMeta tracks lack duration/BPM data';
+      }
+
+      if (mounted) {
+        setState(() { _running = false; _resultMessage = msg; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(msg),
+          backgroundColor: success > 0 ? AppTheme.lime.withValues(alpha: 0.9) : AppTheme.amber,
+          duration: const Duration(seconds: 4),
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() { _running = false; _resultMessage = 'Error: $e'; });
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Cue generation error: $e'),
+          backgroundColor: AppTheme.pink,
+        ));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cue = ref.watch(cueProvider);
+
+    if (_running || (cue.isGenerating && cue.batchTotal > 0)) {
+      final pct = cue.batchTotal > 0 ? cue.batchProgress / cue.batchTotal : 0.0;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.amber.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          SizedBox(
+            width: 16, height: 16,
+            child: CircularProgressIndicator(
+              value: pct > 0 ? pct : null,
+              strokeWidth: 2,
+              color: AppTheme.amber,
+              backgroundColor: AppTheme.amber.withValues(alpha: 0.2),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            cue.batchTotal > 0
+                ? '${cue.batchProgress}/${cue.batchTotal} tracks'
+                : 'Starting…',
+            style: const TextStyle(color: AppTheme.amber, fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+        ]),
+      );
+    }
+
+    // Show result summary if we have one
+    if (_resultMessage != null) {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        Flexible(child: Text(_resultMessage!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis)),
+        const SizedBox(width: 8),
+        _buildButton(),
+      ]);
+    }
+
+    return _buildButton();
+  }
+
+  Widget _buildButton() {
+    return ElevatedButton.icon(
+      onPressed: widget.tracks.isEmpty ? null : _run,
+      icon: const Icon(Icons.flag_rounded, size: 16),
+      label: const Text('Generate All Cues'),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: AppTheme.amber.withValues(alpha: 0.2),
+        foregroundColor: AppTheme.amber,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
@@ -1034,6 +1651,252 @@ class _StatsSection extends StatelessWidget {
         ]),
       )),
     ]);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// AI CRATE COMPONENTS
+// ══════════════════════════════════════════════════════════════════════════════
+
+class _AiCrateDropdown extends StatelessWidget {
+  final String? value;
+  final List<String> items;
+  final ValueChanged<String?> onChanged;
+  const _AiCrateDropdown({required this.value, required this.items, required this.onChanged});
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.surface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.edge),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          hint: const Text('Any', style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+          isExpanded: true,
+          isDense: true,
+          dropdownColor: AppTheme.panel,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+          items: [
+            const DropdownMenuItem<String>(value: null, child: Text('Any')),
+            ...items.map((i) => DropdownMenuItem(value: i, child: Text(i))),
+          ],
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+class _AiCrateCard extends ConsumerStatefulWidget {
+  final int index;
+  final GeneratedCrate crate;
+  const _AiCrateCard({required this.index, required this.crate});
+  @override
+  ConsumerState<_AiCrateCard> createState() => _AiCrateCardState();
+}
+
+class _AiCrateCardState extends ConsumerState<_AiCrateCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final crate = widget.crate;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.panel,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.edge),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header — always visible
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(children: [
+                Container(
+                  width: 40, height: 40,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [AppTheme.violet, AppTheme.cyan]),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Center(child: Text(
+                    '${widget.index + 1}',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                  )),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(crate.name, style: const TextStyle(
+                        color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14)),
+                    const SizedBox(height: 2),
+                    Text(crate.description, style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11), maxLines: 2, overflow: TextOverflow.ellipsis),
+                  ],
+                )),
+                const SizedBox(width: 8),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('${crate.tracks.length} tracks',
+                      style: const TextStyle(color: AppTheme.cyan, fontSize: 11, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(crate.totalDurationFormatted,
+                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                ]),
+                const SizedBox(width: 8),
+                Icon(
+                  _expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                  color: AppTheme.textSecondary, size: 20,
+                ),
+              ]),
+            ),
+          ),
+
+          // Expanded: track list + actions
+          if (_expanded) ...[
+            const Divider(color: AppTheme.edge, height: 1),
+            // Action buttons
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              child: Wrap(spacing: 8, runSpacing: 6, children: [
+                _AiCrateActionButton(
+                  icon: Icons.save_rounded,
+                  label: 'Save to Crates',
+                  color: AppTheme.lime,
+                  onTap: () {
+                    ref.read(smartCrateProvider.notifier).saveCrate(widget.index);
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('"${crate.name}" saved to your crates'),
+                      backgroundColor: AppTheme.lime.withValues(alpha: 0.9),
+                    ));
+                  },
+                ),
+                _AiCrateActionButton(
+                  icon: Icons.headset_rounded,
+                  label: 'Export VDJ',
+                  color: AppTheme.cyan,
+                  onTap: () => ref.read(smartCrateProvider.notifier).exportToVdj(widget.index, context),
+                ),
+                _AiCrateActionButton(
+                  icon: Icons.album_rounded,
+                  label: 'Export Serato',
+                  color: AppTheme.violet,
+                  onTap: () => ref.read(smartCrateProvider.notifier).exportToSerato(widget.index, context),
+                ),
+                _AiCrateActionButton(
+                  icon: Icons.playlist_play_rounded,
+                  label: 'Export M3U',
+                  color: AppTheme.amber,
+                  onTap: () => ref.read(smartCrateProvider.notifier).exportToM3u(widget.index, context),
+                ),
+              ]),
+            ),
+            // Track list
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: crate.tracks.asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final t = entry.value;
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        border: i < crate.tracks.length - 1
+                            ? const Border(bottom: BorderSide(color: AppTheme.edge, width: 0.5))
+                            : null,
+                      ),
+                      child: Row(children: [
+                        SizedBox(
+                          width: 22,
+                          child: Text('${i + 1}',
+                              style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10, fontFamily: 'monospace')),
+                        ),
+                        Expanded(child: Text(t.title,
+                            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                            overflow: TextOverflow.ellipsis)),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 80,
+                          child: Text(t.artist,
+                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        const SizedBox(width: 8),
+                        if (t.bpm > 0)
+                          SizedBox(
+                            width: 36,
+                            child: Text('${t.bpm.toStringAsFixed(0)}',
+                                style: const TextStyle(color: AppTheme.amber, fontSize: 10, fontWeight: FontWeight.w600),
+                                textAlign: TextAlign.right),
+                          ),
+                        const SizedBox(width: 8),
+                        if (t.key.isNotEmpty && t.key != '--')
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: AppTheme.cyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(t.key,
+                                style: const TextStyle(color: AppTheme.cyan, fontSize: 9, fontWeight: FontWeight.w700)),
+                          ),
+                      ]),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AiCrateActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback onTap;
+  const _AiCrateActionButton({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.onTap,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    );
   }
 }
 

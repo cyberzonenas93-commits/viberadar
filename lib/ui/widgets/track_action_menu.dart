@@ -6,7 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/track.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/streaming_provider.dart';
-import '../../providers/video_player_provider.dart';
+import '../../providers/track_selection_provider.dart';
 import '../features/cues/cue_preview_panel.dart';
 
 /// Shows a context menu when a track card is tapped.
@@ -39,17 +39,6 @@ void showTrackActionMenu(
             ],
           ),
         ),
-      // Play Video — resolves YouTube match and opens embedded player
-      const PopupMenuItem(
-        value: 'video',
-        child: Row(
-          children: [
-            Icon(Icons.videocam_rounded, color: Color(0xFFFF4B4B), size: 20),
-            SizedBox(width: 10),
-            Text('Play Video', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
-          ],
-        ),
-      ),
       // Divider between play and actions
       if (track.platformLinks.isNotEmpty)
         const PopupMenuDivider(),
@@ -61,6 +50,18 @@ void showTrackActionMenu(
             Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 18),
             const SizedBox(width: 10),
             const Text('Add to Crate',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+          ],
+        ),
+      ),
+      // Multi-select toggle
+      PopupMenuItem(
+        value: 'select',
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_outline_rounded, color: AppTheme.cyan, size: 18),
+            const SizedBox(width: 10),
+            const Text('Select',
                 style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
           ],
         ),
@@ -99,10 +100,10 @@ void showTrackActionMenu(
           if (url != null) _openUrl(url);
         }
       });
-    } else if (value == 'video') {
-      ref.read(videoPlayerProvider.notifier).playYouTube(track);
     } else if (value == 'crate') {
       _showAddToCrateSheet(context, ref, track);
+    } else if (value == 'select') {
+      ref.read(trackSelectionProvider.notifier).toggle(track.id);
     } else if (value == 'info') {
       _showTrackInfoSheet(context, ref, track);
     } else if (value == 'cues') {
@@ -205,10 +206,13 @@ void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
               const Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 20),
               const SizedBox(width: 10),
               Text('Add to Crate', style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
-              const Spacer(),
-              Text('${track.title} — ${track.artist}',
-                  style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
-                  overflow: TextOverflow.ellipsis),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Text('${track.title} — ${track.artist}',
+                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
           const SizedBox(height: 16),
@@ -307,9 +311,9 @@ void _showTrackInfoSheet(BuildContext context, WidgetRef ref, Track track) {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
+          Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w700), maxLines: 2, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 4),
-          Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
           const SizedBox(height: 16),
           Wrap(
             spacing: 10,
@@ -419,8 +423,11 @@ void showBulkAddToCrate(BuildContext context, WidgetRef ref, List<Track> tracks)
             children: [
               const Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 20),
               const SizedBox(width: 10),
-              Text('Add ${tracks.length} tracks to Crate',
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+              Expanded(
+                child: Text('Add ${tracks.length} tracks to Crate',
+                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
           const SizedBox(height: 16),

@@ -9,6 +9,8 @@ import '../../../models/track.dart';
 import '../../../models/user_profile.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/repositories.dart';
+import '../../../services/platform_search_service.dart';
+import '../../widgets/album_detail_sheet.dart';
 import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
 
@@ -28,6 +30,28 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   String _selectedGenre = 'All';
+  List<PlatformAlbumResult> _newAlbums = [];
+  bool _albumsLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNewAlbums();
+  }
+
+  Future<void> _loadNewAlbums() async {
+    try {
+      final albums = await PlatformSearchService().getNewReleases(limit: 20);
+      if (mounted) {
+        setState(() {
+          _newAlbums = albums;
+          _albumsLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _albumsLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -193,6 +217,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
 
         const SliverToBoxAdapter(child: SizedBox(height: 28)),
+
+        // ── New Albums ───────────────────────────────────────────────────
+        if (!_albumsLoading && _newAlbums.isNotEmpty) ...[
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+              child: _SectionHeader(icon: Icons.album_rounded, label: 'New Albums', color: AppTheme.violet, count: '${_newAlbums.length}'),
+            ),
+          ),
+          SliverToBoxAdapter(
+            child: SizedBox(
+              height: 200,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
+                itemCount: _newAlbums.length,
+                separatorBuilder: (_, i) => const SizedBox(width: 12),
+                itemBuilder: (ctx, i) => _NewAlbumCard(album: _newAlbums[i]),
+              ),
+            ),
+          ),
+          const SliverToBoxAdapter(child: SizedBox(height: 28)),
+        ],
 
         // ── Genre Quick Filters ───────────────────────────────────────────
         SliverToBoxAdapter(
@@ -475,7 +522,9 @@ class _HeroCardState extends State<_HeroCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Row(
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -486,13 +535,11 @@ class _HeroCardState extends State<_HeroCard> {
                                   Text('#1 TRENDING', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 9, letterSpacing: 0.5)),
                                 ]),
                               ),
-                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(color: AppTheme.violet.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
                                 child: Text(t.genre, style: const TextStyle(color: AppTheme.violet, fontSize: 10, fontWeight: FontWeight.w600)),
                               ),
-                              const SizedBox(width: 8),
                               SourceBadges(sources: t.effectiveSources, compact: true),
                             ],
                           ),
@@ -503,10 +550,18 @@ class _HeroCardState extends State<_HeroCard> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              _Pill('${t.bpm} BPM'), const SizedBox(width: 6),
-                              _Pill(t.keySignature), const SizedBox(width: 6),
-                              _Pill(t.leadRegion),
-                              const Spacer(),
+                              Flexible(
+                                child: Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  children: [
+                                    _Pill('${t.bpm} BPM'),
+                                    _Pill(t.keySignature),
+                                    _Pill(t.leadRegion),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                 decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(8)),
@@ -688,7 +743,7 @@ class _TrackCardState extends State<_TrackCard> {
                           child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
                         ),
                         const Spacer(),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        Flexible(child: SourceBadges(sources: t.effectiveSources, compact: true)),
                       ],
                     ),
                   ],
@@ -929,4 +984,106 @@ class _RegionPickerBadge extends ConsumerWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New Album card for horizontal scroll
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _NewAlbumCard extends StatefulWidget {
+  const _NewAlbumCard({required this.album});
+  final PlatformAlbumResult album;
+
+  @override
+  State<_NewAlbumCard> createState() => _NewAlbumCardState();
+}
+
+class _NewAlbumCardState extends State<_NewAlbumCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.album;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => showAlbumDetailSheet(context, a),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          width: 140,
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Artwork
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                      child: SizedBox.expand(
+                        child: a.artworkUrl != null
+                            ? CachedNetworkImage(imageUrl: a.artworkUrl!, fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _placeholder())
+                            : _placeholder(),
+                      ),
+                    ),
+                    if (_hovered)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 40, height: 40,
+                              decoration: BoxDecoration(
+                                color: AppTheme.violet,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: AppTheme.violet.withValues(alpha: 0.5), blurRadius: 14)],
+                              ),
+                              child: const Icon(Icons.album_rounded, color: Colors.white, size: 20),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              // Title and artist
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 7, 8, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(a.name,
+                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    const SizedBox(height: 2),
+                    Text(a.artist,
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _placeholder() => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised]),
+        ),
+        child: const Center(child: Icon(Icons.album_rounded, color: AppTheme.textTertiary, size: 28)),
+      );
 }

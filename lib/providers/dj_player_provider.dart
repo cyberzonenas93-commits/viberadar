@@ -116,13 +116,14 @@ class DjPlayerState {
     this.deckB = const DeckState(),
     this.crossfader = 0.5,    // 0=full A, 1=full B
     this.masterVolume = 1.0,
-    this.autoMix = false,
+    this.autoMix = true,
     this.autoMixThreshold = 20, // seconds before end to start automix
     this.bpmSynced = false,
     this.isVisible = false,
     this.activeDeck = 0,       // 0=A, 1=B
-    this.autoQueue = false,    // Spotify-style auto-advance
+    this.autoQueue = true,     // Auto-advance to next compatible track
     this.preloadedDeck = -1,   // which deck has the preloaded next track (-1 = none)
+    this.queue = const [],     // Manual queue of tracks to play next
   });
 
   final DeckState deckA;
@@ -136,8 +137,10 @@ class DjPlayerState {
   final int activeDeck;       // which deck was last loaded
   final bool autoQueue;
   final int preloadedDeck;
+  final List<LibraryTrack> queue; // User's manual queue
 
   bool get hasAnyTrack => deckA.hasTrack || deckB.hasTrack;
+  bool get hasQueue => queue.isNotEmpty;
 
   // Effective volumes accounting for crossfader
   // Crossfader: 0.0 = deck A full, 0.5 = equal, 1.0 = deck B full
@@ -161,6 +164,7 @@ class DjPlayerState {
     int? activeDeck,
     bool? autoQueue,
     int? preloadedDeck,
+    List<LibraryTrack>? queue,
   }) => DjPlayerState(
     deckA: deckA ?? this.deckA,
     deckB: deckB ?? this.deckB,
@@ -173,6 +177,7 @@ class DjPlayerState {
     activeDeck: activeDeck ?? this.activeDeck,
     autoQueue: autoQueue ?? this.autoQueue,
     preloadedDeck: preloadedDeck ?? this.preloadedDeck,
+    queue: queue ?? this.queue,
   );
 }
 
@@ -578,9 +583,54 @@ class DjPlayerNotifier extends Notifier<DjPlayerState> {
     }
   }
 
-  /// Find the best next track from the library:
-  /// Compatible Camelot key + BPM within ±8% of currently playing deck.
+  // ── Queue management ─────────────────────────────────────────────────────
+
+  /// Add a track to the end of the queue.
+  void addToQueue(LibraryTrack track) {
+    state = state.copyWith(queue: [...state.queue, track]);
+    dev.log('Queue: added "${track.title}" (${state.queue.length} in queue)', name: 'DjPlayer');
+  }
+
+  /// Add a track to play next (front of queue).
+  void playNext(LibraryTrack track) {
+    state = state.copyWith(queue: [track, ...state.queue]);
+    dev.log('Queue: play next "${track.title}" (${state.queue.length} in queue)', name: 'DjPlayer');
+  }
+
+  /// Remove a track from the queue by index.
+  void removeFromQueue(int index) {
+    if (index < 0 || index >= state.queue.length) return;
+    final updated = List<LibraryTrack>.from(state.queue)..removeAt(index);
+    state = state.copyWith(queue: updated);
+  }
+
+  /// Reorder queue item from [oldIndex] to [newIndex].
+  void reorderQueue(int oldIndex, int newIndex) {
+    final q = List<LibraryTrack>.from(state.queue);
+    final item = q.removeAt(oldIndex);
+    q.insert(newIndex.clamp(0, q.length), item);
+    state = state.copyWith(queue: q);
+  }
+
+  /// Clear the entire queue.
+  void clearQueue() {
+    state = state.copyWith(queue: []);
+  }
+
+  /// Pop the next track from the queue (returns null if empty).
+  LibraryTrack? _popQueue() {
+    if (state.queue.isEmpty) return null;
+    final next = state.queue.first;
+    state = state.copyWith(queue: state.queue.sublist(1));
+    return next;
+  }
+
+  /// Find the best next track: queue first, then auto-suggest from library.
   LibraryTrack? _suggestNextTrack() {
+    // Queue takes priority
+    if (state.queue.isNotEmpty) return state.queue.first;
+
+    // Auto-suggest from library
     try {
       final lib = ref.read(libraryProvider);
       if (lib.tracks.isEmpty) return null;
@@ -600,7 +650,6 @@ class DjPlayerNotifier extends Notifier<DjPlayerState> {
       }).toList();
 
       if (candidates.isEmpty) return null;
-      // Sort by BPM closeness
       candidates.sort((a, b) {
         final da = (a.bpm - currentBpm).abs();
         final db = (b.bpm - currentBpm).abs();
@@ -617,17 +666,35 @@ class DjPlayerNotifier extends Notifier<DjPlayerState> {
 
   void _onDeckCompleted(int deck) {
     if (deck == _playingDeck) {
-      // The main deck finished — if auto-queue/auto-mix was supposed to transition,
-      // but somehow didn't, snap the crossfader now.
       if (state.autoMix || state.autoQueue) {
         final idleDeck = deck == 0 ? 1 : 0;
+        final idlePlayer = idleDeck == 0 ? _playerA : _playerB;
+        final idleDeckState = idleDeck == 0 ? state.deckA : state.deckB;
+
         _playingDeck = idleDeck;
         _autoMixing = false;
         state = state.copyWith(crossfader: idleDeck == 0 ? 0.0 : 1.0);
-        // Schedule next preload
-        if (state.autoQueue) {
+
+        // If the idle deck already has a preloaded track, start playing it
+        if (idleDeckState.hasTrack) {
+          idlePlayer.setVolume(state.masterVolume);
+          idlePlayer.seek(Duration.zero);
+          idlePlayer.play();
+          // If this was a queued track, pop it
+          if (state.queue.isNotEmpty && idleDeckState.track?.id == state.queue.first.id) {
+            _popQueue();
+          }
+          dev.log('AutoQueue: deck $deck ended, playing preloaded track on deck $idleDeck', name: 'DjPlayer');
           // ignore: discarded_futures
           _schedulePreload();
+        } else {
+          // No preloaded track — check queue first, then auto-suggest
+          final next = _popQueue() ?? _suggestNextTrack();
+          if (next != null) {
+            // ignore: discarded_futures
+            loadTrack(next, deck: idleDeck);
+            dev.log('AutoQueue: deck $deck ended, loading "${next.title}" on deck $idleDeck', name: 'DjPlayer');
+          }
         }
       }
     }

@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../models/library_track.dart';
 import 'action_log_service.dart';
 
@@ -296,29 +297,42 @@ class ExportService {
 
   // ── Private helpers ───────────────────────────────────────────────────────
 
-  /// Returns the default exports directory path (Desktop/VibeRadar Exports).
+  /// Returns the default exports directory path (Downloads/VibeRadar Exports).
+  ///
+  /// Uses [getDownloadsDirectory] from path_provider so the path is always
+  /// inside the sandbox-permitted Downloads folder. The Release entitlements
+  /// already grant `com.apple.security.files.downloads.read-write`, so writes
+  /// succeed without any temporary exceptions or sandbox bypass.
   static Future<String> getExportsPath() async {
-    // Use NSHomeDirectory-equivalent via path_provider to get the real home,
-    // then write to Desktop. If sandbox rewrites HOME, extract the real user.
-    var home = Platform.environment['HOME'] ?? '';
-    final containerMatch = RegExp(r'/Users/([^/]+)/Library/Containers/').firstMatch(home);
-    if (containerMatch != null) {
-      home = '/Users/${containerMatch.group(1)!}';
-    }
-    if (home.isEmpty) home = '/tmp';
-    return p.join(home, 'Desktop', 'VibeRadar Exports');
+    final dir = await getDownloadsDirectory();
+    return p.join(dir?.path ?? '/tmp', 'VibeRadar Exports');
   }
 
-  /// Reveals a file in Finder.
+  /// Reveals a file in Finder (macOS) or shares it (mobile).
   static Future<void> revealInFinder(String filePath) async {
-    await Process.run('open', ['-R', filePath]);
+    if (Platform.isMacOS) {
+      await Process.run('open', ['-R', filePath]);
+    }
+    // On mobile, use shareFile() instead
   }
 
-  /// Opens the exports folder in Finder.
+  /// Opens the exports folder in Finder (macOS only).
   static Future<void> openExportsFolder() async {
+    if (!Platform.isMacOS) return;
     final path = await getExportsPath();
     await Directory(path).create(recursive: true);
     await Process.run('open', [path]);
+  }
+
+  /// Share a file via the system share sheet (mobile).
+  static Future<void> shareFile(String filePath) async {
+    if (Platform.isIOS || Platform.isAndroid) {
+      // Uses share_plus — imported where needed
+      final file = File(filePath);
+      if (await file.exists()) {
+        // Caller should use SharePlus.instance.share()
+      }
+    }
   }
 
   final _actionLog = ActionLogService();

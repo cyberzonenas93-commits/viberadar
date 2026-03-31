@@ -44,6 +44,7 @@ dependencies:
   flutter_dotenv: ^5.2.1
   just_audio: ^0.9.42
   xml: ^6.5.0
+  share_plus: ^12.0.2
 
   # Video playback
   webview_flutter: ^4.10.0

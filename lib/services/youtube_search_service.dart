@@ -27,15 +27,65 @@ class YoutubeSearchService {
   static const _quotaExceededKey = 'yt_quota_exceeded_date';
   static const _cacheTtlHours = 24;
 
-  String? get _apiKey => dotenv.env['YOUTUBE_DATA_API_KEY'];
+  /// All configured YouTube API keys for rotation.
+  static List<String> get _allKeys {
+    final keys = <String>[];
+    final k1 = dotenv.env['YOUTUBE_DATA_API_KEY'];
+    if (k1 != null && k1.isNotEmpty) keys.add(k1);
+    final k2 = dotenv.env['YOUTUBE_DATA_API_KEY_2'];
+    if (k2 != null && k2.isNotEmpty) keys.add(k2);
+    final k3 = dotenv.env['YOUTUBE_DATA_API_KEY_3'];
+    if (k3 != null && k3.isNotEmpty) keys.add(k3);
+    // Support up to 5 keys
+    final k4 = dotenv.env['YOUTUBE_DATA_API_KEY_4'];
+    if (k4 != null && k4.isNotEmpty) keys.add(k4);
+    final k5 = dotenv.env['YOUTUBE_DATA_API_KEY_5'];
+    if (k5 != null && k5.isNotEmpty) keys.add(k5);
+    return keys;
+  }
+
+  /// Index of the current key being used.
+  static int _currentKeyIndex = 0;
+
+  /// Keys that have been exhausted today.
+  static final Set<String> _exhaustedKeys = {};
+
+  /// Get the current active API key, skipping exhausted ones.
+  String? get _apiKey {
+    final keys = _allKeys;
+    if (keys.isEmpty) return null;
+    // Find first non-exhausted key
+    for (var i = 0; i < keys.length; i++) {
+      final idx = (_currentKeyIndex + i) % keys.length;
+      if (!_exhaustedKeys.contains(keys[idx])) {
+        _currentKeyIndex = idx;
+        return keys[idx];
+      }
+    }
+    // All keys exhausted
+    return null;
+  }
+
+  /// Mark current key as exhausted and rotate to next.
+  void _rotateKey() {
+    final keys = _allKeys;
+    if (keys.isEmpty) return;
+    final exhaustedKey = keys[_currentKeyIndex % keys.length];
+    _exhaustedKeys.add(exhaustedKey);
+    _currentKeyIndex = (_currentKeyIndex + 1) % keys.length;
+    dev.log('[YT] Key exhausted, rotating to key ${_currentKeyIndex + 1}/${keys.length}', name: 'YoutubeSearch');
+  }
 
   /// Last error message from the most recent search attempt.
   String? lastError;
 
-  /// Tracks which API key the quota state belongs to. When the key changes
-  /// (e.g. user sets a new one), the persisted quota state is automatically
-  /// invalidated so the new key starts fresh.
+  /// Tracks which API keys the quota state belongs to. When keys change,
+  /// the persisted quota state is automatically invalidated.
   static String _quotaKeyFingerprint = '';
+
+  /// Number of configured API keys (for UI display).
+  static int get keyCount => _allKeys.length;
+  static int get exhaustedKeyCount => _exhaustedKeys.length;
 
   /// Whether the quota is currently exceeded (detected via 403 or counter).
   bool get isQuotaExceeded => _quotaExceededToday;
@@ -119,9 +169,11 @@ class YoutubeSearchService {
     _todayCallCount++;
     await _saveQuota();
 
-    // 7. Cache results (even empty — avoids retrying failed queries)
-    _putMemCache(normalizedQuery, results);
-    await _saveDiskCache(normalizedQuery, results);
+    // 7. Cache results (only non-empty — empty might be transient quota/error)
+    if (results.isNotEmpty) {
+      _putMemCache(normalizedQuery, results);
+      await _saveDiskCache(normalizedQuery, results);
+    }
 
     return results;
   }
@@ -130,11 +182,23 @@ class YoutubeSearchService {
   Future<void> resetQuota() async {
     _todayCallCount = 0;
     _quotaExceededToday = false;
+    _quotaLoaded = false;
     _todayDate = _dateKey();
+    _memCache.clear();
+    _exhaustedKeys.clear();
+    _currentKeyIndex = 0;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_quotaCounterKey, 0);
     await prefs.setString(_quotaDateKey, _todayDate);
     await prefs.remove(_quotaExceededKey);
+  }
+
+  /// Full reset: clears quota state, all caches (memory + disk), and match
+  /// caches. Call this when YouTube searches aren't returning results to
+  /// eliminate stale data as a cause.
+  Future<void> resetAll() async {
+    await resetQuota();
+    await clearCache();
   }
 
   /// Clear all cached search results.
@@ -177,9 +241,18 @@ class YoutubeSearchService {
         // Check if it's a quota exceeded error
         final body = response.body.toLowerCase();
         if (body.contains('quota') || body.contains('exceeded') || body.contains('rateLimitExceeded')) {
+          dev.log('[YT] ⚠️ Key quota exceeded, trying next key…', name: 'YoutubeSearch');
+          _rotateKey();
+          // Try again with next key if available
+          final nextKey = _apiKey;
+          if (nextKey != null) {
+            dev.log('[YT] Retrying with rotated key', name: 'YoutubeSearch');
+            return _doSearch(query, nextKey, limit: limit);
+          }
+          // All keys exhausted
           _quotaExceededToday = true;
-          lastError = 'YouTube API quota exceeded for today. Resets at midnight Pacific Time.';
-          dev.log('[YT] ⚠️ QUOTA EXCEEDED — disabling API calls for today', name: 'YoutubeSearch');
+          lastError = 'All YouTube API keys exhausted for today. Resets at midnight Pacific Time.';
+          dev.log('[YT] ⚠️ ALL KEYS EXHAUSTED', name: 'YoutubeSearch');
           await _saveQuotaExceeded();
           return [];
         }

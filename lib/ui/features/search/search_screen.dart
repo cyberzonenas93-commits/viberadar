@@ -11,8 +11,12 @@ import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
 import '../../../providers/streaming_provider.dart';
 import '../../../services/apple_music_artist_service.dart';
+import '../../../services/platform_search_service.dart';
 import '../../../services/spotify_artist_service.dart';
 import '../../../services/youtube_search_service.dart';
+import '../../widgets/album_detail_sheet.dart';
+
+enum _SearchMode { songs, albums }
 
 // ── Unified search result model ───────────────────────────────────────────────
 
@@ -135,13 +139,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   final _spotify = SpotifyArtistService();
   final _apple = AppleMusicArtistService();
   final _youtube = YoutubeSearchService();
+  final _platformSearch = PlatformSearchService();
   final _controller = TextEditingController();
   final _focus = FocusNode();
 
   String _query = '';
   bool _searching = false;
+  _SearchMode _searchMode = _SearchMode.songs;
   List<_SearchResult> _results = [];
   List<YoutubeVideoResult> _youtubeResults = [];
+  List<PlatformAlbumResult> _albumResults = [];
   Timer? _debounce;
 
   @override
@@ -163,10 +170,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _debounce?.cancel();
     setState(() => _query = value);
     if (value.trim().isEmpty) {
-      setState(() { _results = []; _youtubeResults = []; _searching = false; });
+      setState(() { _results = []; _youtubeResults = []; _albumResults = []; _searching = false; });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(value.trim()));
+    _debounce = Timer(const Duration(milliseconds: 400), () {
+      if (_searchMode == _SearchMode.songs) {
+        _search(value.trim());
+      } else {
+        _searchAlbums(value.trim());
+      }
+    });
   }
 
   Future<void> _search(String q) async {
@@ -185,6 +198,21 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           results[1] as List<AppleMusicTrack>,
         );
         _youtubeResults = results[2] as List<YoutubeVideoResult>;
+        _searching = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Future<void> _searchAlbums(String q) async {
+    if (!mounted) return;
+    setState(() => _searching = true);
+    try {
+      final albums = await _platformSearch.searchAlbums(q, limit: 20);
+      if (!mounted) return;
+      setState(() {
+        _albumResults = albums;
         _searching = false;
       });
     } catch (_) {
@@ -263,7 +291,34 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+
+        // ── Search mode toggle ──────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 12, 28, 8),
+          child: Row(
+            children: [
+              _ModeToggle(
+                label: 'Songs',
+                isActive: _searchMode == _SearchMode.songs,
+                onTap: () {
+                  if (_searchMode == _SearchMode.songs) return;
+                  setState(() => _searchMode = _SearchMode.songs);
+                  if (_query.trim().isNotEmpty) _search(_query.trim());
+                },
+              ),
+              const SizedBox(width: 8),
+              _ModeToggle(
+                label: 'Albums',
+                isActive: _searchMode == _SearchMode.albums,
+                onTap: () {
+                  if (_searchMode == _SearchMode.albums) return;
+                  setState(() => _searchMode = _SearchMode.albums);
+                  if (_query.trim().isNotEmpty) _searchAlbums(_query.trim());
+                },
+              ),
+            ],
+          ),
+        ),
 
         // ── Body ─────────────────────────────────────────────────────────────
         Expanded(
@@ -275,38 +330,105 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                     _onQueryChanged(q);
                   },
                 )
-              : _searching && _results.isEmpty && _youtubeResults.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2),
-                          SizedBox(height: 16),
-                          Text('Searching Spotify, Apple Music, YouTube...', style: TextStyle(color: AppTheme.textSecondary)),
-                        ],
-                      ),
-                    )
-                  : _results.isEmpty && _youtubeResults.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.music_off_rounded, color: AppTheme.textTertiary, size: 48),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No results for "$_query"',
-                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _ResultsList(
-                          results: _results,
-                          youtubeResults: _youtubeResults,
-                          query: _query,
-                        ),
+              : _searchMode == _SearchMode.songs
+                  ? _buildSongResults()
+                  : _buildAlbumResults(),
         ),
       ],
+    );
+  }
+
+  Widget _buildSongResults() {
+    if (_searching && _results.isEmpty && _youtubeResults.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2),
+            SizedBox(height: 16),
+            Text('Searching Spotify, Apple Music, YouTube...', style: TextStyle(color: AppTheme.textSecondary)),
+          ],
+        ),
+      );
+    }
+    if (_results.isEmpty && _youtubeResults.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.music_off_rounded, color: AppTheme.textTertiary, size: 48),
+            const SizedBox(height: 12),
+            Text('No results for "$_query"', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          ],
+        ),
+      );
+    }
+    return _ResultsList(results: _results, youtubeResults: _youtubeResults, query: _query);
+  }
+
+  Widget _buildAlbumResults() {
+    if (_searching && _albumResults.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2),
+            SizedBox(height: 16),
+            Text('Searching albums...', style: TextStyle(color: AppTheme.textSecondary)),
+          ],
+        ),
+      );
+    }
+    if (_albumResults.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.album_rounded, color: AppTheme.textTertiary, size: 48),
+            const SizedBox(height: 12),
+            Text('No albums for "$_query"', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          ],
+        ),
+      );
+    }
+    return _AlbumResultsList(albums: _albumResults, query: _query);
+  }
+}
+
+// ── Search mode toggle pill ─────────────────────────────────────────────────
+
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({required this.label, required this.isActive, required this.onTap});
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+          decoration: BoxDecoration(
+            color: isActive ? AppTheme.cyan.withValues(alpha: 0.15) : AppTheme.panelRaised,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isActive ? AppTheme.cyan.withValues(alpha: 0.5) : AppTheme.edge.withValues(alpha: 0.4),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive ? AppTheme.cyan : AppTheme.textSecondary,
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -703,6 +825,193 @@ class _ResultSectionLabel extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Album results grid ──────────────────────────────────────────────────────
+
+class _AlbumResultsList extends StatelessWidget {
+  const _AlbumResultsList({required this.albums, required this.query});
+  final List<PlatformAlbumResult> albums;
+  final String query;
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
+          sliver: SliverToBoxAdapter(
+            child: Text('${albums.length} albums for "$query"',
+                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 200,
+              childAspectRatio: 0.78,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) => _AlbumCard(album: albums[i]),
+              childCount: albums.length,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _AlbumCard extends StatefulWidget {
+  const _AlbumCard({required this.album});
+  final PlatformAlbumResult album;
+
+  @override
+  State<_AlbumCard> createState() => _AlbumCardState();
+}
+
+class _AlbumCardState extends State<_AlbumCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.album;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => showAlbumDetailSheet(context, a),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      child: SizedBox.expand(
+                        child: a.artworkUrl != null
+                            ? CachedNetworkImage(
+                                imageUrl: a.artworkUrl!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, __, ___) => _albumArtPlaceholder(),
+                              )
+                            : _albumArtPlaceholder(),
+                      ),
+                    ),
+                    // Track count badge
+                    Positioned(
+                      top: 8, right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.7),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '${a.trackCount} tracks',
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ),
+                    // Platform badge
+                    Positioned(
+                      top: 8, left: 8,
+                      child: Container(
+                        width: 20, height: 20,
+                        decoration: BoxDecoration(
+                          color: (a.platform == 'spotify' ? const Color(0xFF1ED760) : const Color(0xFFFF7AB5)).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: (a.platform == 'spotify' ? const Color(0xFF1ED760) : const Color(0xFFFF7AB5)).withValues(alpha: 0.4)),
+                        ),
+                        child: Center(
+                          child: Text(
+                            a.platform == 'spotify' ? 'S' : 'A',
+                            style: TextStyle(
+                              color: a.platform == 'spotify' ? const Color(0xFF1ED760) : const Color(0xFFFF7AB5),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Hover overlay
+                    if (_hovered)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.3),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 44, height: 44,
+                              decoration: BoxDecoration(
+                                color: AppTheme.violet,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: AppTheme.violet.withValues(alpha: 0.5), blurRadius: 16)],
+                              ),
+                              child: const Icon(Icons.album_rounded, color: Colors.white, size: 22),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      a.name,
+                      style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      a.artist,
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (a.year.isNotEmpty) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        a.year,
+                        style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.6), fontSize: 10),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _albumArtPlaceholder() => Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised]),
+        ),
+        child: const Center(child: Icon(Icons.album_rounded, color: AppTheme.textTertiary, size: 32)),
+      );
 }
 
 // ── Grid card for search results (matches trending/region/genre card style) ──
@@ -1262,7 +1571,7 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
               children: [
                 const Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 20),
                 const SizedBox(width: 8),
-                const Text('Add to Crate', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
+                const Expanded(child: Text('Add to Crate', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 15))),
               ],
             ),
             const SizedBox(height: 4),
@@ -1380,12 +1689,12 @@ class _TrackDetailDialog extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 20)),
+                  Text(r.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 20), maxLines: 2, overflow: TextOverflow.ellipsis),
                   const SizedBox(height: 4),
-                  Text(r.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+                  Text(r.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
                   if (r.albumName.isNotEmpty) ...[
                     const SizedBox(height: 2),
-                    Text(r.albumName, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+                    Text(r.albumName, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                   const SizedBox(height: 16),
                   // Metadata pills
@@ -1488,7 +1797,7 @@ class _PlatformButton extends StatelessWidget {
               children: [
                 Icon(icon, color: color, size: 16),
                 const SizedBox(width: 6),
-                Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
+                Flexible(child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis)),
               ],
             ),
           ),

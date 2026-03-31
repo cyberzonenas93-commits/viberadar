@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as dev;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -17,26 +18,38 @@ class LibraryPersistenceService {
   }
 
   Future<void> save(List<LibraryTrack> tracks, String? scannedPath) async {
-    final file = await _getCacheFile();
-    final json = jsonEncode({
-      'scannedPath': scannedPath,
-      'savedAt': DateTime.now().toIso8601String(),
-      'tracks': tracks.map(_trackToJson).toList(),
-    });
-    await file.writeAsString(json);
+    try {
+      final file = await _getCacheFile();
+      final json = jsonEncode({
+        'scannedPath': scannedPath,
+        'savedAt': DateTime.now().toIso8601String(),
+        'tracks': tracks.map(_trackToJson).toList(),
+      });
+      await file.writeAsString(json);
+      dev.log('Library saved: ${tracks.length} tracks to ${file.path}', name: 'LibraryPersistence');
+    } catch (e) {
+      dev.log('Library save error: $e', name: 'LibraryPersistence');
+    }
   }
 
   Future<({List<LibraryTrack> tracks, String? scannedPath})?> load() async {
     try {
       final file = await _getCacheFile();
-      if (!file.existsSync()) return null;
+      dev.log('Library cache path: ${file.path}', name: 'LibraryPersistence');
+      if (!file.existsSync()) {
+        dev.log('Library cache file does not exist', name: 'LibraryPersistence');
+        return null;
+      }
       final raw = await file.readAsString();
+      dev.log('Library cache loaded: ${raw.length} bytes', name: 'LibraryPersistence');
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final tracks = (json['tracks'] as List)
           .map((e) => _trackFromJson(e as Map<String, dynamic>))
           .toList();
+      dev.log('Library cache parsed: ${tracks.length} tracks', name: 'LibraryPersistence');
       return (tracks: tracks, scannedPath: json['scannedPath'] as String?);
-    } catch (_) {
+    } catch (e, st) {
+      dev.log('Library cache load error: $e\n$st', name: 'LibraryPersistence');
       return null;
     }
   }

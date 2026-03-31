@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../models/video_playback_item.dart';
 import '../../providers/video_player_provider.dart';
 import 'local_video_player_panel.dart';
-import 'youtube_player_panel.dart';
 
 /// Floating video player overlay that appears in the bottom-right of the app.
 ///
@@ -101,15 +99,11 @@ class _VideoPlayerOverlayState extends ConsumerState<VideoPlayerOverlay> {
       );
     }
 
-    // Playing state
+    // Playing state — local video only
     final item = state.item;
     if (item == null) return const SizedBox.shrink();
 
-    if (item.sourceType == VideoSourceType.youtube) {
-      return YouTubePlayerPanel(item: item, onClose: onClose);
-    } else {
-      return LocalVideoPlayerPanel(item: item, onClose: onClose);
-    }
+    return LocalVideoPlayerPanel(item: item, onClose: onClose);
   }
 }
 
@@ -175,9 +169,10 @@ class _LoadingPanel extends StatelessWidget {
 // ── Error panel ───────────────────────────────────────────────────────────────
 
 class _ErrorPanel extends StatelessWidget {
-  const _ErrorPanel({required this.error, required this.onClose});
+  const _ErrorPanel({required this.error, required this.onClose, this.onRetry});
   final String error;
   final VoidCallback onClose;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -208,17 +203,37 @@ class _ErrorPanel extends StatelessWidget {
       ),
       SizedBox(
         width: 400,
-        height: 120,
+        height: 140,
         child: ColoredBox(
           color: Colors.black,
           child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                error,
-                style: const TextStyle(
-                    color: AppTheme.textSecondary, fontSize: 11),
-                textAlign: TextAlign.center,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    error,
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 11),
+                    textAlign: TextAlign.center,
+                  ),
+                  if (onRetry != null) ...[
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: onRetry,
+                      icon: const Icon(Icons.refresh_rounded, size: 14),
+                      label: const Text('Retry (Clear Cache)'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.cyan.withValues(alpha: 0.2),
+                        foregroundColor: AppTheme.cyan,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        textStyle: const TextStyle(fontSize: 11),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
           ),

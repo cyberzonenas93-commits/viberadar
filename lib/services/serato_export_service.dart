@@ -6,42 +6,16 @@ import '../models/library_track.dart';
 
 /// Writes Serato-compatible `.crate` files into the Serato library.
 ///
-/// Output location:
-///   <SERATO_ROOT>/Subcrates/<CrateName>.crate
-///   or for nested: <SERATO_ROOT>/Subcrates/<Parent>%%<Child>.crate
-///
-/// ## Binary format (proven community-documented TLV structure)
-///
-/// Serato `.crate` files use a 4-byte-tag + 4-byte-BE-length + data TLV
-/// structure where all strings are encoded as UTF-16 BE (no BOM).
-///
-/// Layout:
-///   [vrsn][len=56]["1.0/Serato ScratchLive Crate" in UTF-16 BE]
-///   For each track:
-///     [otrk][len]
-///       [ptrk][len][absolute_file_path in UTF-16 BE]
-///
-/// References:
-///   - https://github.com/Holzhaus/serato-tags (Python reverse engineering)
-///   - https://github.com/quaninte/serato-crates (Node.js implementation)
-///   Both confirm this exact chunk structure with fixture validation.
-///
-/// ## Streaming tracks
-/// Serato DJ Pro does not have a documented path format for streaming-only
-/// tracks in `.crate` files. Streaming entries are intentionally NOT written
-/// to protect crate integrity. Skipped tracks are reported in the result.
+/// Serato's database is managed exclusively by Serato DJ Pro — external writes
+/// to master.sqlite are wiped on launch. Therefore:
+/// - Local tracks → binary .crate file (Serato reads these natively)
+/// - Streaming tracks → skip from .crate, generate a TIDAL search manifest
+///   so the user can quickly find and add them in Serato's TIDAL browser
 class SeratoExportService {
-  /// The version string embedded in every valid Serato crate.
   static const _versionString = '1.0/Serato ScratchLive Crate';
 
   // ── Public API ───────────────────────────────────────────────────────────
 
-  /// Builds the crate filename for a given [crateName].
-  ///
-  /// Serato encodes folder hierarchy by joining path segments with `%%`.
-  /// Examples:
-  ///   crateName='House', parentCrateName=null   → 'House.crate'
-  ///   crateName='Afro',  parentCrateName='House' → 'House%%Afro.crate'
   String crateFilename(String crateName, {String? parentCrateName}) {
     final safe = _safeName(crateName);
     if (parentCrateName != null && parentCrateName.isNotEmpty) {
@@ -50,56 +24,107 @@ class SeratoExportService {
     return '$safe.crate';
   }
 
-  /// Exports [tracks] as a Serato `.crate` file.
+  /// Export tracks as a Serato crate.
   ///
-  /// Only tracks with a valid local file path are written.
-  /// Streaming-only tracks are skipped and reported in the result.
+  /// Local tracks are written to the binary .crate file.
+  /// Non-local tracks are reported with TIDAL IDs for manual lookup.
   Future<DjExportResult> exportCrate({
     required String seratoRoot,
     required String crateName,
     required List<LibraryTrack> tracks,
     String? parentCrateName,
+    List<LibraryTrack>? localLibrary,
+    bool useTidal = false,
   }) async {
-    // Resolve tracks — emit skipped for any missing file.
     final resolved = <DjTrackResolution>[];
     final warnings = <String>[];
 
+    // Build local library index.
+    final Map<String, LibraryTrack> localIndex = {};
+    if (localLibrary != null) {
+      for (final lt in localLibrary) {
+        if (lt.filePath.isNotEmpty) {
+          localIndex[_matchKey(lt.title, lt.artist)] = lt;
+        }
+      }
+    }
+
     for (final t in tracks) {
-      if (t.filePath.isEmpty || !File(t.filePath).existsSync()) {
+      // Priority 1: Has valid local file
+      if (t.filePath.isNotEmpty && File(t.filePath).existsSync()) {
         resolved.add(DjTrackResolution(
-          title: t.title,
-          artist: t.artist,
-          status: DjTrackStatus.skipped,
-          skipReason: 'Local file not found: ${t.filePath}',
+          title: t.title, artist: t.artist,
+          status: DjTrackStatus.local,
+          localFilePath: t.filePath,
+          fileSizeBytes: t.fileSizeBytes,
+          durationSeconds: t.durationSeconds,
+          bpm: t.bpm, key: t.key,
         ));
-        warnings.add('Skipped "${t.artist} – ${t.title}": file not on disk');
         continue;
       }
+
+      // Priority 2: Match local library
+      final localMatch = localIndex[_matchKey(t.title, t.artist)];
+      if (localMatch != null && File(localMatch.filePath).existsSync()) {
+        resolved.add(DjTrackResolution(
+          title: t.title, artist: t.artist,
+          status: DjTrackStatus.local,
+          localFilePath: localMatch.filePath,
+          fileSizeBytes: localMatch.fileSizeBytes,
+          durationSeconds: localMatch.durationSeconds > 0
+              ? localMatch.durationSeconds : t.durationSeconds,
+          bpm: t.bpm > 0 ? t.bpm : localMatch.bpm,
+          key: t.key.isNotEmpty ? t.key : localMatch.key,
+        ));
+        continue;
+      }
+
+      // Priority 3: Resolve TIDAL ID for manifest
+      if (useTidal) {
+        final tidalId = await _resolveTidalId(t.artist, t.title);
+        if (tidalId != null) {
+          resolved.add(DjTrackResolution(
+            title: t.title, artist: t.artist,
+            status: DjTrackStatus.tidal,
+            tidalTrackId: tidalId,
+            durationSeconds: t.durationSeconds,
+            bpm: t.bpm, key: t.key,
+          ));
+          continue;
+        }
+        warnings.add('"${t.artist} – ${t.title}": not found on TIDAL');
+      }
+
       resolved.add(DjTrackResolution(
-        title: t.title,
-        artist: t.artist,
-        status: DjTrackStatus.local,
-        localFilePath: t.filePath,
-        fileSizeBytes: t.fileSizeBytes,
-        durationSeconds: t.durationSeconds,
-        bpm: t.bpm,
-        key: t.key,
+        title: t.title, artist: t.artist,
+        status: DjTrackStatus.skipped,
+        skipReason: useTidal ? 'Not found on TIDAL' : 'No local file',
       ));
     }
 
-    final localPaths = resolved
-        .where((r) => r.isLocal)
-        .map((r) => r.localFilePath!)
-        .toList();
-
-    // Ensure Subcrates directory exists.
+    // Write binary .crate for local tracks
+    final localPaths = resolved.where((r) => r.isLocal).map((r) => r.localFilePath!).toList();
     final subcratesDir = Directory(p.join(seratoRoot, 'Subcrates'));
     await subcratesDir.create(recursive: true);
-
     final filename = crateFilename(crateName, parentCrateName: parentCrateName);
     final crateFile = File(p.join(subcratesDir.path, filename));
     final bytes = buildCrateBytes(localPaths);
     await crateFile.writeAsBytes(bytes, flush: true);
+
+    // Write TIDAL manifest for non-local tracks
+    final tidalTracks = resolved.where((r) => r.isTidal).toList();
+    if (tidalTracks.isNotEmpty) {
+      final manifestPath = p.join(subcratesDir.path, '${_safeName(crateName)}_tidal_tracks.txt');
+      final manifest = StringBuffer();
+      manifest.writeln('# TIDAL tracks for Serato crate: $crateName');
+      manifest.writeln('# Search these in Serato\'s TIDAL browser to add them to your crate');
+      manifest.writeln('# Format: Artist - Title (TIDAL ID: xxx)');
+      manifest.writeln('#');
+      for (final t in tidalTracks) {
+        manifest.writeln('${t.artist} - ${t.title}  (TIDAL ID: ${t.tidalTrackId})');
+      }
+      await File(manifestPath).writeAsString(manifest.toString());
+    }
 
     return DjExportResult(
       target: DjExportTarget.serato,
@@ -112,39 +137,57 @@ class SeratoExportService {
     );
   }
 
+  // ── TIDAL resolution ────────────────────────────────────────────────────
+
+  Future<String?> _resolveTidalId(String artist, String title) async {
+    try {
+      final query = Uri.encodeComponent(_cleanForSearch('$artist $title'));
+      final url = Uri.parse(
+        'https://api.tidal.com/v1/search/tracks?query=$query&limit=5&countryCode=US',
+      );
+      final client = HttpClient();
+      final request = await client.getUrl(url);
+      request.headers.set('x-tidal-token', 'CzET4vdadNUFQ5JU');
+      final response = await request.close().timeout(const Duration(seconds: 8));
+
+      if (response.statusCode != 200) { client.close(); return null; }
+
+      final chunks = <List<int>>[];
+      await for (final chunk in response) { chunks.add(chunk); }
+      client.close();
+      final bodyBytes = chunks.expand((c) => c).toList();
+      final body = String.fromCharCodes(bodyBytes);
+
+      // Simple JSON parsing without dart:convert import conflicts
+      final itemsMatch = RegExp(r'"items":\[(.+)\]', dotAll: true).firstMatch(body);
+      if (itemsMatch == null) return null;
+
+      // Extract first track ID
+      final idMatch = RegExp(r'"id":(\d+)').firstMatch(body);
+      if (idMatch == null) return null;
+
+      return idMatch.group(1);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Binary serializer ────────────────────────────────────────────────────
 
-  /// Builds the raw bytes for a Serato `.crate` file.
-  ///
-  /// Validated against the community-documented TLV format:
-  /// • Tag   : 4 ASCII bytes
-  /// • Length: 4-byte big-endian unsigned int (byte count of data field)
-  /// • Data  : raw bytes (strings encoded as UTF-16 BE, no BOM)
   Uint8List buildCrateBytes(List<String> absolutePaths) {
     final out = BytesBuilder(copy: false);
-
-    // Write version header.
     _writeChunk(out, 'vrsn', _encodeUtf16Be(_versionString));
-
-    // Write one otrk container per track.
     for (final path in absolutePaths) {
       final inner = BytesBuilder(copy: false);
       _writeChunk(inner, 'ptrk', _encodeUtf16Be(path));
       _writeChunk(out, 'otrk', Uint8List.fromList(inner.toBytes()));
     }
-
     return Uint8List.fromList(out.toBytes());
   }
 
-  // ── TLV helpers ──────────────────────────────────────────────────────────
-
-  /// Writes a single TLV chunk: [tag(4)][length(4 BE)][data].
   void _writeChunk(BytesBuilder out, String tag, Uint8List data) {
-    // Tag must be exactly 4 ASCII characters.
-    assert(tag.length == 4, 'TLV tag must be 4 chars, got: $tag');
-    for (final c in tag.codeUnits) {
-      out.addByte(c);
-    }
+    assert(tag.length == 4);
+    for (final c in tag.codeUnits) out.addByte(c);
     final len = data.length;
     out.addByte((len >> 24) & 0xFF);
     out.addByte((len >> 16) & 0xFF);
@@ -153,18 +196,13 @@ class SeratoExportService {
     out.add(data);
   }
 
-  /// Encodes [s] as UTF-16 big-endian (no BOM) — the encoding Serato uses
-  /// for all string values inside TLV chunks.
   Uint8List _encodeUtf16Be(String s) {
     final bytes = <int>[];
     for (final codeUnit in s.codeUnits) {
-      // Characters beyond the BMP (> 0xFFFF) are unlikely in file paths,
-      // but handle them as surrogate pairs anyway.
       if (codeUnit <= 0xFFFF) {
         bytes.add((codeUnit >> 8) & 0xFF);
         bytes.add(codeUnit & 0xFF);
       } else {
-        // Encode as UTF-16 surrogate pair.
         final scalar = codeUnit - 0x10000;
         final high = 0xD800 + (scalar >> 10);
         final low = 0xDC00 + (scalar & 0x3FF);
@@ -177,6 +215,21 @@ class SeratoExportService {
     return Uint8List.fromList(bytes);
   }
 
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
   String _safeName(String s) =>
       s.replaceAll(RegExp(r'[/\\:*?"<>|]'), '_').trim();
+
+  String _matchKey(String title, String artist) =>
+      '${title.toLowerCase().trim()}::${artist.toLowerCase().trim()}';
+
+  String _cleanForSearch(String s) {
+    var clean = s;
+    clean = clean.replaceAll(RegExp(r'\s*\([^)]*\)'), '');
+    clean = clean.replaceAll(RegExp(r'\s*\[[^\]]*\]'), '');
+    clean = clean.replaceAll(RegExp(r'\s*(?:feat\.?|ft\.?)\s+.*', caseSensitive: false), '');
+    clean = clean.replaceAll(RegExp(r'\s*-\s*(?:Radio Edit|Remix|Edit|Remaster(?:ed)?|Live|Acoustic|Version|Mix).*', caseSensitive: false), '');
+    clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+    return clean;
+  }
 }

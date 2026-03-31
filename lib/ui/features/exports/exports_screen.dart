@@ -144,11 +144,41 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
     final crateTrackIds = _selectedCrate != null
         ? crateState.crates[_selectedCrate] ?? []
         : <String>[];
+    // Resolve tracks from BOTH local library and streaming/Firestore sources
     final crateLibTracks = crateTrackIds
-        .map((id) => lib.tracks.firstWhere(
-              (t) => t.id == id,
-              orElse: () => _dummyTrack,
-            ))
+        .map((id) {
+          // First check local library
+          final local = lib.tracks.cast<LibraryTrack?>().firstWhere(
+                (t) => t?.id == id,
+                orElse: () => null,
+              );
+          if (local != null) return local;
+          // Then check streaming tracks — wrap as LibraryTrack stub
+          final vibe = vibeTracks.cast<Track?>().firstWhere(
+                (t) => t?.id == id,
+                orElse: () => null,
+              );
+          if (vibe != null) {
+            return LibraryTrack(
+              id: vibe.id,
+              filePath: '',
+              fileName: '',
+              title: vibe.title,
+              artist: vibe.artist,
+              album: '',
+              genre: vibe.genre,
+              bpm: vibe.bpm.toDouble(),
+              key: vibe.keySignature,
+              durationSeconds: 0,
+              fileSizeBytes: 0,
+              fileExtension: '',
+              md5Hash: '',
+              bitrate: 0,
+              sampleRate: 0,
+            );
+          }
+          return _dummyTrack;
+        })
         .where((t) => t.id != 'dummy')
         .toList();
 

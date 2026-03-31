@@ -120,6 +120,8 @@ class DjExportNotifier extends Notifier<DjExportState> {
   Future<DjExportResult?> exportToVirtualDj({
     required String crateName,
     required List<LibraryTrack> tracks,
+    VdjStreamingService? streamingService,
+    List<LibraryTrack>? localLibrary,
   }) async {
     final root = state.vdjRoot;
     if (root == null) {
@@ -137,6 +139,8 @@ class DjExportNotifier extends Notifier<DjExportState> {
         vdjRoot: root,
         playlistName: crateName,
         tracks: tracks,
+        streamingService: streamingService,
+        localLibrary: localLibrary,
       );
       state = state.copyWith(isExporting: false, lastResult: result);
       return result;
