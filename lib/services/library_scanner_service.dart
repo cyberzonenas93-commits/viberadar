@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
-import 'package:uuid/uuid.dart';
 import '../models/library_track.dart';
 
 /// Incremental scan cache entry — stores file identity so we can skip
@@ -18,7 +17,6 @@ class _ScanCacheEntry {
 }
 
 class LibraryScannerService {
-  static const _uuid = Uuid();
   static const _supportedExtensions = {
     '.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.aiff',
   };
@@ -100,7 +98,7 @@ class LibraryScannerService {
     final year = meta['year'] != null ? int.tryParse(meta['year']!) : null;
 
     final track = LibraryTrack(
-      id: _uuid.v4(),
+      id: hash,
       filePath: file.path,
       fileName: p.basename(file.path),
       title: title.isNotEmpty ? title : fileName,
