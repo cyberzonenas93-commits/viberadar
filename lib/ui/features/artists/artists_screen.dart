@@ -496,7 +496,7 @@ class _ArtistCardState extends State<_ArtistCard> {
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Text(a.topGenre, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                        Flexible(child: Text(a.topGenre, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), overflow: TextOverflow.ellipsis, maxLines: 1)),
                         const Spacer(),
                         Text('${(a.avgTrendScore * 100).toInt()}', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 12)),
                       ],
@@ -716,14 +716,13 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                   children: [
                     Text(a.name, style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
                       children: [
                         _InfoChip(text: a.topGenre, color: AppTheme.violet),
-                        const SizedBox(width: 8),
                         _InfoChip(text: a.topRegion, color: AppTheme.cyan),
-                        const SizedBox(width: 8),
                         _InfoChip(text: '${a.trackCount} tracks', color: AppTheme.textSecondary),
-                        const SizedBox(width: 8),
                         _InfoChip(text: 'Score: ${(a.avgTrendScore * 100).toInt()}', color: AppTheme.amber),
                       ],
                     ),
@@ -2226,7 +2225,7 @@ class _InfoChip extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600)),
+      child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1),
     );
   }
 }

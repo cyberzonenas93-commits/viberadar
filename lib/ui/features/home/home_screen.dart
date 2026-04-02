@@ -358,7 +358,7 @@ class _SectionHeader extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 18),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w600)),
+        Flexible(child: Text(label, style: TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1)),
         if (count != null) ...[
           const SizedBox(width: 8),
           Container(

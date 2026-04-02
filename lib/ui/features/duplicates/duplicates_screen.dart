@@ -347,12 +347,16 @@ class _BatchToolbar extends StatelessWidget {
           ),
         ],
         const Spacer(),
-        const Text(
-          'Changes take effect immediately. NEVER auto-deletes files.',
-          style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 10,
-              fontStyle: FontStyle.italic),
+        const Flexible(
+          child: Text(
+            'Changes take effect immediately. NEVER auto-deletes files.',
+            style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 10,
+                fontStyle: FontStyle.italic),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
       ]),
     );
@@ -533,11 +537,14 @@ class _DuplicateGroupCard extends StatelessWidget {
                 const Icon(Icons.auto_awesome_rounded,
                     color: AppTheme.amber, size: 11),
                 const SizedBox(width: 4),
-                Text(
-                  'Recommended to keep: ${rec.title.isNotEmpty ? rec.title : rec.fileName}  '
-                  '(${rec.bitrate} kbps  ·  ${rec.fileSizeFormatted})',
-                  style: const TextStyle(
-                      color: AppTheme.amber, fontSize: 10),
+                Flexible(
+                  child: Text(
+                    'Recommended to keep: ${rec.title.isNotEmpty ? rec.title : rec.fileName}  '
+                    '(${rec.bitrate} kbps  ·  ${rec.fileSizeFormatted})',
+                    style: const TextStyle(color: AppTheme.amber, fontSize: 10),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
                 ),
               ]),
             ),

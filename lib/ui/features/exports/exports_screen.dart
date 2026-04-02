@@ -9,6 +9,9 @@ import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
 import '../../../services/export_service.dart';
 import '../../../services/local_match_service.dart';
+import '../../../models/dj_export_models.dart';
+import 'dj_export_sheet.dart';
+import '../cues/cue_preview_sheet.dart';
 
 class ExportsScreen extends ConsumerStatefulWidget {
   const ExportsScreen({super.key});
@@ -410,39 +413,79 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                         ),
                         const SizedBox(width: 8),
                       ],
-                      if (crateLibTracks.isNotEmpty) ...[
-                        _ExportBtn(
-                          label: 'Rekordbox',
-                          icon: Icons.music_note_rounded,
-                          loading: _exportingFormat == 'rekordbox',
-                          onTap: () =>
-                              _export('rekordbox', crateLibTracks),
+                      if (crateLibTracks.isNotEmpty)
+                        Flexible(
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _ExportBtn(
+                                  label: 'Rekordbox',
+                                  icon: Icons.music_note_rounded,
+                                  loading: _exportingFormat == 'rekordbox',
+                                  onTap: () =>
+                                      _export('rekordbox', crateLibTracks),
+                                ),
+                                const SizedBox(width: 8),
+                                _ExportBtn(
+                                  label: 'Serato CSV',
+                                  icon: Icons.table_chart_rounded,
+                                  loading: _exportingFormat == 'serato',
+                                  onTap: () =>
+                                      _export('serato', crateLibTracks),
+                                ),
+                                const SizedBox(width: 8),
+                                _ExportBtn(
+                                  label: 'M3U',
+                                  icon: Icons.queue_music_rounded,
+                                  loading: _exportingFormat == 'm3u',
+                                  onTap: () =>
+                                      _export('m3u', crateLibTracks),
+                                ),
+                                const SizedBox(width: 8),
+                                _ExportBtn(
+                                  label: 'Traktor',
+                                  icon: Icons.folder_zip_rounded,
+                                  loading: _exportingFormat == 'traktor',
+                                  onTap: () =>
+                                      _export('traktor', crateLibTracks),
+                                ),
+                                const SizedBox(width: 8),
+                                _ExportBtn(
+                                  label: 'VirtualDJ',
+                                  icon: Icons.queue_music_rounded,
+                                  loading: false,
+                                  onTap: () => _exportDj(
+                                      DjTarget.virtualDj,
+                                      _selectedCrate!,
+                                      crateLibTracks),
+                                ),
+                                const SizedBox(width: 8),
+                                _ExportBtn(
+                                  label: 'Serato',
+                                  icon: Icons.album_rounded,
+                                  loading: false,
+                                  onTap: () => _exportDj(
+                                      DjTarget.serato,
+                                      _selectedCrate!,
+                                      crateLibTracks),
+                                ),
+                                const SizedBox(width: 8),
+                                _ExportBtn(
+                                  label: 'Auto Cue Crate',
+                                  icon: Icons.piano_rounded,
+                                  loading: false,
+                                  onTap: () => showCueCrateSheet(
+                                    context: context,
+                                    ref: ref,
+                                    tracks: crateLibTracks,
+                                    crateName: _selectedCrate,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        _ExportBtn(
-                          label: 'Serato CSV',
-                          icon: Icons.table_chart_rounded,
-                          loading: _exportingFormat == 'serato',
-                          onTap: () =>
-                              _export('serato', crateLibTracks),
-                        ),
-                        const SizedBox(width: 8),
-                        _ExportBtn(
-                          label: 'M3U',
-                          icon: Icons.queue_music_rounded,
-                          loading: _exportingFormat == 'm3u',
-                          onTap: () =>
-                              _export('m3u', crateLibTracks),
-                        ),
-                        const SizedBox(width: 8),
-                        _ExportBtn(
-                          label: 'Traktor',
-                          icon: Icons.folder_zip_rounded,
-                          loading: _exportingFormat == 'traktor',
-                          onTap: () =>
-                              _export('traktor', crateLibTracks),
-                        ),
-                      ],
                     ]),
                   ),
                   if (_lastExportPath != null)
@@ -719,6 +762,54 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
               ),
       ),
     ]);
+  }
+
+  /// Builds a synthetic TrackMatch list from local library tracks so the
+  /// DJ export services can consume them without requiring a prior match run.
+  /// If [_matchResults] is already populated, those are used directly so
+  /// TIDAL links from cloud tracks are preserved.
+  List<TrackMatch> _buildMatchList(List<LibraryTrack> libTracks) {
+    if (_matchResults != null) return _matchResults!;
+    // Synthetic matches: every library track is treated as a local match.
+    // TIDAL links won't be available here — run the match panel first if needed.
+    final now = DateTime.now();
+    return libTracks
+        .map((lt) => TrackMatch(
+              vibeTrack: Track(
+                id: lt.id,
+                title: lt.title,
+                artist: lt.artist,
+                artworkUrl: '',
+                bpm: lt.bpm.toInt(),
+                keySignature: lt.key,
+                genre: lt.genre,
+                vibe: '',
+                trendScore: 0,
+                regionScores: const {},
+                platformLinks: const {},
+                createdAt: now,
+                updatedAt: now,
+                energyLevel: 0,
+                trendHistory: const [],
+              ),
+              status: MatchStatus.found,
+              localFilePath: lt.filePath,
+              matchScore: 1.0,
+            ))
+        .toList();
+  }
+
+  Future<void> _exportDj(
+      DjTarget target, String crateName, List<LibraryTrack> libTracks) async {
+    if (crateName.isEmpty) return;
+    final matches = _buildMatchList(libTracks);
+    await showDjExportSheet(
+      context: context,
+      ref: ref,
+      target: target,
+      playlistName: crateName,
+      matches: matches,
+    );
   }
 
   Future<void> _export(String format, List<LibraryTrack> tracks) async {

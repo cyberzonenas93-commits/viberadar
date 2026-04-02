@@ -1,8 +1,13 @@
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
+import '../models/dj_export_models.dart';
 import '../models/library_track.dart';
 import 'action_log_service.dart';
+import '../services/dj_root_detection_service.dart';
+import '../services/local_match_service.dart';
+import '../services/serato_export_service.dart';
+import '../services/virtual_dj_export_service.dart';
 
 // ── Physical crate types ──────────────────────────────────────────────────────
 
@@ -43,6 +48,13 @@ class ExportCrate {
 // ── Export service ────────────────────────────────────────────────────────────
 
 class ExportService {
+  // ── Specialist services (lazily wired) ─────────────────────────────────────
+  final _vdjService = VirtualDjExportService();
+  final _seratoService = SeratoExportService();
+  final _rootDetection = DjRootDetectionService();
+
+  // ── Existing formats (unchanged) ─────────────────────────────────────────
+
   Future<String> exportRekordboxXml(ExportCrate crate) async {
     final buf = StringBuffer();
     buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
@@ -207,16 +219,88 @@ class ExportService {
     return _save('${_safeName(crateName)}_missing.txt', buf.toString());
   }
 
+  // ── DJ software exports ───────────────────────────────────────────────────
+
+  /// Exports [matches] to VirtualDJ.
+  ///
+  /// Resolves the VirtualDJ root automatically; falls back to [overrideRoot]
+  /// when auto-detection fails and the caller has already prompted the user.
+  /// Persists the confirmed root for future calls.
+  Future<DjExportResult> exportToVirtualDj({
+    required String playlistName,
+    required List<TrackMatch> matches,
+    bool useTidal = false,
+    Map<String, String> tidalIds = const {},
+    String? overrideRoot,
+  }) async {
+    final root = await _resolveAndPersistVdjRoot(overrideRoot);
+    if (root == null) {
+      throw StateError(
+        'VirtualDJ root not found. Please open VirtualDJ at least once or'
+        ' choose the folder manually.',
+      );
+    }
+
+    return _vdjService.export(
+      playlistName: playlistName,
+      matches: matches,
+      vdjRoot: root,
+      useTidal: useTidal,
+      tidalIds: tidalIds,
+    );
+  }
+
+  /// Exports [matches] to a Serato `.crate` file.
+  ///
+  /// Resolves the Serato root automatically; falls back to [overrideRoot]
+  /// when the caller has already prompted the user.
+  /// Persists the confirmed root for future calls.
+  Future<DjExportResult> exportToSerato({
+    required String playlistName,
+    required List<TrackMatch> matches,
+    String? parentCrateName,
+    String? overrideRoot,
+  }) async {
+    final root = await _resolveAndPersistSeratoRoot(overrideRoot);
+    if (root == null) {
+      throw StateError(
+        'Serato root not found. Please open Serato at least once or choose'
+        ' the folder manually.',
+      );
+    }
+
+    return _seratoService.export(
+      playlistName: playlistName,
+      matches: matches,
+      seratoRoot: root,
+      parentCrateName: parentCrateName,
+    );
+  }
+
+  // ── Root resolution helpers ───────────────────────────────────────────────
+
+  Future<String?> _resolveAndPersistVdjRoot(String? override) async {
+    if (override != null && _rootDetection.validateVirtualDjRoot(override)) {
+      await _rootDetection.persistVirtualDjRoot(override);
+      return override;
+    }
+    final root = await _rootDetection.resolveVirtualDjRoot();
+    if (root != null) await _rootDetection.persistVirtualDjRoot(root);
+    return root;
+  }
+
+  Future<String?> _resolveAndPersistSeratoRoot(String? override) async {
+    if (override != null && _rootDetection.validateSeratoRoot(override)) {
+      await _rootDetection.persistSeratoRoot(override);
+      return override;
+    }
+    final root = await _rootDetection.resolveSeratoRoot();
+    if (root != null) await _rootDetection.persistSeratoRoot(root);
+    return root;
+  }
+
   // ── Physical crate creation ───────────────────────────────────────────────
 
-  /// Creates a physical crate on disk.
-  ///
-  /// - [CrateType.virtualOnly]  → writes an M3U playlist only (no file copy).
-  /// - [CrateType.copyFiles]    → copies each source file into `destinationDir/crateName/`.
-  /// - [CrateType.aliasLinks]   → creates macOS symlinks (dart:io Link) to source files.
-  ///
-  /// Returns a [PhysicalCrateResult] with copy counts and any errors.
-  /// The [onProgress] callback reports `(done, total)` as each file is processed.
   Future<PhysicalCrateResult> createPhysicalCrate({
     required List<LibraryTrack> tracks,
     required String crateName,
@@ -225,7 +309,6 @@ class ExportService {
     bool overwriteExisting = false,
     void Function(int done, int total)? onProgress,
   }) async {
-    // Virtual-only → just write M3U and return immediately.
     if (type == CrateType.virtualOnly) {
       final m3uPath =
           await exportM3u(ExportCrate(name: crateName, tracks: tracks));
@@ -273,7 +356,6 @@ class ExportService {
           await src.copy(destPath);
           copied++;
         } else {
-          // aliasLinks — macOS symlink
           if (destFile.existsSync()) await destFile.delete();
           await Link(destPath).create(t.filePath, recursive: false);
           copied++;

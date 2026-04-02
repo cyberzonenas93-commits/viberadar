@@ -497,6 +497,8 @@ class _MetadataGrid extends StatelessWidget {
                     style: Theme.of(
                       context,
                     ).textTheme.titleSmall?.copyWith(color: Colors.white),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),

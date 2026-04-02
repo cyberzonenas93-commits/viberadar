@@ -152,8 +152,10 @@ class LibraryScannerService {
     final ext = p.extension(file.path).toLowerCase();
     final fileName = p.basenameWithoutExtension(file.path);
 
-    // Fast hash: path + size + mtime — no file I/O needed
-    final hashInput = '${file.path}:${stat.size}:${stat.modified.millisecondsSinceEpoch}';
+    // Stable hash: path + size only — dropping mtime keeps the ID consistent
+    // across rescans as long as the file hasn't been replaced with a different
+    // sized file, covering the vast majority of real-world DJ library cases.
+    final hashInput = '${file.path}:${stat.size}';
     final hash = md5.convert(hashInput.codeUnits).toString();
 
     final title = meta['title'] ?? _parseTitleFromName(fileName);

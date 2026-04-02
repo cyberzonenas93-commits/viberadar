@@ -26,8 +26,6 @@ class _SearchResult {
   final String? applePreviewUrl;
   final String? youtubeUrl;
   final int popularity;
-  final int bpm;
-  final String keySignature;
 
   const _SearchResult({
     required this.title,
@@ -40,8 +38,6 @@ class _SearchResult {
     this.applePreviewUrl,
     this.youtubeUrl,
     this.popularity = 0,
-    this.bpm = 0,
-    this.keySignature = '',
   });
 
   bool get hasSpotify => spotifyUrl != null && spotifyUrl!.isNotEmpty;
@@ -69,8 +65,6 @@ class _SearchResult {
       applePreviewUrl: apple.previewUrl,
       youtubeUrl: youtubeUrl,
       popularity: popularity,
-      bpm: bpm,
-      keySignature: keySignature,
     );
   }
 
@@ -175,7 +169,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       final results = await Future.wait([
         _spotify.searchTracks(q, limit: 20).catchError((_) => <SpotifyTrackInfo>[]),
         _apple.searchSongs(q, limit: 20).catchError((_) => <AppleMusicTrack>[]),
-        _youtube.searchMusic(q, limit: 25).catchError((_) => <YoutubeVideoResult>[]),
+        _youtube.searchMusic(q, limit: 12).catchError((_) => <YoutubeVideoResult>[]),
       ]);
       if (!mounted) return;
       setState(() {
@@ -267,7 +261,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         // ── Body ─────────────────────────────────────────────────────────────
         Expanded(
           child: _query.isEmpty
-              ? _DiscoveryView(topTracks: topTracks.take(200).toList())
+              ? _DiscoveryView(topTracks: topTracks.take(40).toList())
               : _searching && _results.isEmpty && _youtubeResults.isEmpty
                   ? const Center(
                       child: Column(
@@ -312,97 +306,59 @@ class _DiscoveryView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final trending = topTracks.take(100).toList();
+    final trending = topTracks.take(12).toList();
     final recent = [...topTracks]
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final recentTop = recent.take(100).toList();
+    final recentTop = recent.take(12).toList();
 
     final genres = <String>[
       'Afrobeats', 'Amapiano', 'Hip-Hop', 'House', 'R&B',
       'Dancehall', 'Drill', 'Dance', 'Latin', 'UK Garage',
     ];
 
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
-          sliver: SliverToBoxAdapter(
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: genres.map((g) => _GenreChip(label: g)).toList(),
-            ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Genre shortcuts
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: genres.map((g) => _GenreChip(label: g)).toList(),
           ),
-        ),
+          const SizedBox(height: 32),
 
-        if (trending.isNotEmpty) ...[
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 16, 28, 12),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  _SectionLabel(icon: Icons.local_fire_department_rounded, color: AppTheme.amber, label: 'Trending Now'),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: AppTheme.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
-                    child: Text('${trending.length}', style: const TextStyle(color: AppTheme.amber, fontSize: 10, fontWeight: FontWeight.w600)),
-                  ),
-                ],
+          if (trending.isNotEmpty) ...[
+            _SectionLabel(icon: Icons.local_fire_department_rounded, color: AppTheme.amber, label: 'Trending Now'),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 200,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: trending.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (ctx, i) => _FirestoreTrackCard(track: trending[i], rank: i + 1),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 24),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => _FirestoreTrackCard(track: trending[i], rank: i + 1),
-                childCount: trending.length,
-              ),
-            ),
-          ),
-        ],
+            const SizedBox(height: 32),
+          ],
 
-        if (recentTop.isNotEmpty) ...[
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 8, 28, 12),
-            sliver: SliverToBoxAdapter(
-              child: Row(
-                children: [
-                  _SectionLabel(icon: Icons.new_releases_rounded, color: AppTheme.cyan, label: 'Hot This Week'),
-                  const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
-                    child: Text('${recentTop.length}', style: const TextStyle(color: AppTheme.cyan, fontSize: 10, fontWeight: FontWeight.w600)),
-                  ),
-                ],
+          if (recentTop.isNotEmpty) ...[
+            _SectionLabel(icon: Icons.new_releases_rounded, color: AppTheme.cyan, label: 'Hot This Week'),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 200,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: recentTop.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (ctx, i) => _FirestoreTrackCard(track: recentTop[i]),
               ),
             ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => _FirestoreTrackCard(track: recentTop[i]),
-                childCount: recentTop.length,
-              ),
-            ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
@@ -534,63 +490,36 @@ class _ResultsList extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final totalCount = results.length + youtubeResults.length;
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
           padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
-          sliver: SliverToBoxAdapter(
-            child: Text('$totalCount results for "$query"',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          child: Text(
+            '$totalCount results',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
         ),
-        // Spotify + Apple Music grid
-        if (results.isNotEmpty) ...[
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
-            sliver: SliverToBoxAdapter(
-              child: _ResultSectionLabel(label: 'Spotify & Apple Music', count: results.length),
-            ),
-          ),
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 24),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => _ResultCard(result: results[i]),
-                childCount: results.length,
-              ),
-            ),
-          ),
-        ],
-        // YouTube grid
-        if (youtubeResults.isNotEmpty) ...[
-          SliverPadding(
-            padding: const EdgeInsets.fromLTRB(28, 0, 28, 12),
-            sliver: SliverToBoxAdapter(
-              child: _ResultSectionLabel(label: 'YouTube', count: youtubeResults.length),
-            ),
-          ),
-          SliverPadding(
+        Expanded(
+          child: ListView(
             padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
-            sliver: SliverGrid(
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200,
-                childAspectRatio: 0.72,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
-              delegate: SliverChildBuilderDelegate(
-                (ctx, i) => _YoutubeResultCard(video: youtubeResults[i]),
-                childCount: youtubeResults.length,
-              ),
-            ),
+            children: [
+              // Spotify + Apple Music results
+              if (results.isNotEmpty) ...[
+                _ResultSectionLabel(label: 'Spotify & Apple Music', count: results.length),
+                ...results.asMap().entries.map(
+                  (e) => _ResultRow(result: e.value, index: e.key),
+                ),
+              ],
+              // YouTube results
+              if (youtubeResults.isNotEmpty) ...[
+                if (results.isNotEmpty) const SizedBox(height: 12),
+                _ResultSectionLabel(label: 'YouTube', count: youtubeResults.length),
+                ...youtubeResults.map((v) => _YoutubeVideoCard(video: v)),
+              ],
+            ],
           ),
-        ],
+        ),
       ],
     );
   }
@@ -634,160 +563,15 @@ class _ResultSectionLabel extends StatelessWidget {
   }
 }
 
-// ── Grid card for search results (matches trending/region/genre card style) ──
-
-class _ResultCard extends ConsumerStatefulWidget {
-  const _ResultCard({required this.result});
-  final _SearchResult result;
-
-  @override
-  ConsumerState<_ResultCard> createState() => _ResultCardState();
-}
-
-class _ResultCardState extends ConsumerState<_ResultCard> {
-  bool _hovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = widget.result;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () => _showTrackDetail(context, r),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Artwork
-              Expanded(
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                      child: SizedBox.expand(
-                        child: r.artworkUrl != null
-                            ? CachedNetworkImage(imageUrl: r.artworkUrl!, fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => _artPlaceholder())
-                            : _artPlaceholder(),
-                      ),
-                    ),
-                    // Source badges top-left
-                    Positioned(
-                      top: 8, left: 8,
-                      child: Row(
-                        children: [
-                          if (r.hasSpotify) _SourceBadge(label: 'S', color: const Color(0xFF1ED760), tooltip: 'Spotify'),
-                          if (r.hasSpotify && r.hasApple) const SizedBox(width: 4),
-                          if (r.hasApple) _SourceBadge(label: 'A', color: const Color(0xFFFF7AB5), tooltip: 'Apple Music'),
-                          if ((r.hasSpotify || r.hasApple) && r.hasYoutube) const SizedBox(width: 4),
-                          if (r.hasYoutube) _SourceBadge(label: 'Y', color: const Color(0xFFFF0000), tooltip: 'YouTube'),
-                        ],
-                      ),
-                    ),
-                    // BPM badge top-right
-                    if (r.bpm > 0)
-                      Positioned(
-                        top: 8, right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: AppTheme.cyan.withValues(alpha: 0.9),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text('${r.bpm}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10)),
-                        ),
-                      ),
-                    // Play overlay on hover
-                    if (_hovered)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                          ),
-                          child: Center(
-                            child: Container(
-                              width: 44, height: 44,
-                              decoration: BoxDecoration(
-                                color: AppTheme.cyan, shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)],
-                              ),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              // Title + artist
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(r.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(r.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        if (r.durationFormatted.isNotEmpty)
-                          Text(r.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
-                        if (r.durationFormatted.isNotEmpty && r.keySignature.isNotEmpty) const SizedBox(width: 4),
-                        if (r.keySignature.isNotEmpty && r.keySignature != '--')
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                            decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)),
-                            child: Text(r.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
-                          ),
-                        const Spacer(),
-                        if (r.albumName.isNotEmpty)
-                          Text(r.albumName, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.6), fontSize: 9),
-                              maxLines: 1, overflow: TextOverflow.ellipsis),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _artPlaceholder() => Container(
-    decoration: const BoxDecoration(gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised])),
-    child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
-  );
-
-  void _showTrackDetail(BuildContext context, _SearchResult r) {
-    showDialog(context: context, builder: (_) => _TrackDetailDialog(result: r));
-  }
-}
-
-// ── YouTube result card (grid format) ──
-
-class _YoutubeResultCard extends StatefulWidget {
-  const _YoutubeResultCard({required this.video});
+class _YoutubeVideoCard extends StatefulWidget {
+  const _YoutubeVideoCard({required this.video});
   final YoutubeVideoResult video;
 
   @override
-  State<_YoutubeResultCard> createState() => _YoutubeResultCardState();
+  State<_YoutubeVideoCard> createState() => _YoutubeVideoCardState();
 }
 
-class _YoutubeResultCardState extends State<_YoutubeResultCard> {
+class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
   bool _hovered = false;
 
   @override
@@ -796,81 +580,83 @@ class _YoutubeResultCardState extends State<_YoutubeResultCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: () async {
-          final uri = Uri.tryParse(v.youtubeUrl);
-          if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-        },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: _hovered
-                ? const Color(0xFFFF4B4B).withValues(alpha: 0.4)
-                : AppTheme.edge.withValues(alpha: 0.35)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                      child: SizedBox.expand(
-                        child: v.thumbnailUrl != null
-                            ? CachedNetworkImage(imageUrl: v.thumbnailUrl!, fit: BoxFit.cover)
-                            : Container(color: AppTheme.panelRaised,
-                                child: const Center(child: Icon(Icons.play_circle_outline_rounded, color: AppTheme.textTertiary, size: 32))),
-                      ),
-                    ),
-                    Positioned(
-                      top: 8, left: 8,
-                      child: _SourceBadge(label: 'Y', color: const Color(0xFFFF0000), tooltip: 'YouTube'),
-                    ),
-                    if (_hovered)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                          ),
-                          child: Center(
-                            child: Container(
-                              width: 44, height: 44,
-                              decoration: const BoxDecoration(color: Color(0xFFFF4B4B), shape: BoxShape.circle),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        margin: const EdgeInsets.only(bottom: 8),
+        decoration: BoxDecoration(
+          color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.5 : 0.3)),
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 72,
+                height: 48,
+                child: v.thumbnailUrl != null
+                    ? CachedNetworkImage(
+                        imageUrl: v.thumbnailUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, __, ___) => _thumbPlaceholder(),
+                      )
+                    : _thumbPlaceholder(),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(v.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    const SizedBox(height: 2),
-                    Text(v.channelName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                  ],
-                ),
+            ),
+            const SizedBox(width: 12),
+            // Title + channel
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    v.title,
+                    style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    v.channelName,
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(width: 12),
+            // YouTube badge
+            _SourceBadge(label: 'Y', color: const Color(0xFFFF0000), tooltip: 'YouTube'),
+            const SizedBox(width: 12),
+            // Play button
+            if (_hovered)
+              _ActionButton(
+                icon: Icons.play_circle_rounded,
+                color: const Color(0xFFFF0000),
+                tooltip: 'Open on YouTube',
+                onTap: () async {
+                  final uri = Uri.tryParse(v.youtubeUrl);
+                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                },
+              )
+            else
+              const SizedBox(width: 31),
+          ],
         ),
       ),
     );
   }
+
+  Widget _thumbPlaceholder() => Container(
+    color: AppTheme.panelRaised,
+    child: const Icon(Icons.play_circle_outline_rounded, color: AppTheme.textTertiary, size: 24),
+  );
 }
 
-// Keep _ResultRow for backwards compatibility but unused
 class _ResultRow extends ConsumerStatefulWidget {
   const _ResultRow({required this.result, required this.index});
   final _SearchResult result;
@@ -883,20 +669,11 @@ class _ResultRow extends ConsumerStatefulWidget {
 class _ResultRowState extends ConsumerState<_ResultRow> {
   bool _hovered = false;
 
-  void _showTrackDetail(BuildContext context, _SearchResult r) {
-    showDialog(
-      context: context,
-      builder: (_) => _TrackDetailDialog(result: r),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final r = widget.result;
 
-    return GestureDetector(
-      onTap: () => _showTrackDetail(context, r),
-      child: MouseRegion(
+    return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
@@ -947,29 +724,6 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
               ),
             ),
             const SizedBox(width: 12),
-            // BPM + Key
-            if (r.bpm > 0) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.amber.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text('${r.bpm}', style: const TextStyle(color: AppTheme.amber, fontSize: 10, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 4),
-            ],
-            if (r.keySignature.isNotEmpty && r.keySignature != '--') ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.edge.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(r.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10, fontWeight: FontWeight.w600)),
-              ),
-              const SizedBox(width: 6),
-            ],
             // Duration
             if (r.durationFormatted.isNotEmpty)
               Text(r.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
@@ -1007,7 +761,6 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
               const SizedBox(width: 68),
           ],
         ),
-      ),
       ),
     );
   }
@@ -1233,159 +986,6 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
                 label: const Text('New Crate', style: TextStyle(color: AppTheme.violet)),
               ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-// ── Track Detail Dialog ─────────────────────────────────────────────────────
-
-class _TrackDetailDialog extends StatelessWidget {
-  const _TrackDetailDialog({required this.result});
-  final _SearchResult result;
-
-  @override
-  Widget build(BuildContext context) {
-    final r = result;
-    return Dialog(
-      backgroundColor: AppTheme.panel,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.85),
-        child: SizedBox(
-        width: 440,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Cover art hero
-            ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              child: SizedBox(
-                height: 280,
-                width: double.infinity,
-                child: r.artworkUrl != null
-                    ? CachedNetworkImage(imageUrl: r.artworkUrl!, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _placeholder())
-                    : _placeholder(),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(r.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 20)),
-                  const SizedBox(height: 4),
-                  Text(r.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
-                  if (r.albumName.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(r.albumName, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
-                  ],
-                  const SizedBox(height: 16),
-                  // Metadata pills
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      if (r.bpm > 0) _Pill('${r.bpm} BPM', AppTheme.amber),
-                      if (r.keySignature.isNotEmpty && r.keySignature != '--') _Pill(r.keySignature, AppTheme.cyan),
-                      if (r.durationFormatted.isNotEmpty) _Pill(r.durationFormatted, AppTheme.textSecondary),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  // Platform buttons
-                  Row(
-                    children: [
-                      if (r.hasSpotify)
-                        _PlatformButton(label: 'Spotify', color: const Color(0xFF1ED760), icon: Icons.graphic_eq_rounded, url: r.spotifyUrl!),
-                      if (r.hasSpotify && r.hasApple) const SizedBox(width: 8),
-                      if (r.hasApple)
-                        _PlatformButton(label: 'Apple Music', color: const Color(0xFFFF7AB5), icon: Icons.music_note_rounded, url: r.appleUrl!),
-                      if ((r.hasSpotify || r.hasApple) && r.hasYoutube) const SizedBox(width: 8),
-                      if (r.hasYoutube)
-                        _PlatformButton(label: 'YouTube', color: const Color(0xFFFF0000), icon: Icons.play_circle_fill_rounded, url: r.youtubeUrl!),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Close button
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Close', style: TextStyle(color: AppTheme.textSecondary)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-      ),
-    );
-  }
-
-  Widget _placeholder() => Container(
-    color: AppTheme.panelRaised,
-    child: const Center(child: Icon(Icons.album_rounded, color: AppTheme.textTertiary, size: 64)),
-  );
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill(this.label, this.color);
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
-      ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w600)),
-    );
-  }
-}
-
-class _PlatformButton extends StatelessWidget {
-  const _PlatformButton({required this.label, required this.color, required this.icon, required this.url});
-  final String label;
-  final Color color;
-  final IconData icon;
-  final String url;
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(10),
-          onTap: () {
-            final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: color.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, color: color, size: 16),
-                const SizedBox(width: 6),
-                Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
         ),
       ),
     );

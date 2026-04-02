@@ -50,6 +50,29 @@ flutter run -d macos \
   --dart-define=GOOGLE_SERVER_CLIENT_ID=...
 ```
 
+## Signed macOS release
+
+If you distribute VibeRadar outside the Mac App Store, do not upload the raw app bundle from `build/macos/Build/Products/Release/`. That build is fine for local development, but browser-downloaded apps must be `Developer ID` signed and notarized or Gatekeeper will block launch.
+
+Store notarization credentials once in your keychain:
+
+```bash
+xcrun notarytool store-credentials viberadar-notary \
+  --apple-id "you@example.com" \
+  --team-id "YOUR_TEAM_ID" \
+  --password "app-specific-password"
+```
+
+Create the distributable release artifacts:
+
+```bash
+APPLE_NOTARY_PROFILE=viberadar-notary ./scripts/release_macos.sh
+```
+
+The script builds the release app, re-signs it with a `Developer ID Application` certificate, notarizes and staples the `.app`, then creates a notarized DMG and a zip in `build/macos/dist/`.
+
+Upload the DMG to Hosting, not the raw `.app` from `build/macos/Build/Products/Release/`.
+
 ## Firebase setup
 
 Install backend dependencies:
