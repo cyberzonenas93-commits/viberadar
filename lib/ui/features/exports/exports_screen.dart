@@ -37,28 +37,81 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
   double _physProgress = 0.0; // 0.0 – 1.0
   PhysicalCrateResult? _physResult;
 
-  static final _dummyTrack = LibraryTrack(
-    id: 'dummy',
-    filePath: '',
-    fileName: '',
-    title: '',
-    artist: '',
-    album: '',
-    genre: '',
-    bpm: 0,
-    key: '',
-    durationSeconds: 0,
-    fileSizeBytes: 0,
-    fileExtension: '',
-    md5Hash: '',
-    bitrate: 0,
-    sampleRate: 0,
-  );
-
   @override
   void dispose() {
     _crateNameController.dispose();
     super.dispose();
+  }
+
+  /// Resolves a crate track ID to a [LibraryTrack].
+  ///
+  /// Resolution order:
+  /// 1. Direct ID match against local library (works for tracks added from the
+  ///    library panel — IDs are now stable md5 hashes of file content).
+  /// 2. Online Track ID match — look up the VibeRadar [Track] by ID, then
+  ///    fuzzy-match its title + artist against the local library.
+  /// 3. Encoded ID format `spotify:Title:Artist` or `apple:Title:Artist` from
+  ///    the search screen — extract title/artist and fuzzy-match.
+  LibraryTrack? _resolveTrackId(
+    String id,
+    List<LibraryTrack> library,
+    List<Track> onlineTracks,
+  ) {
+    // 1. Direct local library ID match.
+    final direct = library.where((t) => t.id == id).firstOrNull;
+    if (direct != null) return direct;
+
+    // 2. Online Track ID → title/artist → library match.
+    final onlineTrack = onlineTracks.where((t) => t.id == id).firstOrNull;
+    if (onlineTrack != null) {
+      return _matchByTitleArtist(onlineTrack.title, onlineTrack.artist, library);
+    }
+
+    // 3. Encoded search-screen ID `spotify:Title:Artist` or `apple:Title:Artist`.
+    if (id.startsWith('spotify:') || id.startsWith('apple:')) {
+      final parts = id.split(':');
+      if (parts.length >= 3) {
+        return _matchByTitleArtist(parts[1], parts[2], library);
+      }
+    }
+
+    return null;
+  }
+
+  LibraryTrack? _matchByTitleArtist(
+    String title,
+    String artist,
+    List<LibraryTrack> library,
+  ) {
+    final normTitle = _normalise(title);
+    final normArtist = _normalise(artist);
+
+    // Exact title + artist.
+    for (final t in library) {
+      final libTitle = _normalise(t.title.isNotEmpty ? t.title : t.fileName);
+      final libArtist = _normalise(t.artist);
+      if (libTitle == normTitle &&
+          (normArtist.isEmpty || libArtist.isEmpty || libArtist.contains(normArtist) || normArtist.contains(libArtist))) {
+        return t;
+      }
+    }
+    // Title-only fallback (artist may be missing in metadata).
+    for (final t in library) {
+      final libTitle = _normalise(t.title.isNotEmpty ? t.title : t.fileName);
+      if (libTitle == normTitle) return t;
+    }
+    return null;
+  }
+
+  String _normalise(String s) {
+    var out = s.toLowerCase();
+    out = out.replaceAll(RegExp(r'\(feat[^)]*\)', caseSensitive: false), '');
+    out = out.replaceAll(RegExp(r'\(ft[^)]*\)', caseSensitive: false), '');
+    out = out.replaceAll(RegExp(r'\(remix[^)]*\)', caseSensitive: false), '');
+    out = out.replaceAll(RegExp(r'\[.*?\]'), '');
+    out = out.replaceAll(RegExp(r'\.(mp3|flac|wav|aac|m4a|ogg|aiff)$'), '');
+    out = out.replaceAll(RegExp(r'[^a-z0-9 ]'), ' ');
+    return out.trim().replaceAll(RegExp(r'\s+'), ' ');
   }
 
   Future<void> _runMatch(List<Track> vibeTracks, List<LibraryTrack> library) async {
@@ -141,11 +194,8 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
         ? crateState.crates[_selectedCrate] ?? []
         : <String>[];
     final crateLibTracks = crateTrackIds
-        .map((id) => lib.tracks.firstWhere(
-              (t) => t.id == id,
-              orElse: () => _dummyTrack,
-            ))
-        .where((t) => t.id != 'dummy')
+        .map((id) => _resolveTrackId(id, lib.tracks, vibeTracks))
+        .whereType<LibraryTrack>()
         .toList();
 
     return Row(children: [

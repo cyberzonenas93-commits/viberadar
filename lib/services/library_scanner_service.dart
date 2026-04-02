@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:developer' as dev;
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
-import 'package:uuid/uuid.dart';
 import '../models/library_track.dart';
 
 /// Max total files to scan in one pass.
@@ -27,7 +26,6 @@ class _ScanCacheEntry {
 }
 
 class LibraryScannerService {
-  static const _uuid = Uuid();
   static const _supportedExtensions = {
     '.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.aiff',
   };
@@ -176,7 +174,7 @@ class LibraryScannerService {
     final year = meta['year'] != null ? int.tryParse(meta['year']!) : null;
 
     return LibraryTrack(
-      id: _uuid.v4(),
+      id: hash,
       filePath: file.path,
       fileName: p.basename(file.path),
       title: title.isNotEmpty ? title : fileName,
