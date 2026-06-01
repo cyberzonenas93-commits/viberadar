@@ -9,6 +9,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/app.dart';
 import 'app/bootstrap.dart';
+import 'core/platform.dart';
 import 'services/secure_storage_service.dart';
 
 Future<void> main() async {
@@ -37,8 +38,9 @@ Future<void> main() async {
   // Keychain. Non-fatal — failures log and the app continues using the env var.
   await _migrateOpenAiKeyToKeychain();
 
-  // macOS window setup. Browser builds do not have a window_manager plugin.
-  if (!kIsWeb) {
+  // Desktop window setup only. Mobile (iOS/Android) and web have no
+  // window_manager plugin, so calling it there would crash at launch.
+  if (!kIsWeb && !isMobileForm) {
     await windowManager.ensureInitialized();
     const windowOptions = WindowOptions(
       size: Size(1280, 820),
