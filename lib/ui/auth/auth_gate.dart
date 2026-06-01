@@ -2,20 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/platform.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/session_state.dart';
 import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
+import '../mobile/mobile_shell.dart';
 import '../shell/vibe_shell.dart';
 import 'onboarding_screen.dart';
 import 'splash_screen.dart';
 
 enum _AuthPhase { splash, onboarding, login }
+
 enum _LoginMode { main, emailSignIn, emailCreate }
 
 class AuthGate extends ConsumerStatefulWidget {
-  const AuthGate({super.key, required this.statusMessage});
+  const AuthGate({
+    super.key,
+    required this.statusMessage,
+    this.isDemoMode = false,
+  });
   final String statusMessage;
+  final bool isDemoMode;
 
   @override
   ConsumerState<AuthGate> createState() => _AuthGateState();
@@ -61,7 +69,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       final pending = prefs.getStringList('pending_followed_artists');
       if (pending != null && pending.isNotEmpty) {
         await prefs.remove('pending_followed_artists');
-        await ref.read(userRepositoryProvider).setFollowedArtists(
+        await ref
+            .read(userRepositoryProvider)
+            .setFollowedArtists(
               userId: session.userId,
               fallbackName: session.displayName,
               artists: pending,
@@ -85,7 +95,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           onFinished: () => setState(() => _phase = _AuthPhase.onboarding),
         );
       case _AuthPhase.onboarding:
-        return OnboardingScreen(onComplete: (artists) => _completeOnboarding(artists));
+        return OnboardingScreen(
+          onComplete: (artists) => _completeOnboarding(artists),
+        );
       case _AuthPhase.login:
         break;
     }
@@ -100,9 +112,21 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       );
     }
 
-    if (session?.isAuthenticated == true) {
-      _syncPendingArtists(session!);
-      return VibeShell(statusMessage: widget.statusMessage);
+    if (sessionAsync.hasValue) {
+      if (session?.isAuthenticated == true) {
+        _syncPendingArtists(session!);
+      }
+      // On phones the user must be signed in (no guest); desktop keeps its
+      // existing behavior of admitting any resolved session.
+      if (isMobileForm) {
+        return session?.isAuthenticated == true
+            ? const MobileShell()
+            : _LoginScreen(statusMessage: widget.statusMessage);
+      }
+      return VibeShell(
+        statusMessage: widget.statusMessage,
+        isDemoMode: widget.isDemoMode,
+      );
     }
 
     return _LoginScreen(statusMessage: widget.statusMessage);
@@ -197,10 +221,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     ),
     child: const Padding(
       padding: EdgeInsets.all(10),
-      child: CustomPaint(
-        painter: _AuthLogoPainter(),
-        child: SizedBox.expand(),
-      ),
+      child: CustomPaint(painter: _AuthLogoPainter(), child: SizedBox.expand()),
     ),
   );
 
@@ -236,7 +257,11 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     ),
     child: Row(
       children: [
-        const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 18),
+        const Icon(
+          Icons.error_outline_rounded,
+          color: Colors.redAccent,
+          size: 18,
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
@@ -262,7 +287,8 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(
-            width: 20, height: 20,
+            width: 20,
+            height: 20,
             child: Checkbox(
               value: _rememberMe,
               onChanged: (v) => setState(() => _rememberMe = v ?? true),
@@ -273,7 +299,10 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => setState(() => _rememberMe = !_rememberMe),
-            child: const Text('Keep me signed in', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            child: const Text(
+              'Keep me signed in',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
           ),
         ],
       ),
@@ -287,7 +316,8 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
           'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
           width: 20,
           height: 20,
-          errorBuilder: (_, __, ___) => const Icon(Icons.login, size: 20, color: Colors.white),
+          errorBuilder: (_, _, _) =>
+              const Icon(Icons.login, size: 20, color: Colors.white),
         ),
         label: 'Continue with Google',
       ),
@@ -295,7 +325,12 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
 
       // Email sign-in
       _OutlineButton(
-        onPressed: _isLoading ? null : () => setState(() { _mode = _LoginMode.emailSignIn; _error = null; }),
+        onPressed: _isLoading
+            ? null
+            : () => setState(() {
+                _mode = _LoginMode.emailSignIn;
+                _error = null;
+              }),
         icon: const Icon(Icons.mail_outline_rounded, size: 20),
         label: 'Sign in with Email',
       ),
@@ -307,7 +342,10 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
           const Expanded(child: Divider(color: AppTheme.edge)),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text('or', style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+            child: Text(
+              'or',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            ),
           ),
           const Expanded(child: Divider(color: AppTheme.edge)),
         ],
@@ -345,25 +383,40 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       Row(
         children: [
           IconButton(
-            onPressed: () => setState(() { _mode = _LoginMode.main; _error = null; }),
+            onPressed: () => setState(() {
+              _mode = _LoginMode.main;
+              _error = null;
+            }),
             icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
             padding: EdgeInsets.zero,
           ),
           const SizedBox(width: 8),
           Text(
             _mode == _LoginMode.emailCreate ? 'Create Account' : 'Sign In',
-            style: theme.textTheme.titleLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
       const SizedBox(height: 24),
 
       if (_mode == _LoginMode.emailCreate) ...[
-        _textField(controller: _nameCtrl, hint: 'Display name', icon: Icons.person_outline),
+        _textField(
+          controller: _nameCtrl,
+          hint: 'Display name',
+          icon: Icons.person_outline,
+        ),
         const SizedBox(height: 12),
       ],
 
-      _textField(controller: _emailCtrl, hint: 'Email address', icon: Icons.mail_outline, keyboardType: TextInputType.emailAddress),
+      _textField(
+        controller: _emailCtrl,
+        hint: 'Email address',
+        icon: Icons.mail_outline,
+        keyboardType: TextInputType.emailAddress,
+      ),
       const SizedBox(height: 12),
       _textField(
         controller: _passwordCtrl,
@@ -372,7 +425,13 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
         obscure: _obscurePassword,
         suffix: IconButton(
           onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-          icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, color: AppTheme.textSecondary, size: 18),
+          icon: Icon(
+            _obscurePassword
+                ? Icons.visibility_outlined
+                : Icons.visibility_off_outlined,
+            color: AppTheme.textSecondary,
+            size: 18,
+          ),
         ),
       ),
 
@@ -380,7 +439,8 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       Row(
         children: [
           SizedBox(
-            width: 20, height: 20,
+            width: 20,
+            height: 20,
             child: Checkbox(
               value: _rememberMe,
               onChanged: (v) => setState(() => _rememberMe = v ?? true),
@@ -391,14 +451,21 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => setState(() => _rememberMe = !_rememberMe),
-            child: const Text('Keep me signed in', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            child: const Text(
+              'Keep me signed in',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
           ),
         ],
       ),
       const SizedBox(height: 16),
 
       _PrimaryButton(
-        onPressed: _isLoading ? null : (_mode == _LoginMode.emailCreate ? _createAccount : _signInWithEmail),
+        onPressed: _isLoading
+            ? null
+            : (_mode == _LoginMode.emailCreate
+                  ? _createAccount
+                  : _signInWithEmail),
         isLoading: _isLoading,
         label: _mode == _LoginMode.emailCreate ? 'Create Account' : 'Sign In',
       ),
@@ -406,11 +473,15 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
 
       TextButton(
         onPressed: () => setState(() {
-          _mode = _mode == _LoginMode.emailCreate ? _LoginMode.emailSignIn : _LoginMode.emailCreate;
+          _mode = _mode == _LoginMode.emailCreate
+              ? _LoginMode.emailSignIn
+              : _LoginMode.emailCreate;
           _error = null;
         }),
         child: Text(
-          _mode == _LoginMode.emailCreate ? 'Already have an account? Sign in' : "Don't have an account? Create one",
+          _mode == _LoginMode.emailCreate
+              ? 'Already have an account? Sign in'
+              : "Don't have an account? Create one",
           style: TextStyle(color: AppTheme.cyan, fontSize: 13),
         ),
       ),
@@ -464,7 +535,10 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   }
 
   Future<void> _signInWithGoogle() async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
       await ref.read(sessionRepositoryProvider).signInWithGoogle();
       await _saveRememberMe();
@@ -476,7 +550,10 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   }
 
   Future<void> _signInAnonymously() async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
       await ref.read(sessionRepositoryProvider).signInAnonymously();
       await _saveRememberMe();
@@ -488,12 +565,17 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   }
 
   Future<void> _signInWithEmail() async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
-      await ref.read(sessionRepositoryProvider).signInWithEmail(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-      );
+      await ref
+          .read(sessionRepositoryProvider)
+          .signInWithEmail(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+          );
       await _saveRememberMe();
     } catch (e) {
       if (mounted) setState(() => _error = _friendly(e));
@@ -503,13 +585,18 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   }
 
   Future<void> _createAccount() async {
-    setState(() { _isLoading = true; _error = null; });
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
     try {
-      await ref.read(sessionRepositoryProvider).createAccount(
-        email: _emailCtrl.text.trim(),
-        password: _passwordCtrl.text,
-        displayName: _nameCtrl.text.trim(),
-      );
+      await ref
+          .read(sessionRepositoryProvider)
+          .createAccount(
+            email: _emailCtrl.text.trim(),
+            password: _passwordCtrl.text,
+            displayName: _nameCtrl.text.trim(),
+          );
     } catch (e) {
       if (mounted) setState(() => _error = _friendly(e));
     } finally {
@@ -519,17 +606,37 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
 
   String _friendly(Object error) {
     final msg = error.toString();
-    if (msg.contains('network-request-failed')) return 'Network error. Check your connection.';
-    if (msg.contains('popup-closed-by-user') || msg.contains('canceled')) return 'Sign-in was cancelled.';
-    if (msg.contains('too-many-requests')) return 'Too many attempts. Wait a moment.';
-    if (msg.contains('wrong-password') || msg.contains('invalid-credential')) return 'Incorrect email or password.';
-    if (msg.contains('user-not-found')) return 'No account found with this email.';
-    if (msg.contains('email-already-in-use')) return 'An account with this email already exists.';
-    if (msg.contains('weak-password')) return 'Password must be at least 6 characters.';
+    if (msg.contains('network-request-failed')) {
+      return 'Network error. Check your connection.';
+    }
+    if (msg.contains('popup-closed-by-user') || msg.contains('canceled')) {
+      return 'Sign-in was cancelled.';
+    }
+    if (msg.contains('too-many-requests')) {
+      return 'Too many attempts. Wait a moment.';
+    }
+    if (msg.contains('wrong-password') || msg.contains('invalid-credential')) {
+      return 'Incorrect email or password.';
+    }
+    if (msg.contains('user-not-found')) {
+      return 'No account found with this email.';
+    }
+    if (msg.contains('email-already-in-use')) {
+      return 'An account with this email already exists.';
+    }
+    if (msg.contains('weak-password')) {
+      return 'Password must be at least 6 characters.';
+    }
     if (msg.contains('invalid-email')) return 'Invalid email address.';
-    if (msg.contains('keychain')) return 'Google Sign-In keychain error — try Email or Guest sign-in instead.';
-    if (msg.contains('ID token')) return 'Google Sign-In token error — try Email or Guest sign-in.';
-    if (msg.contains('sign_in_failed') || msg.contains('sign-in-failed')) return 'Sign-in failed: $msg';
+    if (msg.contains('keychain')) {
+      return 'Google Sign-In keychain error — try Email or Guest sign-in instead.';
+    }
+    if (msg.contains('ID token')) {
+      return 'Google Sign-In token error — try Email or Guest sign-in.';
+    }
+    if (msg.contains('sign_in_failed') || msg.contains('sign-in-failed')) {
+      return 'Sign-in failed: $msg';
+    }
     return 'Sign-in failed. Please try again.';
   }
 }
@@ -558,14 +665,26 @@ class _PrimaryButton extends StatelessWidget {
       child: FilledButton.icon(
         onPressed: onPressed,
         icon: isLoading
-            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
             : (icon ?? const SizedBox.shrink()),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        label: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
         style: FilledButton.styleFrom(
           backgroundColor: AppTheme.violet,
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );
@@ -573,7 +692,11 @@ class _PrimaryButton extends StatelessWidget {
 }
 
 class _OutlineButton extends StatelessWidget {
-  const _OutlineButton({required this.onPressed, required this.label, this.icon});
+  const _OutlineButton({
+    required this.onPressed,
+    required this.label,
+    this.icon,
+  });
   final VoidCallback? onPressed;
   final String label;
   final Widget? icon;
@@ -585,12 +708,17 @@ class _OutlineButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onPressed,
         icon: icon ?? const SizedBox.shrink(),
-        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+        label: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        ),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
           foregroundColor: Colors.white,
           side: BorderSide(color: AppTheme.edge),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
         ),
       ),
     );
@@ -612,12 +740,18 @@ class _AuthLogoPainter extends CustomPainter {
       ..strokeWidth = size.width * 0.1;
 
     final xPositions = [
-      size.width * 0.14, size.width * 0.34, size.width * 0.5,
-      size.width * 0.66, size.width * 0.86,
+      size.width * 0.14,
+      size.width * 0.34,
+      size.width * 0.5,
+      size.width * 0.66,
+      size.width * 0.86,
     ];
     final heights = [
-      size.height * 0.38, size.height * 0.72, size.height * 0.96,
-      size.height * 0.68, size.height * 0.44,
+      size.height * 0.38,
+      size.height * 0.72,
+      size.height * 0.96,
+      size.height * 0.68,
+      size.height * 0.44,
     ];
     final centerY = size.height / 2;
 

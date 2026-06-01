@@ -50,6 +50,44 @@ flutter run -d macos \
   --dart-define=GOOGLE_SERVER_CLIENT_ID=...
 ```
 
+## Web app setup
+
+VibeRadar can also run as a Flutter Web app. Without Firebase web
+configuration it falls back to the same demo workspace, which is useful for
+local verification:
+
+```bash
+flutter build web --release --no-wasm-dry-run
+python3 -m http.server 53334 --bind 127.0.0.1 --directory build/web
+```
+
+For the live hosted app, create/register a Firebase Web app and build with its
+web configuration:
+
+```bash
+flutter build web --release --no-wasm-dry-run \
+  --dart-define=FIREBASE_API_KEY=... \
+  --dart-define=FIREBASE_APP_ID=... \
+  --dart-define=FIREBASE_MESSAGING_SENDER_ID=... \
+  --dart-define=FIREBASE_PROJECT_ID=... \
+  --dart-define=FIREBASE_STORAGE_BUCKET=... \
+  --dart-define=FIREBASE_AUTH_DOMAIN=... \
+  --dart-define=FIREBASE_MEASUREMENT_ID=... \
+  --dart-define=GOOGLE_CLIENT_ID=...
+```
+
+Firebase Hosting now serves `build/web` directly:
+
+```bash
+firebase deploy --only hosting
+```
+
+Browser limitations: the web app can match the desktop UI and cloud-backed
+workflows, but browsers cannot directly scan arbitrary local folders, write to
+VirtualDJ/Serato databases, or reveal Finder paths. Those desktop-only actions
+need browser-safe equivalents such as file pickers, generated downloads, or a
+small local companion service if true filesystem automation is required.
+
 ## Signed macOS release
 
 If you distribute VibeRadar outside the Mac App Store, do not upload the raw app bundle from `build/macos/Build/Products/Release/`. That build is fine for local development, but browser-downloaded apps must be `Developer ID` signed and notarized or Gatekeeper will block launch.

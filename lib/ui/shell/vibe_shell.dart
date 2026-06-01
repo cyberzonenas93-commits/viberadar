@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -15,7 +13,6 @@ import '../widgets/track_action_menu.dart';
 import '../../models/crate.dart';
 import '../../models/session_state.dart';
 import '../../models/track.dart';
-import '../../models/track_filters.dart';
 import '../../models/user_profile.dart';
 import '../../providers/app_state.dart';
 import '../../providers/library_provider.dart';
@@ -27,12 +24,10 @@ import '../../services/greatest_of_service.dart';
 import '../../services/platform_search_service.dart';
 import '../../services/playlist_aggregation_service.dart';
 import '../../services/ingest_service.dart';
-import '../../services/set_builder_service.dart';
-import '../widgets/dashboard_cards.dart';
-import '../widgets/filter_bar.dart';
+import '../widgets/command_palette.dart';
+import '../widgets/drop_target_shell.dart';
 import '../widgets/sidebar_nav.dart';
 import '../widgets/track_detail_panel.dart';
-import '../widgets/track_table.dart';
 import '../features/artists/artists_screen.dart';
 import '../features/for_you/for_you_screen.dart';
 import '../features/greatest_of/greatest_of_screen.dart';
@@ -49,9 +44,14 @@ import '../features/trending/trending_screen.dart';
 import '../features/search/search_screen.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
-  const VibeShell({super.key, required this.statusMessage});
+  const VibeShell({
+    super.key,
+    required this.statusMessage,
+    this.isDemoMode = false,
+  });
 
   final String statusMessage;
+  final bool isDemoMode;
 
   @override
   ConsumerState<VibeShell> createState() => _VibeShellState();
@@ -76,13 +76,15 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     });
 
     // Auto-ingest every 60 minutes while app is running (cost-conscious)
-    _autoIngestTimer = Timer.periodic(
-      const Duration(minutes: 60),
-      (_) { if (mounted) _autoIngest(); },
-    );
+    _autoIngestTimer = Timer.periodic(const Duration(minutes: 60), (_) {
+      if (mounted) _autoIngest();
+    });
   }
 
   Future<void> _autoIngest() async {
+    final session = ref.read(sessionProvider).value;
+    if (session?.isAuthenticated != true) return;
+
     try {
       await IngestService.triggerIngest();
       // After ingest writes new data, refresh the local cache
@@ -90,6 +92,34 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     } catch (_) {
       // Silent — background ingest should not interrupt the user
     }
+  }
+
+  /// Opens the ⌘K / Ctrl+K global command palette.
+  void _openCommandPalette() {
+    showCommandPalette(
+      context,
+      onNavigate: (section) {
+        ref.read(workspaceControllerProvider.notifier).setSection(section);
+      },
+      onOpenTrack: (libraryTrack) {
+        // Navigate to Library and best-effort highlight if the online catalogue
+        // has a matching id. LibraryTrack ids don't always line up with Track
+        // ids, so this is a v1 heuristic — future: dedicated library detail.
+        ref
+            .read(workspaceControllerProvider.notifier)
+            .setSection(AppSection.library);
+        final allTracks =
+            ref.read(trackStreamProvider).value ?? const <Track>[];
+        final match = allTracks.firstWhereOrNull(
+          (t) => t.id == libraryTrack.id,
+        );
+        if (match != null) {
+          ref
+              .read(workspaceControllerProvider.notifier)
+              .activateTrack(match.id);
+        }
+      },
+    );
   }
 
   @override
@@ -130,77 +160,177 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       );
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 262,
-                child: SidebarNav(
-                  selectedSection: workspace.section,
-                  statusMessage: widget.statusMessage,
-                  onSelected: (section) => ref
-                      .read(workspaceControllerProvider.notifier)
-                      .setSection(section),
-                  onRefreshComplete: () =>
-                      ref.read(trackRepositoryProvider).refresh(),
-                ),
-              ),
-              const SizedBox(width: 20),
-              Expanded(
-                child: _showDetailPanel(workspace.section)
-                    ? Row(
-                        children: [
-                          Expanded(
-                            child: _buildMainPanel(
-                              context: context,
-                              workspace: workspace,
-                              allTracks: allTracks,
-                              visibleTracks: visibleTracks,
-                              tracksAsync: tracksAsync,
-                              session: session,
-                              userProfile: userProfile,
-                              genres: genres,
-                              vibes: vibes,
-                              regions: regions,
-                            ),
-                          ),
-                          const SizedBox(width: 20),
-                          SizedBox(
-                            width: workspace.detailExpanded ? 420 : 360,
-                            child: TrackDetailPanel(
-                              selectedTrack: selectedTrack,
-                              allTracks: allTracks,
-                              watchlist: userProfile.watchlist,
-                              expanded: workspace.detailExpanded,
-                              onToggleExpanded: () => ref
-                                  .read(workspaceControllerProvider.notifier)
-                                  .toggleDetailExpanded(),
-                              onToggleWatchlist: (trackId) => _toggleWatchlist(
-                                session: session,
-                                userProfile: userProfile,
-                                trackId: trackId,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : _buildMainPanel(
-                        context: context,
-                        workspace: workspace,
-                        allTracks: allTracks,
-                        visibleTracks: visibleTracks,
-                        tracksAsync: tracksAsync,
-                        session: session,
-                        userProfile: userProfile,
-                        genres: genres,
-                        vibes: vibes,
-                        regions: regions,
+    Widget mainPanel() => _buildMainPanel(
+      context: context,
+      workspace: workspace,
+      allTracks: allTracks,
+      visibleTracks: visibleTracks,
+      tracksAsync: tracksAsync,
+      session: session,
+      userProfile: userProfile,
+      genres: genres,
+      vibes: vibes,
+      regions: regions,
+    );
+
+    Widget sidebar({BuildContext? drawerContext}) => SidebarNav(
+      selectedSection: workspace.section,
+      statusMessage: widget.statusMessage,
+      isDemoMode: widget.isDemoMode,
+      onSelected: (section) {
+        ref.read(workspaceControllerProvider.notifier).setSection(section);
+        if (drawerContext != null) {
+          Navigator.of(drawerContext).maybePop();
+        }
+      },
+      onRefreshComplete: () => ref.read(trackRepositoryProvider).refresh(),
+    );
+
+    Widget detailPanel() => TrackDetailPanel(
+      selectedTrack: selectedTrack,
+      allTracks: allTracks,
+      watchlist: userProfile.watchlist,
+      expanded: workspace.detailExpanded,
+      onToggleExpanded: () =>
+          ref.read(workspaceControllerProvider.notifier).toggleDetailExpanded(),
+      onToggleWatchlist: (trackId) => _toggleWatchlist(
+        session: session,
+        userProfile: userProfile,
+        trackId: trackId,
+      ),
+    );
+
+    return DropTargetShell(
+      child: CallbackShortcuts(
+        bindings: <ShortcutActivator, VoidCallback>{
+          const SingleActivator(LogicalKeyboardKey.keyK, meta: true):
+              _openCommandPalette,
+          const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+              _openCommandPalette,
+        },
+        child: Focus(
+          autofocus: true,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final viewportWidth = MediaQuery.sizeOf(context).width;
+              final compact = viewportWidth < 960;
+              final body = _showDetailPanel(workspace.section) && !compact
+                  ? Row(
+                      children: [
+                        Expanded(child: mainPanel()),
+                        const SizedBox(width: 20),
+                        SizedBox(
+                          width: workspace.detailExpanded ? 420 : 360,
+                          child: detailPanel(),
+                        ),
+                      ],
+                    )
+                  : mainPanel();
+
+              if (compact) {
+                final drawerWidth = viewportWidth < 360
+                    ? viewportWidth * 0.88
+                    : 300.0;
+
+                return Scaffold(
+                  backgroundColor: AppTheme.ink,
+                  drawerScrimColor: Colors.black.withValues(alpha: 0.62),
+                  drawer: Drawer(
+                    width: drawerWidth,
+                    backgroundColor: AppTheme.panel,
+                    surfaceTintColor: Colors.transparent,
+                    child: SafeArea(
+                      child: Builder(
+                        builder: (drawerContext) =>
+                            sidebar(drawerContext: drawerContext),
                       ),
-              ),
-            ],
+                    ),
+                  ),
+                  appBar: AppBar(
+                    toolbarHeight: 56,
+                    backgroundColor: AppTheme.panel,
+                    surfaceTintColor: Colors.transparent,
+                    elevation: 0,
+                    leading: Builder(
+                      builder: (scaffoldContext) => IconButton(
+                        tooltip: 'Menu',
+                        icon: const Icon(Icons.menu_rounded),
+                        color: AppTheme.textPrimary,
+                        onPressed: () =>
+                            Scaffold.of(scaffoldContext).openDrawer(),
+                      ),
+                    ),
+                    titleSpacing: 0,
+                    title: Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [AppTheme.violet, AppTheme.pink],
+                            ),
+                            borderRadius: BorderRadius.circular(7),
+                          ),
+                          child: const Icon(
+                            Icons.radio_button_checked,
+                            color: Colors.white,
+                            size: 14,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            workspace.section.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      IconButton(
+                        tooltip: 'Command palette',
+                        icon: const Icon(Icons.manage_search_rounded),
+                        color: AppTheme.textSecondary,
+                        onPressed: _openCommandPalette,
+                      ),
+                    ],
+                    bottom: PreferredSize(
+                      preferredSize: const Size.fromHeight(1),
+                      child: Divider(
+                        height: 1,
+                        color: AppTheme.edge.withValues(alpha: 0.55),
+                      ),
+                    ),
+                  ),
+                  body: SafeArea(top: false, child: body),
+                );
+              }
+
+              return Scaffold(
+                backgroundColor: AppTheme.ink,
+                body: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        SizedBox(width: 262, child: sidebar()),
+                        const SizedBox(width: 20),
+                        Expanded(child: body),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -229,10 +359,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
           },
         );
       case AppSection.home:
-        return HomeScreen(
-          allTracks: allTracks,
-          userProfile: userProfile,
-        );
+        return HomeScreen(allTracks: allTracks, userProfile: userProfile);
       case AppSection.trending:
         return const TrendingScreen();
       case AppSection.search:
@@ -345,108 +472,6 @@ class _VibeShellState extends ConsumerState<VibeShell> {
   }
 }
 
-class _WorkbenchView extends StatelessWidget {
-  const _WorkbenchView({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    required this.showDashboard,
-    required this.allTracks,
-    required this.visibleTracks,
-    required this.filters,
-    required this.userProfile,
-    required this.genres,
-    required this.vibes,
-    required this.regions,
-    required this.searchController,
-    required this.searchFocusNode,
-    required this.filterFocusNode,
-    required this.selectedTrackIds,
-    required this.primaryTrackId,
-    required this.activeSortColumn,
-    required this.sortAscending,
-    required this.isLoading,
-    required this.onSearchChanged,
-    required this.onFiltersChanged,
-    required this.onRefresh,
-    required this.onSort,
-    required this.onToggleSelection,
-    required this.onActivateTrack,
-  });
-
-  final String title;
-  final String subtitle;
-  final bool showDashboard;
-  final List<Track> allTracks;
-  final List<Track> visibleTracks;
-  final TrackFilters filters;
-  final UserProfile userProfile;
-  final List<String> genres;
-  final List<String> vibes;
-  final List<String> regions;
-  final TextEditingController searchController;
-  final FocusNode searchFocusNode;
-  final FocusNode filterFocusNode;
-  final Set<String> selectedTrackIds;
-  final String? primaryTrackId;
-  final TrackSortColumn activeSortColumn;
-  final bool sortAscending;
-  final bool isLoading;
-  final ValueChanged<String> onSearchChanged;
-  final ValueChanged<TrackFilters> onFiltersChanged;
-  final VoidCallback onRefresh;
-  final void Function(TrackSortColumn column, bool ascending) onSort;
-  final ValueChanged<String> onToggleSelection;
-  final ValueChanged<String> onActivateTrack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _TitleBlock(title: title, subtitle: subtitle),
-        const SizedBox(height: 18),
-        if (showDashboard) ...[
-          DashboardCards(
-            tracks: allTracks,
-            preferredRegion: userProfile.preferredRegion,
-          ),
-          const SizedBox(height: 18),
-        ],
-        FilterBar(
-          searchController: searchController,
-          searchFocusNode: searchFocusNode,
-          filterFocusNode: filterFocusNode,
-          filters: filters,
-          genres: genres,
-          vibes: vibes,
-          regions: regions,
-          onSearchChanged: onSearchChanged,
-          onFiltersChanged: onFiltersChanged,
-          onRefresh: onRefresh,
-        ),
-        const SizedBox(height: 18),
-        Expanded(
-          child: isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : TrackTable(
-                  tracks: visibleTracks,
-                  selectedTrackIds: selectedTrackIds,
-                  primaryTrackId: primaryTrackId,
-                  activeRegion: filters.region,
-                  watchlist: userProfile.watchlist,
-                  sortColumn: activeSortColumn,
-                  sortAscending: sortAscending,
-                  onSort: onSort,
-                  onToggleSelection: onToggleSelection,
-                  onActivateTrack: onActivateTrack,
-                ),
-        ),
-      ],
-    );
-  }
-}
-
 class _RegionsView extends StatefulWidget {
   const _RegionsView({
     required this.tracks,
@@ -499,12 +524,15 @@ class _RegionsViewState extends State<_RegionsView> {
     final regions = regionStats.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
     final fallbackRegion = regions.firstOrNull?.key ?? 'Global';
-    final selectedRegion =
-        widget.activeRegion == 'Global' ? fallbackRegion : widget.activeRegion;
+    final selectedRegion = widget.activeRegion == 'Global'
+        ? fallbackRegion
+        : widget.activeRegion;
     final focusedTracks = [...tracks]
       ..sort(
-        (a, b) => regionScoreForTrack(b, selectedRegion)
-            .compareTo(regionScoreForTrack(a, selectedRegion)),
+        (a, b) => regionScoreForTrack(
+          b,
+          selectedRegion,
+        ).compareTo(regionScoreForTrack(a, selectedRegion)),
       );
     final regionalLeaders = focusedTracks
         .where((track) => regionScoreForTrack(track, selectedRegion) > 0)
@@ -523,21 +551,26 @@ class _RegionsViewState extends State<_RegionsView> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.public_rounded,
-                          color: AppTheme.pink, size: 24),
+                      const Icon(
+                        Icons.public_rounded,
+                        color: AppTheme.pink,
+                        size: 24,
+                      ),
                       const SizedBox(width: 10),
-                      Text('Regional Pulse',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(color: AppTheme.textPrimary)),
+                      Text(
+                        'Regional Pulse',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: AppTheme.textPrimary),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${regionalLeaders.length} tracks in ${formatRegionLabel(selectedRegion)}${_selectedGenre != 'All' ? ' · $_selectedGenre' : ''}',
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12),
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -548,16 +581,32 @@ class _RegionsViewState extends State<_RegionsView> {
                 decoration: BoxDecoration(
                   color: AppTheme.panelRaised,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                  border: Border.all(
+                    color: AppTheme.edge.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: DropdownButton<String>(
-                  value: genres.contains(_selectedGenre) ? _selectedGenre : 'All',
+                  value: genres.contains(_selectedGenre)
+                      ? _selectedGenre
+                      : 'All',
                   dropdownColor: AppTheme.panelRaised,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                  ),
                   underline: const SizedBox(),
                   isDense: true,
-                  items: genres.map((g) => DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 12)))).toList(),
-                  onChanged: (v) { if (v != null) setState(() => _selectedGenre = v); },
+                  items: genres
+                      .map(
+                        (g) => DropdownMenuItem(
+                          value: g,
+                          child: Text(g, style: const TextStyle(fontSize: 12)),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) setState(() => _selectedGenre = v);
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -584,9 +633,7 @@ class _RegionsViewState extends State<_RegionsView> {
                     selected: selected,
                     label: Text(entry.key),
                     labelStyle: TextStyle(
-                      color: selected
-                          ? Colors.white
-                          : AppTheme.textSecondary,
+                      color: selected ? Colors.white : AppTheme.textSecondary,
                       fontSize: 12,
                     ),
                     backgroundColor: AppTheme.panel,
@@ -608,12 +655,14 @@ class _RegionsViewState extends State<_RegionsView> {
         Expanded(
           child: regionalLeaders.isEmpty
               ? const Center(
-                  child: Text('No tracks match this region',
-                      style: TextStyle(color: AppTheme.textTertiary)))
+                  child: Text(
+                    'No tracks match this region',
+                    style: TextStyle(color: AppTheme.textTertiary),
+                  ),
+                )
               : GridView.builder(
                   padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                  gridDelegate:
-                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 200,
                     childAspectRatio: 0.72,
                     crossAxisSpacing: 12,
@@ -640,7 +689,11 @@ class _RegionsViewState extends State<_RegionsView> {
 }
 
 class _GenresView extends StatefulWidget {
-  const _GenresView({required this.tracks, required this.ref, required this.onSelectGenre});
+  const _GenresView({
+    required this.tracks,
+    required this.ref,
+    required this.onSelectGenre,
+  });
 
   final List<Track> tracks;
   final WidgetRef ref;
@@ -665,9 +718,9 @@ class _GenresViewState extends State<_GenresView> {
 
     final displayTracks = _selectedGenre == 'All'
         ? ([...widget.tracks]
-          ..sort((a, b) => b.trendScore.compareTo(a.trendScore)))
+            ..sort((a, b) => b.trendScore.compareTo(a.trendScore)))
         : ([...(genreStats[_selectedGenre] ?? <Track>[])]
-          ..sort((a, b) => b.trendScore.compareTo(a.trendScore)));
+            ..sort((a, b) => b.trendScore.compareTo(a.trendScore)));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -682,21 +735,26 @@ class _GenresViewState extends State<_GenresView> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.library_music_rounded,
-                          color: AppTheme.violet, size: 24),
+                      const Icon(
+                        Icons.library_music_rounded,
+                        color: AppTheme.violet,
+                        size: 24,
+                      ),
                       const SizedBox(width: 10),
-                      Text('Genre Landscape',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(color: AppTheme.textPrimary)),
+                      Text(
+                        'Genre Landscape',
+                        style: Theme.of(context).textTheme.headlineSmall
+                            ?.copyWith(color: AppTheme.textPrimary),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   Text(
                     '${displayTracks.length} tracks${_selectedGenre != 'All' ? ' in $_selectedGenre' : ' across ${genreNames.length} genres'}',
                     style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12),
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -740,8 +798,7 @@ class _GenresViewState extends State<_GenresView> {
                       selected: selected,
                       label: Text('$genre (${genreStats[genre]!.length})'),
                       labelStyle: TextStyle(
-                        color:
-                            selected ? Colors.white : AppTheme.textSecondary,
+                        color: selected ? Colors.white : AppTheme.textSecondary,
                         fontSize: 12,
                       ),
                       backgroundColor: AppTheme.panel,
@@ -751,8 +808,7 @@ class _GenresViewState extends State<_GenresView> {
                             ? AppTheme.violet.withValues(alpha: 0.5)
                             : AppTheme.edge.withValues(alpha: 0.5),
                       ),
-                      onSelected: (_) =>
-                          setState(() => _selectedGenre = genre),
+                      onSelected: (_) => setState(() => _selectedGenre = genre),
                     ),
                   );
                 }),
@@ -765,12 +821,14 @@ class _GenresViewState extends State<_GenresView> {
         Expanded(
           child: displayTracks.isEmpty
               ? const Center(
-                  child: Text('No tracks in this genre',
-                      style: TextStyle(color: AppTheme.textTertiary)))
+                  child: Text(
+                    'No tracks in this genre',
+                    style: TextStyle(color: AppTheme.textTertiary),
+                  ),
+                )
               : GridView.builder(
                   padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                  gridDelegate:
-                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 200,
                     childAspectRatio: 0.72,
                     crossAxisSpacing: 12,
@@ -802,23 +860,17 @@ class _SetSlot {
   String genre;
   _SortMode mode;
   int count;
-  String artist; // comma-separated artist names
-  String region;
+  String artist = ''; // comma-separated artist names
+  String region = '';
   int? yearFrom;
   int? yearTo;
-  int minBpm;
-  int maxBpm;
+  int minBpm = 0;
+  int maxBpm = 0;
 
   _SetSlot({
     this.genre = 'Afrobeats',
     this.mode = _SortMode.trending,
     this.count = 20,
-    this.artist = '',
-    this.region = 'All',
-    this.yearFrom,
-    this.yearTo,
-    this.minBpm = 60,
-    this.maxBpm = 200,
   });
 
   String get modeLabel => switch (mode) {
@@ -882,32 +934,55 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
             padding: const EdgeInsets.fromLTRB(28, 24, 28, 16),
             child: Row(
               children: [
-                const Icon(Icons.auto_fix_high_rounded, color: AppTheme.amber, size: 24),
+                const Icon(
+                  Icons.auto_fix_high_rounded,
+                  color: AppTheme.amber,
+                  size: 24,
+                ),
                 const SizedBox(width: 10),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Set Builder', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
+                    Text(
+                      'Set Builder',
+                      style: Theme.of(context).textTheme.headlineSmall
+                          ?.copyWith(color: AppTheme.textPrimary),
+                    ),
                     Text(
                       '${_platformTracks.length} / $totalRequested tracks from Apple Music, Spotify & YouTube'
                       '${_searchingPlatforms ? ' · searching…' : ''}',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
                 const Spacer(),
                 SizedBox(
-                  width: 150, height: 36,
+                  width: 150,
+                  height: 36,
                   child: TextField(
                     onChanged: (v) => _crateName = v,
                     controller: TextEditingController(text: _crateName),
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                    ),
                     decoration: InputDecoration(
                       hintText: 'Crate name…',
                       hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                      filled: true, fillColor: AppTheme.panelRaised, isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                      filled: true,
+                      fillColor: AppTheme.panelRaised,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 0,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                 ),
@@ -927,12 +1002,22 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                 FilledButton.tonalIcon(
                   onPressed: () {
                     // Build AI prompt from current slot config
-                    final slotDesc = _slots.map((s) => '${s.count} ${s.modeLabel} ${s.genre}${s.artist.isNotEmpty ? ' by ${s.artist}' : ''}').join(', ');
-                    ref.read(workspaceControllerProvider.notifier).setSection(AppSection.aiCopilot);
+                    final slotDesc = _slots
+                        .map(
+                          (s) =>
+                              '${s.count} ${s.modeLabel} ${s.genre}${s.artist.isNotEmpty ? ' by ${s.artist}' : ''}',
+                        )
+                        .join(', ');
+                    ref
+                        .read(workspaceControllerProvider.notifier)
+                        .setSection(AppSection.aiCopilot);
                   },
                   icon: const Icon(Icons.auto_awesome_rounded, size: 16),
                   label: const Text('Ask AI'),
-                  style: FilledButton.styleFrom(backgroundColor: AppTheme.amber.withValues(alpha: 0.2), foregroundColor: AppTheme.amber),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.amber.withValues(alpha: 0.2),
+                    foregroundColor: AppTheme.amber,
+                  ),
                 ),
               ],
             ),
@@ -963,8 +1048,7 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                   ),
                 ),
                 // Slot rows
-                for (var i = 0; i < _slots.length; i++)
-                  _buildSlotRow(i),
+                for (var i = 0; i < _slots.length; i++) _buildSlotRow(i),
                 // Add slot button
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
@@ -972,12 +1056,29 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                     children: [
                       TextButton.icon(
                         onPressed: () => setState(() => _slots.add(_SetSlot())),
-                        icon: const Icon(Icons.add_circle_rounded, size: 18, color: AppTheme.cyan),
-                        label: const Text('Add Slot', style: TextStyle(color: AppTheme.cyan, fontSize: 13, fontWeight: FontWeight.w600)),
+                        icon: const Icon(
+                          Icons.add_circle_rounded,
+                          size: 18,
+                          color: AppTheme.cyan,
+                        ),
+                        label: const Text(
+                          'Add Slot',
+                          style: TextStyle(
+                            color: AppTheme.cyan,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                       const Spacer(),
-                      Text('$totalRequested tracks total',
-                          style: const TextStyle(color: AppTheme.amber, fontSize: 12, fontWeight: FontWeight.w600)),
+                      Text(
+                        '$totalRequested tracks total',
+                        style: const TextStyle(
+                          color: AppTheme.amber,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -996,9 +1097,16 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.library_music_rounded, color: AppTheme.textTertiary.withValues(alpha: 0.4), size: 48),
+                  Icon(
+                    Icons.library_music_rounded,
+                    color: AppTheme.textTertiary.withValues(alpha: 0.4),
+                    size: 48,
+                  ),
                   const SizedBox(height: 12),
-                  const Text('Configure your slots and hit Build Set', style: TextStyle(color: AppTheme.textTertiary)),
+                  const Text(
+                    'Configure your slots and hit Build Set',
+                    style: TextStyle(color: AppTheme.textTertiary),
+                  ),
                 ],
               ),
             ),
@@ -1010,9 +1118,15 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2),
+                  CircularProgressIndicator(
+                    color: AppTheme.cyan,
+                    strokeWidth: 2,
+                  ),
                   SizedBox(height: 16),
-                  Text('Searching Apple Music, Spotify & YouTube…', style: TextStyle(color: AppTheme.textSecondary)),
+                  Text(
+                    'Searching Apple Music, Spotify & YouTube…',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
                 ],
               ),
             ),
@@ -1027,13 +1141,10 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final t = _platformTracks[i];
-                  return _PlatformResultCard(track: t, index: i);
-                },
-                childCount: _platformTracks.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final t = _platformTracks[i];
+                return _PlatformResultCard(track: t, index: i);
+              }, childCount: _platformTracks.length),
             ),
           ),
       ],
@@ -1042,9 +1153,21 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
 
   Widget _buildSlotRow(int index) {
     final slot = _slots[index];
-    final genreOptions = ['All', 'Afrobeats', 'Amapiano', 'Hip-Hop', 'R&B', 'House',
-        'Dancehall', 'Pop', 'Latin', 'Drill', 'Dance', 'UK Garage',
-        ...widget.genres.where((g) => g != 'All')].toSet().toList();
+    final genreOptions = {
+      'All',
+      'Afrobeats',
+      'Amapiano',
+      'Hip-Hop',
+      'R&B',
+      'House',
+      'Dancehall',
+      'Pop',
+      'Latin',
+      'Drill',
+      'Dance',
+      'UK Garage',
+      ...widget.genres.where((g) => g != 'All'),
+    }.toList();
     final regionOptions = ['All', 'GH', 'NG', 'ZA', 'GB', 'US', 'DE'];
 
     return Container(
@@ -1059,12 +1182,24 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
         children: [
           // Slot badge
           Container(
-            width: 26, height: 26,
+            width: 26,
+            height: 26,
             decoration: BoxDecoration(
-              gradient: const LinearGradient(colors: [AppTheme.violet, AppTheme.cyan]),
+              gradient: const LinearGradient(
+                colors: [AppTheme.violet, AppTheme.cyan],
+              ),
               borderRadius: BorderRadius.circular(7),
             ),
-            child: Center(child: Text('${index + 1}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800))),
+            child: Center(
+              child: Text(
+                '${index + 1}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
           ),
           const SizedBox(width: 6),
           // Mode
@@ -1072,19 +1207,32 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
             width: 110,
             child: _pill(
               child: DropdownButton<_SortMode>(
-                value: slot.mode, dropdownColor: AppTheme.panelRaised,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                underline: const SizedBox(), isDense: true, isExpanded: true,
-                items: _SortMode.values.map((m) => DropdownMenuItem(value: m,
-                  child: Text(switch (m) {
-                    _SortMode.all => 'All Best',
-                    _SortMode.trending => 'Trending',
-                    _SortMode.hottest => 'Hottest',
-                    _SortMode.rising => 'Rising',
-                    _SortMode.greatestOf => 'Greatest',
-                  }, style: const TextStyle(fontSize: 12)),
-                )).toList(),
-                onChanged: (v) { if (v != null) setState(() => slot.mode = v); },
+                value: slot.mode,
+                dropdownColor: AppTheme.panelRaised,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 12,
+                ),
+                underline: const SizedBox(),
+                isDense: true,
+                isExpanded: true,
+                items: _SortMode.values
+                    .map(
+                      (m) => DropdownMenuItem(
+                        value: m,
+                        child: Text(switch (m) {
+                          _SortMode.all => 'All Best',
+                          _SortMode.trending => 'Trending',
+                          _SortMode.hottest => 'Hottest',
+                          _SortMode.rising => 'Rising',
+                          _SortMode.greatestOf => 'Greatest',
+                        }, style: const TextStyle(fontSize: 12)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => slot.mode = v);
+                },
               ),
             ),
           ),
@@ -1096,10 +1244,24 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
               child: DropdownButton<String>(
                 value: genreOptions.contains(slot.genre) ? slot.genre : 'All',
                 dropdownColor: AppTheme.panelRaised,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                underline: const SizedBox(), isDense: true, isExpanded: true,
-                items: genreOptions.map((g) => DropdownMenuItem(value: g, child: Text(g, style: const TextStyle(fontSize: 12)))).toList(),
-                onChanged: (v) { if (v != null) setState(() => slot.genre = v); },
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 12,
+                ),
+                underline: const SizedBox(),
+                isDense: true,
+                isExpanded: true,
+                items: genreOptions
+                    .map(
+                      (g) => DropdownMenuItem(
+                        value: g,
+                        child: Text(g, style: const TextStyle(fontSize: 12)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => slot.genre = v);
+                },
               ),
             ),
           ),
@@ -1111,13 +1273,27 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
               child: TextField(
                 onChanged: (v) => slot.artist = v.trim(),
                 controller: TextEditingController(text: slot.artist),
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 12,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Drake, Wizkid…',
-                  hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
-                  filled: true, fillColor: AppTheme.panelRaised, isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                  hintStyle: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 11,
+                  ),
+                  filled: true,
+                  fillColor: AppTheme.panelRaised,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 0,
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ),
@@ -1128,12 +1304,28 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
             width: 70,
             child: _pill(
               child: DropdownButton<String>(
-                value: regionOptions.contains(slot.region) ? slot.region : 'All',
+                value: regionOptions.contains(slot.region)
+                    ? slot.region
+                    : 'All',
                 dropdownColor: AppTheme.panelRaised,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                underline: const SizedBox(), isDense: true, isExpanded: true,
-                items: regionOptions.map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 12)))).toList(),
-                onChanged: (v) { if (v != null) setState(() => slot.region = v); },
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 12,
+                ),
+                underline: const SizedBox(),
+                isDense: true,
+                isExpanded: true,
+                items: regionOptions
+                    .map(
+                      (r) => DropdownMenuItem(
+                        value: r,
+                        child: Text(r, style: const TextStyle(fontSize: 12)),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) setState(() => slot.region = v);
+                },
               ),
             ),
           ),
@@ -1148,30 +1340,69 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                     height: 32,
                     child: TextField(
                       onChanged: (v) => slot.yearFrom = int.tryParse(v),
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12,
+                      ),
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        hintText: 'From', hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                        filled: true, fillColor: AppTheme.panelRaised, isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                        hintText: 'From',
+                        hintStyle: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 10,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.panelRaised,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 0,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 2), child: Text('–', style: TextStyle(color: AppTheme.textTertiary, fontSize: 10))),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    '–',
+                    style: TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: SizedBox(
                     height: 32,
                     child: TextField(
                       onChanged: (v) => slot.yearTo = int.tryParse(v),
-                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12,
+                      ),
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        hintText: 'To', hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                        filled: true, fillColor: AppTheme.panelRaised, isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                        hintText: 'To',
+                        hintStyle: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 10,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.panelRaised,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 0,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
@@ -1190,32 +1421,75 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                     height: 32,
                     child: TextField(
                       onChanged: (v) => slot.minBpm = int.tryParse(v) ?? 60,
-                      controller: TextEditingController(text: slot.minBpm == 60 ? '' : '${slot.minBpm}'),
-                      style: const TextStyle(color: AppTheme.amber, fontSize: 12),
+                      controller: TextEditingController(
+                        text: slot.minBpm == 60 ? '' : '${slot.minBpm}',
+                      ),
+                      style: const TextStyle(
+                        color: AppTheme.amber,
+                        fontSize: 12,
+                      ),
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        hintText: '60', hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                        filled: true, fillColor: AppTheme.panelRaised, isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                        hintText: '60',
+                        hintStyle: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 10,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.panelRaised,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 0,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const Padding(padding: EdgeInsets.symmetric(horizontal: 2), child: Text('–', style: TextStyle(color: AppTheme.textTertiary, fontSize: 10))),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    '–',
+                    style: TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
                 Expanded(
                   child: SizedBox(
                     height: 32,
                     child: TextField(
                       onChanged: (v) => slot.maxBpm = int.tryParse(v) ?? 200,
-                      controller: TextEditingController(text: slot.maxBpm == 200 ? '' : '${slot.maxBpm}'),
-                      style: const TextStyle(color: AppTheme.amber, fontSize: 12),
+                      controller: TextEditingController(
+                        text: slot.maxBpm == 200 ? '' : '${slot.maxBpm}',
+                      ),
+                      style: const TextStyle(
+                        color: AppTheme.amber,
+                        fontSize: 12,
+                      ),
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
-                        hintText: '200', hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                        filled: true, fillColor: AppTheme.panelRaised, isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 6, vertical: 0),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide.none),
+                        hintText: '200',
+                        hintStyle: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 10,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.panelRaised,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 0,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                     ),
                   ),
@@ -1229,10 +1503,19 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
             width: 100,
             child: Row(
               children: [
-                Text('${slot.count}', style: const TextStyle(color: AppTheme.amber, fontSize: 13, fontWeight: FontWeight.w800)),
+                Text(
+                  '${slot.count}',
+                  style: const TextStyle(
+                    color: AppTheme.amber,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
                 Expanded(
                   child: Slider(
-                    min: 5, max: 500, divisions: 99,
+                    min: 5,
+                    max: 500,
+                    divisions: 99,
                     value: slot.count.toDouble(),
                     onChanged: (v) => setState(() => slot.count = v.round()),
                   ),
@@ -1243,7 +1526,11 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
           // Remove
           if (_slots.length > 1)
             IconButton(
-              icon: const Icon(Icons.close_rounded, size: 16, color: AppTheme.textTertiary),
+              icon: const Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: AppTheme.textTertiary,
+              ),
               onPressed: () => setState(() => _slots.removeAt(index)),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
@@ -1307,7 +1594,13 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
           final yearHint = slot.yearFrom != null ? '${slot.yearFrom}s' : null;
           final allResults = <PlatformTrackResult>[];
           final allSeen = <String>{};
-          for (final hint in ['best top popular', 'trending hit', 'classic essential', 'new hot', 'playlist']) {
+          for (final hint in [
+            'best top popular',
+            'trending hit',
+            'classic essential',
+            'new hot',
+            'playlist',
+          ]) {
             final batch = await _platformSearch.searchByGenre(
               '$hint $genre $bpmHint'.trim(),
               limit: (slot.count ~/ 3).clamp(20, 200),
@@ -1336,14 +1629,16 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
           if (seen.contains(key)) continue;
           seen.add(key);
 
-          allFound.add(AiCrateTrack(
-            title: r.title,
-            artist: r.artist,
-            artworkUrl: r.artworkUrl,
-            spotifyUrl: r.spotifyUrl,
-            appleUrl: r.appleUrl,
-            resolved: r.hasUrl,
-          ));
+          allFound.add(
+            AiCrateTrack(
+              title: r.title,
+              artist: r.artist,
+              artworkUrl: r.artworkUrl,
+              spotifyUrl: r.spotifyUrl,
+              appleUrl: r.appleUrl,
+              resolved: r.hasUrl,
+            ),
+          );
           added++;
         }
       } catch (_) {}
@@ -1382,80 +1677,17 @@ class _ColHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final child = Text(label, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9, fontWeight: FontWeight.w700, letterSpacing: 1.2));
+    final child = Text(
+      label,
+      style: const TextStyle(
+        color: AppTheme.textTertiary,
+        fontSize: 9,
+        fontWeight: FontWeight.w700,
+        letterSpacing: 1.2,
+      ),
+    );
     if (flex) return Expanded(child: child);
     return SizedBox(width: width, child: child);
-  }
-}
-
-class _SlotFilter extends StatelessWidget {
-  const _SlotFilter({required this.icon, required this.label, required this.child});
-  final IconData icon;
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: AppTheme.textTertiary),
-        const SizedBox(width: 6),
-        Text(label, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11, fontWeight: FontWeight.w600)),
-        const SizedBox(width: 8),
-        child,
-      ],
-    );
-  }
-}
-
-class _SetBuilderDropdown extends StatelessWidget {
-  const _SetBuilderDropdown({
-    required this.label,
-    required this.value,
-    required this.options,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String value;
-  final List<String> options;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      decoration: BoxDecoration(
-        color: AppTheme.panelRaised,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('$label: ',
-              style: const TextStyle(
-                  color: AppTheme.textTertiary, fontSize: 11)),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: options.contains(value) ? value : options.firstOrNull,
-              isDense: true,
-              dropdownColor: AppTheme.panelRaised,
-              style: const TextStyle(
-                  color: AppTheme.textPrimary, fontSize: 12),
-              items: options
-                  .map((o) =>
-                      DropdownMenuItem(value: o, child: Text(o)))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) onChanged(v);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -1489,7 +1721,9 @@ class _SavedCratesView extends ConsumerWidget {
               ? Center(
                   child: Text(
                     'No crates yet. Use AI Copilot or Set Builder to create one.',
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: Colors.white70),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyLarge?.copyWith(color: Colors.white70),
                   ),
                 )
               : ListView(
@@ -1570,41 +1804,81 @@ class _AiCrateCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [AppTheme.violet, AppTheme.pink]),
+                  gradient: const LinearGradient(
+                    colors: [AppTheme.violet, AppTheme.pink],
+                  ),
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.auto_awesome_rounded, color: Colors.white, size: 10),
+                    Icon(
+                      Icons.auto_awesome_rounded,
+                      color: Colors.white,
+                      size: 10,
+                    ),
                     SizedBox(width: 4),
-                    Text('AI', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                    Text(
+                      'AI',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+                child: Text(
+                  name,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              Text('$resolved/${tracks.length} playable',
-                  style: TextStyle(color: resolved == tracks.length ? AppTheme.lime : AppTheme.amber, fontSize: 11)),
+              Text(
+                '$resolved/${tracks.length} playable',
+                style: TextStyle(
+                  color: resolved == tracks.length
+                      ? AppTheme.lime
+                      : AppTheme.amber,
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
           // Export buttons
           Row(
             children: [
-              _ExportBtn(label: 'Export M3U', icon: Icons.queue_music_rounded, onTap: () => _export(context, 'm3u')),
+              _ExportBtn(
+                label: 'Export M3U',
+                icon: Icons.queue_music_rounded,
+                onTap: () => _export(context, 'm3u'),
+              ),
               const SizedBox(width: 8),
-              _ExportBtn(label: 'Export CSV', icon: Icons.table_chart_rounded, onTap: () => _export(context, 'csv')),
+              _ExportBtn(
+                label: 'Export CSV',
+                icon: Icons.table_chart_rounded,
+                onTap: () => _export(context, 'csv'),
+              ),
               const SizedBox(width: 8),
-              _ExportBtn(label: 'Manifest', icon: Icons.description_rounded, onTap: () => _export(context, 'manifest')),
+              _ExportBtn(
+                label: 'Manifest',
+                icon: Icons.description_rounded,
+                onTap: () => _export(context, 'manifest'),
+              ),
             ],
           ),
           const SizedBox(height: 14),
           for (var i = 0; i < tracks.length; i++) ...[
             _AiTrackRow(track: tracks[i], index: i),
-            if (i < tracks.length - 1) Divider(color: AppTheme.edge.withValues(alpha: 0.3), height: 1),
+            if (i < tracks.length - 1)
+              Divider(color: AppTheme.edge.withValues(alpha: 0.3), height: 1),
           ],
         ],
       ),
@@ -1626,21 +1900,40 @@ class _AiTrackRow extends StatelessWidget {
           // Index
           SizedBox(
             width: 24,
-            child: Text('${index + 1}', textAlign: TextAlign.right,
-                style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+            child: Text(
+              '${index + 1}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 11,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           // Artwork
           if (track.artworkUrl != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
-              child: CachedNetworkImage(imageUrl: track.artworkUrl!, width: 36, height: 36, fit: BoxFit.cover),
+              child: CachedNetworkImage(
+                imageUrl: track.artworkUrl!,
+                width: 36,
+                height: 36,
+                fit: BoxFit.cover,
+              ),
             )
           else
             Container(
-              width: 36, height: 36,
-              decoration: BoxDecoration(color: AppTheme.panelRaised, borderRadius: BorderRadius.circular(6)),
-              child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 16),
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.panelRaised,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.music_note_rounded,
+                color: AppTheme.textTertiary,
+                size: 16,
+              ),
             ),
           const SizedBox(width: 10),
           // Title + artist
@@ -1648,10 +1941,25 @@ class _AiTrackRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  track.title,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  track.artist,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
@@ -1660,25 +1968,59 @@ class _AiTrackRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(color: AppTheme.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-              child: Text('${track.bpm}', style: const TextStyle(color: AppTheme.amber, fontSize: 10, fontWeight: FontWeight.w600)),
+              decoration: BoxDecoration(
+                color: AppTheme.amber.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${track.bpm}',
+                style: const TextStyle(
+                  color: AppTheme.amber,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           if (track.key.isNotEmpty)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(4)),
-              child: Text(track.key, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10, fontWeight: FontWeight.w600)),
+              decoration: BoxDecoration(
+                color: AppTheme.edge.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                track.key,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           // Play buttons
           if (track.spotifyUrl != null)
-            _PlatformPlayBtn(icon: Icons.graphic_eq_rounded, color: const Color(0xFF1ED760), url: track.spotifyUrl!, tooltip: 'Play on Spotify'),
+            _PlatformPlayBtn(
+              icon: Icons.graphic_eq_rounded,
+              color: const Color(0xFF1ED760),
+              url: track.spotifyUrl!,
+              tooltip: 'Play on Spotify',
+            ),
           if (track.appleUrl != null)
-            _PlatformPlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: track.appleUrl!, tooltip: 'Play on Apple Music'),
+            _PlatformPlayBtn(
+              icon: Icons.music_note_rounded,
+              color: const Color(0xFFFF7AB5),
+              url: track.appleUrl!,
+              tooltip: 'Play on Apple Music',
+            ),
           if (!track.resolved)
             const Tooltip(
               message: 'Not found on platforms',
-              child: Icon(Icons.cloud_off_rounded, color: AppTheme.textTertiary, size: 16),
+              child: Icon(
+                Icons.cloud_off_rounded,
+                color: AppTheme.textTertiary,
+                size: 16,
+              ),
             ),
         ],
       ),
@@ -1687,7 +2029,12 @@ class _AiTrackRow extends StatelessWidget {
 }
 
 class _PlatformPlayBtn extends StatelessWidget {
-  const _PlatformPlayBtn({required this.icon, required this.color, required this.url, required this.tooltip});
+  const _PlatformPlayBtn({
+    required this.icon,
+    required this.color,
+    required this.url,
+    required this.tooltip,
+  });
   final IconData icon;
   final Color color;
   final String url;
@@ -1703,7 +2050,9 @@ class _PlatformPlayBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
           onTap: () {
             final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           },
           child: Padding(
             padding: const EdgeInsets.all(4),
@@ -1716,7 +2065,11 @@ class _PlatformPlayBtn extends StatelessWidget {
 }
 
 class _ExportBtn extends StatelessWidget {
-  const _ExportBtn({required this.label, required this.icon, required this.onTap});
+  const _ExportBtn({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
   final String label;
   final IconData icon;
   final VoidCallback onTap;
@@ -1740,7 +2093,14 @@ class _ExportBtn extends StatelessWidget {
             children: [
               Icon(icon, color: AppTheme.cyan, size: 14),
               const SizedBox(width: 6),
-              Text(label, style: const TextStyle(color: AppTheme.cyan, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.cyan,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -1754,20 +2114,43 @@ class _RegularCrateCard extends StatelessWidget {
   final Crate crate;
   final List<Track> allTracks;
 
-  Future<void> _export(BuildContext context, String format, List<Track> tracks) async {
+  Future<void> _export(
+    BuildContext context,
+    String format,
+    List<Track> tracks,
+  ) async {
     // Show immediate feedback
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Exporting $format...'), backgroundColor: AppTheme.cyan, duration: const Duration(seconds: 1)),
+      SnackBar(
+        content: Text('Exporting $format...'),
+        backgroundColor: AppTheme.cyan,
+        duration: const Duration(seconds: 1),
+      ),
     );
 
     final svc = ExportService();
     final name = crate.name;
-    final libTracks = tracks.map((t) => LibraryTrack(
-      id: t.id, filePath: '', fileName: '${t.artist} - ${t.title}',
-      title: t.title, artist: t.artist, album: '', genre: t.genre,
-      bpm: t.bpm.toDouble(), key: t.keySignature, durationSeconds: 0,
-      fileSizeBytes: 0, fileExtension: '.mp3', md5Hash: '', bitrate: 320, sampleRate: 44100,
-    )).toList();
+    final libTracks = tracks
+        .map(
+          (t) => LibraryTrack(
+            id: t.id,
+            filePath: '',
+            fileName: '${t.artist} - ${t.title}',
+            title: t.title,
+            artist: t.artist,
+            album: '',
+            genre: t.genre,
+            bpm: t.bpm.toDouble(),
+            key: t.keySignature,
+            durationSeconds: 0,
+            fileSizeBytes: 0,
+            fileExtension: '.mp3',
+            md5Hash: '',
+            bitrate: 320,
+            sampleRate: 44100,
+          ),
+        )
+        .toList();
     final exportCrate = ExportCrate(name: name, tracks: libTracks);
 
     String path;
@@ -1783,10 +2166,13 @@ class _RegularCrateCard extends StatelessWidget {
       case 'traktor':
         path = await svc.exportTraktorNml(exportCrate);
       case 'manifest':
-        path = await svc.exportAiCrateManifest(name, tracks.map((t) {
-          // Wrap as dynamic with required fields
-          return _TrackExportProxy(t);
-        }).toList());
+        path = await svc.exportAiCrateManifest(
+          name,
+          tracks.map((t) {
+            // Wrap as dynamic with required fields
+            return _TrackExportProxy(t);
+          }).toList(),
+        );
       default:
         return;
     }
@@ -1834,45 +2220,99 @@ class _RegularCrateCard extends StatelessWidget {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.auto_fix_high_rounded, color: AppTheme.amber, size: 10),
+                    Icon(
+                      Icons.auto_fix_high_rounded,
+                      color: AppTheme.amber,
+                      size: 10,
+                    ),
                     SizedBox(width: 4),
-                    Text('SET', style: TextStyle(color: AppTheme.amber, fontSize: 9, fontWeight: FontWeight.w800)),
+                    Text(
+                      'SET',
+                      style: TextStyle(
+                        color: AppTheme.amber,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: Text(crate.name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w700)),
+                child: Text(
+                  crate.name,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              Text('${tracks.length} tracks',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              Text(
+                '${tracks.length} tracks',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
             ],
           ),
           if (crate.context.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(crate.context, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+            Text(
+              crate.context,
+              style: const TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 11,
+              ),
+            ),
           ],
           const SizedBox(height: 10),
           // Export buttons
           Row(
             children: [
-              _ExportBtn(label: 'M3U', icon: Icons.queue_music_rounded, onTap: () => _export(context, 'm3u', tracks)),
+              _ExportBtn(
+                label: 'M3U',
+                icon: Icons.queue_music_rounded,
+                onTap: () => _export(context, 'm3u', tracks),
+              ),
               const SizedBox(width: 6),
-              _ExportBtn(label: 'Serato', icon: Icons.table_chart_rounded, onTap: () => _export(context, 'csv', tracks)),
+              _ExportBtn(
+                label: 'Serato',
+                icon: Icons.table_chart_rounded,
+                onTap: () => _export(context, 'csv', tracks),
+              ),
               const SizedBox(width: 6),
-              _ExportBtn(label: 'Rekordbox', icon: Icons.album_rounded, onTap: () => _export(context, 'rekordbox', tracks)),
+              _ExportBtn(
+                label: 'Rekordbox',
+                icon: Icons.album_rounded,
+                onTap: () => _export(context, 'rekordbox', tracks),
+              ),
               const SizedBox(width: 6),
-              _ExportBtn(label: 'VirtualDJ', icon: Icons.surround_sound_rounded, onTap: () => _export(context, 'virtualdj', tracks)),
+              _ExportBtn(
+                label: 'VirtualDJ',
+                icon: Icons.surround_sound_rounded,
+                onTap: () => _export(context, 'virtualdj', tracks),
+              ),
               const SizedBox(width: 6),
-              _ExportBtn(label: 'Traktor', icon: Icons.speaker_rounded, onTap: () => _export(context, 'traktor', tracks)),
+              _ExportBtn(
+                label: 'Traktor',
+                icon: Icons.speaker_rounded,
+                onTap: () => _export(context, 'traktor', tracks),
+              ),
               const SizedBox(width: 6),
-              _ExportBtn(label: 'Manifest', icon: Icons.description_rounded, onTap: () => _export(context, 'manifest', tracks)),
+              _ExportBtn(
+                label: 'Manifest',
+                icon: Icons.description_rounded,
+                onTap: () => _export(context, 'manifest', tracks),
+              ),
             ],
           ),
           const SizedBox(height: 14),
           for (var i = 0; i < tracks.length; i++) ...[
             _CrateTrackRow(track: tracks[i], index: i),
-            if (i < tracks.length - 1) Divider(color: AppTheme.edge.withValues(alpha: 0.3), height: 1),
+            if (i < tracks.length - 1)
+              Divider(color: AppTheme.edge.withValues(alpha: 0.3), height: 1),
           ],
         ],
       ),
@@ -1894,16 +2334,27 @@ class _CrateTrackRow extends StatelessWidget {
           // Index
           SizedBox(
             width: 24,
-            child: Text('${index + 1}', textAlign: TextAlign.right,
-                style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+            child: Text(
+              '${index + 1}',
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 11,
+              ),
+            ),
           ),
           const SizedBox(width: 10),
           // Artwork
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
             child: track.artworkUrl.isNotEmpty
-                ? CachedNetworkImage(imageUrl: track.artworkUrl, width: 36, height: 36, fit: BoxFit.cover,
-                    errorWidget: (_, __, ___) => _trackArtPlaceholder())
+                ? CachedNetworkImage(
+                    imageUrl: track.artworkUrl,
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    errorWidget: (_, _, _) => _trackArtPlaceholder(),
+                  )
                 : _trackArtPlaceholder(),
           ),
           const SizedBox(width: 10),
@@ -1912,10 +2363,25 @@ class _CrateTrackRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  track.title,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  track.artist,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
@@ -1924,19 +2390,45 @@ class _CrateTrackRow extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               margin: const EdgeInsets.only(right: 4),
-              decoration: BoxDecoration(color: AppTheme.amber.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(4)),
-              child: Text('${track.bpm}', style: const TextStyle(color: AppTheme.amber, fontSize: 10, fontWeight: FontWeight.w600)),
+              decoration: BoxDecoration(
+                color: AppTheme.amber.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                '${track.bpm}',
+                style: const TextStyle(
+                  color: AppTheme.amber,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           // Key
           if (track.keySignature.isNotEmpty && track.keySignature != '--')
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
               margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(4)),
-              child: Text(track.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10, fontWeight: FontWeight.w600)),
+              decoration: BoxDecoration(
+                color: AppTheme.edge.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                track.keySignature,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           // Genre
-          Text(track.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.6), fontSize: 10)),
+          Text(
+            track.genre,
+            style: TextStyle(
+              color: AppTheme.violet.withValues(alpha: 0.6),
+              fontSize: 10,
+            ),
+          ),
           const SizedBox(width: 8),
           // Play buttons per platform
           for (final entry in track.platformLinks.entries.take(3))
@@ -1946,7 +2438,8 @@ class _CrateTrackRow extends StatelessWidget {
                 icon: _platformIcon(entry.key),
                 color: _platformColor(entry.key),
                 url: entry.value,
-                tooltip: 'Play on ${entry.key[0].toUpperCase()}${entry.key.substring(1)}',
+                tooltip:
+                    'Play on ${entry.key[0].toUpperCase()}${entry.key.substring(1)}',
               ),
             ),
         ],
@@ -1955,9 +2448,17 @@ class _CrateTrackRow extends StatelessWidget {
   }
 
   static Widget _trackArtPlaceholder() => Container(
-    width: 36, height: 36,
-    decoration: BoxDecoration(color: AppTheme.panelRaised, borderRadius: BorderRadius.circular(6)),
-    child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 16),
+    width: 36,
+    height: 36,
+    decoration: BoxDecoration(
+      color: AppTheme.panelRaised,
+      borderRadius: BorderRadius.circular(6),
+    ),
+    child: const Icon(
+      Icons.music_note_rounded,
+      color: AppTheme.textTertiary,
+      size: 16,
+    ),
   );
 
   static IconData _platformIcon(String p) => switch (p.toLowerCase()) {
@@ -2004,8 +2505,17 @@ class _PlaylistsViewState extends State<_PlaylistsView> {
   Future<void> _load() async {
     setState(() => _loading = true);
     try {
-      final results = await _service.fetchPlaylists(genre: _genre, region: _region, limit: 100);
-      if (mounted) setState(() { _playlists = results; _loading = false; });
+      final results = await _service.fetchPlaylists(
+        genre: _genre,
+        region: _region,
+        limit: 100,
+      );
+      if (mounted) {
+        setState(() {
+          _playlists = results;
+          _loading = false;
+        });
+      }
     } catch (_) {
       if (mounted) setState(() => _loading = false);
     }
@@ -2013,7 +2523,18 @@ class _PlaylistsViewState extends State<_PlaylistsView> {
 
   @override
   Widget build(BuildContext context) {
-    final genreOptions = ['All', 'Afrobeats', 'Amapiano', 'Hip-Hop', 'R&B', 'House', 'Dancehall', 'Pop', 'Latin', 'Drill'];
+    final genreOptions = [
+      'All',
+      'Afrobeats',
+      'Amapiano',
+      'Hip-Hop',
+      'R&B',
+      'House',
+      'Dancehall',
+      'Pop',
+      'Latin',
+      'Drill',
+    ];
     final regionOptions = ['All', 'GH', 'NG', 'ZA', 'GB', 'US', 'DE'];
 
     return Column(
@@ -2023,26 +2544,55 @@ class _PlaylistsViewState extends State<_PlaylistsView> {
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
           child: Row(
             children: [
-              const Icon(Icons.playlist_play_rounded, color: AppTheme.cyan, size: 24),
+              const Icon(
+                Icons.playlist_play_rounded,
+                color: AppTheme.cyan,
+                size: 24,
+              ),
               const SizedBox(width: 10),
-              Text('Top Playlists', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
+              Text(
+                'Top Playlists',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: AppTheme.textPrimary,
+                ),
+              ),
               const SizedBox(width: 12),
-              Text('${_playlists.length} playlists from Apple Music, Spotify & YouTube',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              Text(
+                '${_playlists.length} playlists from Apple Music, Spotify & YouTube',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
               const Spacer(),
               // Genre filter
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.panelRaised, borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                  color: AppTheme.panelRaised,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.edge.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: DropdownButton<String>(
-                  value: _genre, dropdownColor: AppTheme.panelRaised,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                  underline: const SizedBox(), isDense: true,
-                  items: genreOptions.map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                  onChanged: (v) { if (v != null) { setState(() => _genre = v); _load(); } },
+                  value: _genre,
+                  dropdownColor: AppTheme.panelRaised,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                  ),
+                  underline: const SizedBox(),
+                  isDense: true,
+                  items: genreOptions
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() => _genre = v);
+                      _load();
+                    }
+                  },
                 ),
               ),
               const SizedBox(width: 8),
@@ -2050,15 +2600,30 @@ class _PlaylistsViewState extends State<_PlaylistsView> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 decoration: BoxDecoration(
-                  color: AppTheme.panelRaised, borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                  color: AppTheme.panelRaised,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.edge.withValues(alpha: 0.5),
+                  ),
                 ),
                 child: DropdownButton<String>(
-                  value: _region, dropdownColor: AppTheme.panelRaised,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                  underline: const SizedBox(), isDense: true,
-                  items: regionOptions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                  onChanged: (v) { if (v != null) { setState(() => _region = v); _load(); } },
+                  value: _region,
+                  dropdownColor: AppTheme.panelRaised,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                  ),
+                  underline: const SizedBox(),
+                  isDense: true,
+                  items: regionOptions
+                      .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setState(() => _region = v);
+                      _load();
+                    }
+                  },
                 ),
               ),
             ],
@@ -2067,14 +2632,25 @@ class _PlaylistsViewState extends State<_PlaylistsView> {
         const SizedBox(height: 16),
         Expanded(
           child: _loading
-              ? const Center(child: CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2))
+              ? const Center(
+                  child: CircularProgressIndicator(
+                    color: AppTheme.cyan,
+                    strokeWidth: 2,
+                  ),
+                )
               : _playlists.isEmpty
-                  ? const Center(child: Text('No playlists found. Try a different genre.', style: TextStyle(color: AppTheme.textTertiary)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
-                      itemCount: _playlists.length,
-                      itemBuilder: (ctx, i) => _PlaylistCard(playlist: _playlists[i]),
-                    ),
+              ? const Center(
+                  child: Text(
+                    'No playlists found. Try a different genre.',
+                    style: TextStyle(color: AppTheme.textTertiary),
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
+                  itemCount: _playlists.length,
+                  itemBuilder: (ctx, i) =>
+                      _PlaylistCard(playlist: _playlists[i]),
+                ),
         ),
       ],
     );
@@ -2105,23 +2681,48 @@ class _PlaylistCard extends StatelessWidget {
                 if (playlist.artworkUrl != null)
                   ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: CachedNetworkImage(imageUrl: playlist.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover),
+                    child: CachedNetworkImage(
+                      imageUrl: playlist.artworkUrl!,
+                      width: 48,
+                      height: 48,
+                      fit: BoxFit.cover,
+                    ),
                   )
                 else
                   Container(
-                    width: 48, height: 48,
-                    decoration: BoxDecoration(color: AppTheme.panelRaised, borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.playlist_play_rounded, color: AppTheme.cyan, size: 24),
+                    width: 48,
+                    height: 48,
+                    decoration: BoxDecoration(
+                      color: AppTheme.panelRaised,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.playlist_play_rounded,
+                      color: AppTheme.cyan,
+                      size: 24,
+                    ),
                   ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(playlist.name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
+                      Text(
+                        playlist.name,
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       const SizedBox(height: 2),
-                      Text('${playlist.tracks.length} tracks from ${playlist.sourceLabel}',
-                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                      Text(
+                        '${playlist.tracks.length} tracks from ${playlist.sourceLabel}',
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2141,7 +2742,8 @@ class _PlaylistCard extends StatelessWidget {
                   mainAxisExtent: 150,
                 ),
                 itemCount: playlist.tracks.length,
-                itemBuilder: (ctx, i) => _PlaylistTrackCard(track: playlist.tracks[i]),
+                itemBuilder: (ctx, i) =>
+                    _PlaylistTrackCard(track: playlist.tracks[i]),
               ),
             ),
         ],
@@ -2176,7 +2778,9 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
           final url = t.bestUrl;
           if (url.isNotEmpty) {
             final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           }
         },
         child: AnimatedContainer(
@@ -2184,7 +2788,9 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
           decoration: BoxDecoration(
             color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+            border: Border.all(
+              color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2193,28 +2799,75 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: t.artworkUrl != null
-                            ? CachedNetworkImage(imageUrl: t.artworkUrl!, fit: BoxFit.cover)
-                            : Container(color: AppTheme.panelRaised,
-                                child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32))),
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl!,
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                color: AppTheme.panelRaised,
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.music_note_rounded,
+                                    color: AppTheme.textTertiary,
+                                    size: 32,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
-                    Positioned(top: 8, left: 8,
+                    Positioned(
+                      top: 8,
+                      left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(6)),
-                        child: Text('#${widget.index + 1}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 10)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '#${widget.index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
                       ),
                     ),
                     // Source badges
-                    Positioned(top: 8, right: 8,
+                    Positioned(
+                      top: 8,
+                      right: 8,
                       child: Row(
                         children: [
-                          if (t.spotifyUrl != null) Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF1ED760), shape: BoxShape.circle)),
-                          if (t.spotifyUrl != null && t.appleUrl != null) const SizedBox(width: 3),
-                          if (t.appleUrl != null) Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFFF7AB5), shape: BoxShape.circle)),
+                          if (t.spotifyUrl != null)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF1ED760),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          if (t.spotifyUrl != null && t.appleUrl != null)
+                            const SizedBox(width: 3),
+                          if (t.appleUrl != null)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFF7AB5),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                         ],
                       ),
                     ),
@@ -2223,14 +2876,29 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: Center(
                             child: Container(
-                              width: 44, height: 44,
-                              decoration: BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle,
-                                  boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)]),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                              width: 44,
+                              height: 44,
+                              decoration: BoxDecoration(
+                                color: AppTheme.cyan,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.cyan.withValues(alpha: 0.5),
+                                    blurRadius: 16,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -2243,22 +2911,58 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.title,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
-                    Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.artist,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (t.bpm > 0 || t.key.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(
                         children: [
-                          if (t.bpm > 0) Text('${t.bpm}', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
-                          if (t.bpm > 0 && t.key.isNotEmpty) const SizedBox(width: 4),
+                          if (t.bpm > 0)
+                            Text(
+                              '${t.bpm}',
+                              style: const TextStyle(
+                                color: AppTheme.textTertiary,
+                                fontSize: 10,
+                              ),
+                            ),
+                          if (t.bpm > 0 && t.key.isNotEmpty)
+                            const SizedBox(width: 4),
                           if (t.key.isNotEmpty)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)),
-                              child: Text(t.key, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.edge.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                t.key,
+                                style: const TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ),
                         ],
                       ),
@@ -2297,14 +3001,18 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
           final url = t.bestUrl;
           if (url.isNotEmpty) {
             final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           }
         },
         child: Container(
           decoration: BoxDecoration(
             color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+            border: Border.all(
+              color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2313,11 +3021,22 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(11),
+                      ),
                       child: SizedBox.expand(
                         child: t.artworkUrl != null
-                            ? CachedNetworkImage(imageUrl: t.artworkUrl!, fit: BoxFit.cover)
-                            : Container(color: AppTheme.panelRaised, child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary)),
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl!,
+                                fit: BoxFit.cover,
+                              )
+                            : Container(
+                                color: AppTheme.panelRaised,
+                                child: const Icon(
+                                  Icons.music_note_rounded,
+                                  color: AppTheme.textTertiary,
+                                ),
+                              ),
                       ),
                     ),
                     if (_hovered)
@@ -2325,25 +3044,39 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(11),
+                            ),
                           ),
                           child: Center(
                             child: Container(
-                              width: 36, height: 36,
-                              decoration: const BoxDecoration(color: AppTheme.cyan, shape: BoxShape.circle),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+                              width: 36,
+                              height: 36,
+                              decoration: const BoxDecoration(
+                                color: AppTheme.cyan,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
                           ),
                         ),
                       ),
                     // Source badges
                     Positioned(
-                      top: 6, left: 6,
+                      top: 6,
+                      left: 6,
                       child: Row(
                         children: [
-                          if (t.spotifyUrl != null) _miniSourceBadge(const Color(0xFF1ED760)),
-                          if (t.spotifyUrl != null && t.appleUrl != null) const SizedBox(width: 3),
-                          if (t.appleUrl != null) _miniSourceBadge(const Color(0xFFFF7AB5)),
+                          if (t.spotifyUrl != null)
+                            _miniSourceBadge(const Color(0xFF1ED760)),
+                          if (t.spotifyUrl != null && t.appleUrl != null)
+                            const SizedBox(width: 3),
+                          if (t.appleUrl != null)
+                            _miniSourceBadge(const Color(0xFFFF7AB5)),
                         ],
                       ),
                     ),
@@ -2355,10 +3088,25 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10, fontWeight: FontWeight.w600),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
-                    Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
-                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.title,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      t.artist,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 9,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
@@ -2370,7 +3118,8 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
   }
 
   Widget _miniSourceBadge(Color color) => Container(
-    width: 8, height: 8,
+    width: 8,
+    height: 8,
     decoration: BoxDecoration(color: color, shape: BoxShape.circle),
   );
 }
@@ -2591,35 +3340,44 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
               _settingsCard(
                 context,
                 title: 'DJ defaults',
-                child: DropdownButtonFormField<String>(
-                  initialValue:
-                      widget.regions.contains(
-                        widget.userProfile.preferredRegion,
-                      )
-                      ? widget.userProfile.preferredRegion
-                      : widget.regions.firstOrNull,
-                  decoration: const InputDecoration(
-                    labelText: 'Preferred region',
-                  ),
-                  items: widget.regions
-                      .map(
-                        (region) => DropdownMenuItem(
-                          value: region,
-                          child: Text(region),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) {
-                      return;
-                    }
-                    ref
-                        .read(userRepositoryProvider)
-                        .updatePreferredRegion(
-                          userId: widget.session.userId,
-                          fallbackName: widget.session.displayName,
-                          region: value,
-                        );
+                child: Consumer(
+                  builder: (context, ref, _) {
+                    final effectiveRegion =
+                        ref.watch(selectedRegionProvider) ??
+                            widget.userProfile.preferredRegion;
+                    return DropdownButtonFormField<String>(
+                      initialValue: widget.regions.contains(effectiveRegion)
+                          ? effectiveRegion
+                          : widget.regions.firstOrNull,
+                      decoration: const InputDecoration(
+                        labelText: 'Preferred region',
+                      ),
+                      items: widget.regions
+                          .map(
+                            (region) => DropdownMenuItem(
+                              value: region,
+                              child: Text(region),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        // Apply immediately for everyone (incl. guests)…
+                        ref.read(selectedRegionProvider.notifier).set(value);
+                        // …and persist only for a genuinely signed-in user.
+                        final session = widget.session;
+                        if (session.isAuthenticated &&
+                            session.userId.isNotEmpty) {
+                          ref
+                              .read(userRepositoryProvider)
+                              .updatePreferredRegion(
+                                userId: session.userId,
+                                fallbackName: session.displayName,
+                                region: value,
+                              );
+                        }
+                      },
+                    );
                   },
                 ),
               ),
@@ -2740,10 +3498,10 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
     final rankColor = widget.rank == 1
         ? AppTheme.amber
         : widget.rank == 2
-            ? const Color(0xFFC0C0C0)
-            : widget.rank == 3
-                ? const Color(0xFFCD7F32)
-                : null;
+        ? const Color(0xFFC0C0C0)
+        : widget.rank == 3
+        ? const Color(0xFFCD7F32)
+        : null;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -2758,14 +3516,21 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
             _openShellTrack(t);
             // Also activate in detail panel if ref available
             if (widget.ref != null) {
-              widget.ref!.read(workspaceControllerProvider.notifier).activateTrack(t.id);
+              widget.ref!
+                  .read(workspaceControllerProvider.notifier)
+                  .activateTrack(t.id);
             }
           }
         },
         onSecondaryTapDown: (details) {
           // Right-click shows the full action menu
           if (widget.ref != null) {
-            showTrackActionMenu(context, widget.ref!, t, position: details.globalPosition);
+            showTrackActionMenu(
+              context,
+              widget.ref!,
+              t,
+              position: details.globalPosition,
+            );
           }
         },
         child: AnimatedContainer(
@@ -2776,8 +3541,7 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
             border: Border.all(
               color: isTop3
                   ? rankColor!.withValues(alpha: _hovered ? 0.5 : 0.3)
-                  : AppTheme.edge
-                      .withValues(alpha: _hovered ? 0.6 : 0.35),
+                  : AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
             ),
           ),
           child: Column(
@@ -2788,13 +3552,14 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                   children: [
                     ClipRRect(
                       borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(13)),
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: t.artworkUrl.isNotEmpty
                             ? CachedNetworkImage(
                                 imageUrl: t.artworkUrl,
                                 fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) =>
+                                errorWidget: (_, _, _) =>
                                     _ShellArtPlaceholder(),
                               )
                             : _ShellArtPlaceholder(),
@@ -2806,7 +3571,9 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                       left: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: isTop3
                               ? rankColor!.withValues(alpha: 0.9)
@@ -2817,8 +3584,9 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                           '#${widget.rank}',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight:
-                                isTop3 ? FontWeight.w800 : FontWeight.w700,
+                            fontWeight: isTop3
+                                ? FontWeight.w800
+                                : FontWeight.w700,
                             fontSize: 10,
                           ),
                         ),
@@ -2830,7 +3598,9 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                       right: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.cyan.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(6),
@@ -2852,7 +3622,8 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
                             borderRadius: const BorderRadius.vertical(
-                                top: Radius.circular(13)),
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: Center(
                             child: Container(
@@ -2863,14 +3634,16 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: AppTheme.cyan
-                                        .withValues(alpha: 0.5),
+                                    color: AppTheme.cyan.withValues(alpha: 0.5),
                                     blurRadius: 16,
                                   ),
                                 ],
                               ),
-                              child: const Icon(Icons.play_arrow_rounded,
-                                  color: Colors.white, size: 24),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -2897,7 +3670,9 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                     Text(
                       t.artist,
                       style: const TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 11),
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -2907,12 +3682,16 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                         Text(
                           '${t.bpm}',
                           style: const TextStyle(
-                              color: AppTheme.textTertiary, fontSize: 10),
+                            color: AppTheme.textTertiary,
+                            fontSize: 10,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.edge.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(3),
@@ -2927,7 +3706,10 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
                           ),
                         ),
                         const Spacer(),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        SourceBadges(
+                          sources: t.effectiveSources,
+                          compact: true,
+                        ),
                       ],
                     ),
                   ],
@@ -2953,8 +3735,11 @@ class _ShellArtPlaceholder extends StatelessWidget {
         ),
       ),
       child: const Center(
-        child: Icon(Icons.music_note_rounded,
-            color: AppTheme.textTertiary, size: 32),
+        child: Icon(
+          Icons.music_note_rounded,
+          color: AppTheme.textTertiary,
+          size: 32,
+        ),
       ),
     );
   }
@@ -2995,4 +3780,3 @@ class _TrackExportProxy {
   String? get appleUrl => t.platformLinks['apple'];
   bool get resolved => t.platformLinks.isNotEmpty;
 }
-

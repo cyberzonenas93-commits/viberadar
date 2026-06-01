@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/library_track.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
@@ -614,7 +615,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                               ),
                                             ),
                                             Text(
-                                                '${t.bpm.toStringAsFixed(0)} BPM',
+                                                '${formatBpm(t.bpm)} BPM',
                                                 style: const TextStyle(
                                                     color: AppTheme.textSecondary,
                                                     fontSize: 10)),

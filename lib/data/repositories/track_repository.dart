@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 
@@ -32,6 +33,16 @@ class MockTrackRepository implements TrackRepository {
     yield _tracks;
     yield* _controller.stream;
   }
+}
+
+class EmptyTrackRepository implements TrackRepository {
+  const EmptyTrackRepository();
+
+  @override
+  Future<void> refresh() async {}
+
+  @override
+  Stream<List<Track>> watchTracks() => Stream.value(const <Track>[]);
 }
 
 /// Cost-optimised Firestore repository.
@@ -99,14 +110,20 @@ class FirestoreTrackRepository implements TrackRepository {
           .limit(_pageSize)
           .get();
 
-      if (snapshot.docs.isEmpty) {
-        return buildMockTracks();
-      }
+      if (snapshot.docs.isEmpty) return const <Track>[];
+
       return snapshot.docs
           .map((doc) => Track.fromMap(doc.data(), id: doc.id))
           .toList();
-    } catch (_) {
-      // If network fails, try cache-only fetch
+    } catch (error, stackTrace) {
+      // Network/permission/index error — log it (don't swallow silently) and
+      // fall back to the Firestore disk cache, then to the last good result.
+      developer.log(
+        'Firestore tracks fetch failed; falling back to cache.',
+        name: 'TrackRepository',
+        error: error,
+        stackTrace: stackTrace,
+      );
       try {
         final cached = await _firestore
             .collection('tracks')
@@ -118,8 +135,14 @@ class FirestoreTrackRepository implements TrackRepository {
               .map((doc) => Track.fromMap(doc.data(), id: doc.id))
               .toList();
         }
-      } catch (_) {}
-      return _cached ?? buildMockTracks();
+      } catch (cacheError) {
+        developer.log(
+          'Firestore cache-only fetch also failed.',
+          name: 'TrackRepository',
+          error: cacheError,
+        );
+      }
+      return _cached ?? const <Track>[];
     }
   }
 

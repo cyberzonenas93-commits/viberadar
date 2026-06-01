@@ -7,6 +7,7 @@ export async function fetchBeatportSignals(input: {
 }): Promise<SourceTrackSignal[]> {
   const { apiToken, apiBaseUrl, region } = input;
   if (!apiToken || !apiBaseUrl) {
+    console.warn("[beatport] skipped — BEATPORT_API_BASE_URL not configured");
     return [];
   }
 

@@ -15,7 +15,10 @@ class VibeRadarApp extends StatelessWidget {
       title: 'VibeRadar',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme(),
-      home: AuthGate(statusMessage: bootstrap.statusMessage),
+      home: AuthGate(
+        statusMessage: bootstrap.statusMessage,
+        isDemoMode: bootstrap.isDemoMode,
+      ),
     );
   }
 }

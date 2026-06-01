@@ -12,16 +12,6 @@ const CHART_URLS: Array<{ url: string; tag: string; region: string }> = [
   },
 ];
 
-/**
- * Additional Billboard charts via the same archive format from other repos.
- * These use the billboard.com scraping pattern.
- */
-const SCRAPE_CHARTS: Array<{ chart: string; tag: string; region: string }> = [
-  { chart: "hot-100", tag: "billboard:hot-100", region: "US" },
-  { chart: "billboard-200", tag: "billboard:200", region: "US" },
-  { chart: "artist-100", tag: "billboard:artist-100", region: "US" },
-];
-
 interface BillboardSong {
   song?: string;
   name?: string;

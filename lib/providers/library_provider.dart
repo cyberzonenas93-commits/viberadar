@@ -1,11 +1,12 @@
 import 'dart:convert';
 import 'dart:developer' as dev;
-import 'dart:io';
 
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/library_track.dart';
 import '../services/duplicate_detector_service.dart';
@@ -13,6 +14,17 @@ import '../services/library_persistence_service.dart';
 import '../services/library_scanner_service.dart';
 import '../services/spotify_artist_service.dart';
 import '../services/apple_music_artist_service.dart';
+
+const Set<String> _supportedAudioExtensions = {
+  '.mp3',
+  '.wav',
+  '.flac',
+  '.aiff',
+  '.aif',
+  '.m4a',
+  '.ogg',
+  '.aac',
+};
 
 // ── Services ──────────────────────────────────────────────────────────────────
 
@@ -180,6 +192,79 @@ class LibraryNotifier extends Notifier<LibraryState> {
     }
   }
 
+  /// Browser-safe import path. Flutter Web cannot scan arbitrary folders by
+  /// path, so selected files are indexed from the FilePicker metadata/bytes.
+  Future<void> importPickedFiles(List<PlatformFile> files) async {
+    state = state.copyWith(
+      isScanning: true,
+      scanProgress: 0,
+      scanTotal: files.length,
+      scannedPath: 'Browser file import',
+      error: null,
+    );
+
+    try {
+      final tracks = <LibraryTrack>[];
+      for (var i = 0; i < files.length; i++) {
+        final file = files[i];
+        final ext = p.extension(file.name).toLowerCase();
+        if (!_supportedAudioExtensions.contains(ext)) continue;
+
+        final parsed = _parseArtistTitle(file.name);
+        final hashInput = file.bytes ?? utf8.encode('${file.name}:${file.size}');
+        final id = crypto.md5.convert(hashInput).toString();
+
+        tracks.add(
+          LibraryTrack(
+            id: id,
+            filePath: file.path ?? file.name,
+            fileName: file.name,
+            title: parsed.title,
+            artist: parsed.artist,
+            album: '',
+            genre: 'Unknown',
+            bpm: 0,
+            key: '',
+            durationSeconds: 0,
+            fileSizeBytes: file.size,
+            fileExtension: ext,
+            md5Hash: id,
+            bitrate: 0,
+            sampleRate: 0,
+          ),
+        );
+
+        state = state.copyWith(
+          scanProgress: i + 1,
+          scanTotal: files.length,
+          isScanning: true,
+        );
+      }
+
+      state = state.copyWith(
+        tracks: tracks,
+        isScanning: false,
+        scanProgress: tracks.length,
+        scanTotal: tracks.length,
+      );
+
+      await _persistence.save(tracks, 'Browser file import');
+      _detectDuplicatesAsync(tracks);
+      _enrichArtworkAsync(tracks);
+    } catch (e) {
+      state = state.copyWith(isScanning: false, error: e.toString());
+    }
+  }
+
+  ({String artist, String title}) _parseArtistTitle(String filename) {
+    final base = p.basenameWithoutExtension(filename).trim();
+    final parts = base.split(RegExp(r'\s+-\s+'));
+    if (parts.length >= 2) {
+      return (artist: parts.first.trim(), title: parts.skip(1).join(' - ').trim());
+    }
+    return (artist: 'Unknown Artist', title: base);
+  }
+
   /// Fetches album artwork from Spotify and Apple Music for tracks that
   /// don't have artwork yet. Runs in background, updates state in batches.
   Future<void> _enrichArtworkAsync(List<LibraryTrack> tracks, {int maxTracks = 100}) async {
@@ -301,20 +386,16 @@ class LibraryNotifier extends Notifier<LibraryState> {
 final libraryProvider =
     NotifierProvider<LibraryNotifier, LibraryState>(LibraryNotifier.new);
 
-// ── Crate Persistence ─────────────────────────────────────────────────────────
+const _cratesCacheKey = 'viberadar_crates_cache_v1';
+const _aiCratesCacheKey = 'viberadar_ai_crates_cache_v1';
 
-Future<File> _getCratesCacheFile() async {
-  final dir = await getApplicationDocumentsDirectory();
-  final cacheDir = Directory(p.join(dir.path, 'VibeRadar'));
-  await cacheDir.create(recursive: true);
-  return File(p.join(cacheDir.path, 'crates_cache.json'));
-}
+// ── Crate Persistence ─────────────────────────────────────────────────────────
 
 Future<Map<String, List<String>>> _loadCratesFromDisk() async {
   try {
-    final file = await _getCratesCacheFile();
-    if (!file.existsSync()) return {};
-    final raw = await file.readAsString();
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_cratesCacheKey);
+    if (raw == null) return {};
     final json = jsonDecode(raw) as Map<String, dynamic>;
     return json.map(
       (k, v) => MapEntry(k, (v as List).cast<String>()),
@@ -326,8 +407,8 @@ Future<Map<String, List<String>>> _loadCratesFromDisk() async {
 
 Future<void> _saveCratesToDisk(Map<String, List<String>> crates) async {
   try {
-    final file = await _getCratesCacheFile();
-    await file.writeAsString(jsonEncode(crates));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_cratesCacheKey, jsonEncode(crates));
   } catch (_) {}
 }
 
@@ -480,10 +561,10 @@ class AiCrateNotifier extends Notifier<AiCrateState> {
 
   Future<void> _loadFromDisk() async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final file = File(p.join(dir.path, 'VibeRadar', 'ai_crates_cache.json'));
-      if (!file.existsSync()) return;
-      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_aiCratesCacheKey);
+      if (raw == null) return;
+      final json = jsonDecode(raw) as Map<String, dynamic>;
       final loaded = <String, List<AiCrateTrack>>{};
       for (final entry in json.entries) {
         loaded[entry.key] = (entry.value as List)
@@ -496,12 +577,9 @@ class AiCrateNotifier extends Notifier<AiCrateState> {
 
   Future<void> _saveToDisk(Map<String, List<AiCrateTrack>> crates) async {
     try {
-      final dir = await getApplicationDocumentsDirectory();
-      final folder = Directory(p.join(dir.path, 'VibeRadar'));
-      await folder.create(recursive: true);
-      final file = File(p.join(folder.path, 'ai_crates_cache.json'));
+      final prefs = await SharedPreferences.getInstance();
       final json = crates.map((k, v) => MapEntry(k, v.map((t) => t.toJson()).toList()));
-      await file.writeAsString(jsonEncode(json));
+      await prefs.setString(_aiCratesCacheKey, jsonEncode(json));
     } catch (_) {}
   }
 }

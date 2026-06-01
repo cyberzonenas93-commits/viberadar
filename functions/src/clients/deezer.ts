@@ -114,20 +114,7 @@ export async function fetchDeezerSignals(input: {
     }
   }
 
-  // 3. Country-specific editorial charts (actual regional popularity!)
-  // Deezer editorial endpoint: GET /editorial/{id}/charts returns real
-  // country charts. IDs found via /editorial endpoint.
-  const COUNTRY_EDITORIAL_MAP: Record<string, number> = {
-    "GH": 0,  // Ghana uses the main editorial endpoint with country context
-    "NG": 0,
-    "ZA": 0,
-    "GB": 0,
-    "US": 0,
-    "DE": 0,
-  };
-
-  // Deezer editorial charts respond to the editorial/0/charts endpoint
-  // but we can also search for country-specific trending content
+  // 3. Country-specific trending content via search (actual regional popularity)
   const countrySearches: Array<{ query: string; region: string }> = [
     { query: "ghana afrobeats", region: "GH" },
     { query: "ghana highlife", region: "GH" },

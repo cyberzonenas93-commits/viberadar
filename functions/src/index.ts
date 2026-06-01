@@ -72,6 +72,15 @@ export const manualIngestTrackSignals = onRequest(
     memory: "512MiB",
   },
   async (request, response) => {
+    response.set("Access-Control-Allow-Origin", "*");
+    response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+    response.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+
+    if (request.method === "OPTIONS") {
+      response.status(204).send("");
+      return;
+    }
+
     const authHeader = request.headers.authorization ?? "";
     if (!authHeader.startsWith("Bearer ")) {
       response.status(401).json({ error: "Missing Bearer token" });

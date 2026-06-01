@@ -11,12 +11,19 @@ class SidebarNav extends StatefulWidget {
     required this.selectedSection,
     required this.onSelected,
     required this.statusMessage,
+    this.isDemoMode = false,
     this.onRefreshComplete,
   });
 
   final AppSection selectedSection;
   final ValueChanged<AppSection> onSelected;
   final String statusMessage;
+
+  /// When true the app is running on demo/offline data (Firebase unavailable);
+  /// the status indicator switches to an amber warning so it can't be mistaken
+  /// for a healthy "connected" state.
+  final bool isDemoMode;
+
   /// Called after a manual refresh completes so the parent can update the track cache.
   final VoidCallback? onRefreshComplete;
 
@@ -29,11 +36,17 @@ class _SidebarNavState extends State<SidebarNav> {
   String? _refreshResult;
 
   Future<void> _refresh() async {
-    setState(() { _refreshing = true; _refreshResult = null; });
+    setState(() {
+      _refreshing = true;
+      _refreshResult = null;
+    });
     final result = await IngestService.triggerIngest();
     widget.onRefreshComplete?.call();
     if (mounted) {
-      setState(() { _refreshing = false; _refreshResult = result; });
+      setState(() {
+        _refreshing = false;
+        _refreshResult = result;
+      });
       Future.delayed(const Duration(seconds: 5), () {
         if (mounted) setState(() => _refreshResult = null);
       });
@@ -46,7 +59,7 @@ class _SidebarNavState extends State<SidebarNav> {
     final onSelected = widget.onSelected;
     final statusMessage = _refreshResult ?? widget.statusMessage;
     return Container(
-      width: 220,
+      width: double.infinity,
       decoration: BoxDecoration(
         color: AppTheme.panel,
         border: Border(
@@ -72,7 +85,11 @@ class _SidebarNavState extends State<SidebarNav> {
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.radio_button_checked, color: Colors.white, size: 16),
+                  child: const Icon(
+                    Icons.radio_button_checked,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Text(
@@ -87,41 +104,146 @@ class _SidebarNavState extends State<SidebarNav> {
               ],
             ),
           ),
-          Divider(color: AppTheme.edge.withValues(alpha: 0.4), indent: 16, endIndent: 16),
+          Divider(
+            color: AppTheme.edge.withValues(alpha: 0.4),
+            indent: 16,
+            endIndent: 16,
+          ),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _SectionHeader('DISCOVER'),
-                  _NavItem(section: AppSection.forYou, icon: Icons.favorite_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.home, icon: Icons.dashboard_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.trending, icon: Icons.local_fire_department_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.search, icon: Icons.search_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.artists, icon: Icons.person_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.regions, icon: Icons.public_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.genres, icon: Icons.library_music_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.playlists, icon: Icons.playlist_play_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(
+                    section: AppSection.forYou,
+                    icon: Icons.favorite_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.home,
+                    icon: Icons.dashboard_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.trending,
+                    icon: Icons.local_fire_department_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.search,
+                    icon: Icons.search_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.artists,
+                    icon: Icons.person_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.regions,
+                    icon: Icons.public_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.genres,
+                    icon: Icons.library_music_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.playlists,
+                    icon: Icons.playlist_play_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
 
                   _SectionHeader('COMMUNITY'),
-                  _NavItem(section: AppSection.community, icon: Icons.groups_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.myProfile, icon: Icons.account_circle_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.upload, icon: Icons.cloud_upload_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.discoverDJs, icon: Icons.explore_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(
+                    section: AppSection.community,
+                    icon: Icons.groups_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.myProfile,
+                    icon: Icons.account_circle_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.upload,
+                    icon: Icons.cloud_upload_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.discoverDJs,
+                    icon: Icons.explore_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
 
                   _SectionHeader('BUILD'),
-                  _NavItem(section: AppSection.greatestOf, icon: Icons.star_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.setBuilder, icon: Icons.queue_music_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.aiCopilot, icon: Icons.auto_awesome_rounded, selected: selectedSection, onSelected: onSelected, badge: true),
+                  _NavItem(
+                    section: AppSection.greatestOf,
+                    icon: Icons.star_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.setBuilder,
+                    icon: Icons.queue_music_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.aiCopilot,
+                    icon: Icons.auto_awesome_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                    badge: true,
+                  ),
 
                   _SectionHeader('LIBRARY'),
-                  _NavItem(section: AppSection.library, icon: Icons.folder_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.duplicates, icon: Icons.content_copy_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.savedCrates, icon: Icons.folder_copy_rounded, selected: selectedSection, onSelected: onSelected),
-                  _NavItem(section: AppSection.watchlist, icon: Icons.visibility_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(
+                    section: AppSection.library,
+                    icon: Icons.folder_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.duplicates,
+                    icon: Icons.content_copy_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.savedCrates,
+                    icon: Icons.folder_copy_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
+                  _NavItem(
+                    section: AppSection.watchlist,
+                    icon: Icons.visibility_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
 
                   _SectionHeader('EXPORT'),
-                  _NavItem(section: AppSection.exports, icon: Icons.upload_rounded, selected: selectedSection, onSelected: onSelected),
+                  _NavItem(
+                    section: AppSection.exports,
+                    icon: Icons.upload_rounded,
+                    selected: selectedSection,
+                    onSelected: onSelected,
+                  ),
 
                   const SizedBox(height: 8),
                 ],
@@ -141,21 +263,34 @@ class _SidebarNavState extends State<SidebarNav> {
                 borderRadius: BorderRadius.circular(8),
                 onTap: _refreshing ? null : _refresh,
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 9,
+                  ),
                   child: Row(
                     children: [
                       if (_refreshing)
                         const SizedBox(
-                          width: 17, height: 17,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan),
+                          width: 17,
+                          height: 17,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.cyan,
+                          ),
                         )
                       else
-                        const Icon(Icons.refresh_rounded, size: 17, color: AppTheme.cyan),
+                        const Icon(
+                          Icons.refresh_rounded,
+                          size: 17,
+                          color: AppTheme.cyan,
+                        ),
                       const SizedBox(width: 10),
                       Text(
                         _refreshing ? 'Refreshing...' : 'Refresh Data',
                         style: TextStyle(
-                          color: _refreshing ? AppTheme.cyan : AppTheme.textSecondary,
+                          color: _refreshing
+                              ? AppTheme.cyan
+                              : AppTheme.textSecondary,
                           fontWeight: FontWeight.w500,
                           fontSize: 13,
                         ),
@@ -166,33 +301,65 @@ class _SidebarNavState extends State<SidebarNav> {
               ),
             ),
           ),
-          _NavItem(section: AppSection.settings, icon: Icons.settings_rounded, selected: selectedSection, onSelected: onSelected),
-          // Status bar
+          _NavItem(
+            section: AppSection.settings,
+            icon: Icons.settings_rounded,
+            selected: selectedSection,
+            onSelected: onSelected,
+          ),
+          // Status bar — amber warning in demo mode so fake data is obvious;
+          // calm lime "connected" dot when running on live Firebase data.
           if (statusMessage.isNotEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
-                  color: AppTheme.cyan.withValues(alpha: 0.06),
+                  color: (widget.isDemoMode ? AppTheme.amber : AppTheme.cyan)
+                      .withValues(alpha: widget.isDemoMode ? 0.12 : 0.06),
                   borderRadius: BorderRadius.circular(6),
+                  border: widget.isDemoMode
+                      ? Border.all(
+                          color: AppTheme.amber.withValues(alpha: 0.5))
+                      : null,
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: 5,
-                      height: 5,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.lime,
-                        shape: BoxShape.circle,
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: widget.isDemoMode
+                          ? const Icon(Icons.warning_amber_rounded,
+                              color: AppTheme.amber, size: 12)
+                          : Container(
+                              width: 5,
+                              height: 5,
+                              margin: const EdgeInsets.only(top: 2),
+                              decoration: const BoxDecoration(
+                                color: AppTheme.lime,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        statusMessage,
-                        style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10),
-                        maxLines: 1,
+                        widget.isDemoMode
+                            ? 'Demo mode — showing sample data, not live tracks.'
+                            : statusMessage,
+                        style: TextStyle(
+                          color: widget.isDemoMode
+                              ? AppTheme.amber
+                              : AppTheme.textTertiary,
+                          fontSize: 10,
+                          fontWeight: widget.isDemoMode
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                        maxLines: widget.isDemoMode ? 2 : 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -266,8 +433,8 @@ class _NavItemState extends State<_NavItem> {
             color: isActive
                 ? AppTheme.violet.withValues(alpha: 0.15)
                 : _hovered
-                    ? AppTheme.textPrimary.withValues(alpha: 0.04)
-                    : Colors.transparent,
+                ? AppTheme.textPrimary.withValues(alpha: 0.04)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
@@ -292,7 +459,9 @@ class _NavItemState extends State<_NavItem> {
                 child: Text(
                   widget.section.label,
                   style: TextStyle(
-                    color: isActive ? AppTheme.textPrimary : AppTheme.textSecondary,
+                    color: isActive
+                        ? AppTheme.textPrimary
+                        : AppTheme.textSecondary,
                     fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                     fontSize: 13,
                   ),
@@ -300,7 +469,10 @@ class _NavItemState extends State<_NavItem> {
               ),
               if (widget.badge)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [AppTheme.violet, AppTheme.pink],

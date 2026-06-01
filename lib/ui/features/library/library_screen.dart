@@ -1,7 +1,9 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/library_track.dart';
 import '../../../providers/library_provider.dart';
 import '../cues/cue_preview_sheet.dart';
@@ -62,7 +64,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     lib.hasLibrary
                         ? '${lib.tracks.length} tracks  •  '
                             '${lib.duplicateCount} duplicates found'
-                        : 'Scan your local music folder to index tracks',
+                        : kIsWeb
+                            ? 'Import audio files from your browser to index tracks'
+                            : 'Scan your local music folder to index tracks',
                     style:
                         const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                   ),
@@ -97,7 +101,11 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ElevatedButton.icon(
                   onPressed: _pickAndScan,
                   icon: const Icon(Icons.folder_open_rounded, size: 16),
-                  label: Text(lib.hasLibrary ? 'Rescan Folder' : 'Select Folder'),
+                  label: Text(
+                    kIsWeb
+                        ? (lib.hasLibrary ? 'Import More Files' : 'Select Files')
+                        : (lib.hasLibrary ? 'Rescan Folder' : 'Select Folder'),
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.violet,
                     padding:
@@ -233,6 +241,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _pickAndScan() async {
+    if (kIsWeb) {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'aiff'],
+        allowMultiple: true,
+        withData: true,
+      );
+      if (result != null && mounted) {
+        await ref.read(libraryProvider.notifier).importPickedFiles(result.files);
+      }
+      return;
+    }
+
     final result = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Select your music folder',
     );
@@ -268,9 +289,12 @@ class _EmptyState extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 fontSize: 18)),
         const SizedBox(height: 8),
-        const Text('Pick a folder with your music files to start.',
-            style:
-                TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        Text(
+          kIsWeb
+              ? 'Pick audio files from your browser to start.'
+              : 'Pick a folder with your music files to start.',
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
         const SizedBox(height: 20),
         const Wrap(spacing: 16, children: [
           _InfoChip(
@@ -397,7 +421,7 @@ class _TrackRow extends StatelessWidget {
             ],
           ),
         ),
-        _MetaChip(label: '${track.bpm.toStringAsFixed(0)} BPM'),
+        _MetaChip(label: '${formatBpm(track.bpm)} BPM'),
         const SizedBox(width: 8),
         _MetaChip(label: track.key, color: AppTheme.cyan),
         const SizedBox(width: 8),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/formatters.dart';
 import '../../models/track.dart';
 import '../../providers/library_provider.dart';
 
@@ -255,7 +256,7 @@ void _showTrackInfoSheet(BuildContext context, Track track) {
             spacing: 10,
             runSpacing: 8,
             children: [
-              _InfoTag(icon: Icons.speed_rounded, label: '${track.bpm} BPM'),
+              _InfoTag(icon: Icons.speed_rounded, label: '${formatBpm(track.bpm)} BPM'),
               _InfoTag(icon: Icons.music_note_rounded, label: track.keySignature),
               _InfoTag(icon: Icons.category_rounded, label: track.genre),
               _InfoTag(icon: Icons.public_rounded, label: track.leadRegion),
@@ -284,25 +285,6 @@ void _showTrackInfoSheet(BuildContext context, Track track) {
       ),
     ),
   );
-}
-
-String? _bestUrl(Track track) {
-  const priority = ['spotify', 'apple', 'youtube', 'deezer', 'soundcloud', 'audius'];
-  for (final key in priority) {
-    final url = track.platformLinks[key];
-    if (url != null && url.isNotEmpty) return url;
-  }
-  return track.platformLinks.values.firstOrNull;
-}
-
-String _platformLabel(Track track) {
-  const priority = ['spotify', 'apple', 'youtube', 'deezer', 'soundcloud', 'audius'];
-  for (final key in priority) {
-    if (track.platformLinks.containsKey(key)) {
-      return key[0].toUpperCase() + key.substring(1);
-    }
-  }
-  return 'Browser';
 }
 
 class _InfoTag extends StatelessWidget {

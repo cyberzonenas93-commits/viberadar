@@ -191,7 +191,7 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
                       child: SizedBox.expand(
                         child: t.artworkUrl.isNotEmpty
                             ? CachedNetworkImage(imageUrl: t.artworkUrl, fit: BoxFit.cover,
-                                errorWidget: (_, __, ___) => _artPlaceholder())
+                                errorWidget: (_, _, _) => _artPlaceholder())
                             : _artPlaceholder(),
                       ),
                     ),

@@ -16,7 +16,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  bool _editing = false;
+  final bool _editing = false;
   final _bioController = TextEditingController();
   final _locationController = TextEditingController();
   String _role = 'DJ';

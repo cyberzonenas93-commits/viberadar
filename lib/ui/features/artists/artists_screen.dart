@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/artist_model.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
@@ -1422,7 +1423,7 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
                     const SizedBox(height: 5),
                     Row(
                       children: [
-                        Text('${t.bpm}', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text(formatBpm(t.bpm), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
                         const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
@@ -2031,7 +2032,7 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
             // BPM
             SizedBox(
               width: 55,
-              child: Text('${t.bpm} BPM', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right),
+              child: Text('${formatBpm(t.bpm)} BPM', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right),
             ),
             const SizedBox(width: 10),
             // Key

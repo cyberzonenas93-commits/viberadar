@@ -4,6 +4,10 @@ import '../../models/track.dart';
 
 String formatTrendScore(double score) => '${(score * 100).round()}';
 
+/// Renders a BPM value, showing an em dash for unknown (0 or negative) values
+/// instead of a misleading "0". Tracks without a real BPM tag/source carry 0.
+String formatBpm(num bpm) => bpm > 0 ? '${bpm.round()}' : '—';
+
 String formatCompactNumber(num value) =>
     NumberFormat.compact().format(value).replaceAll('.0', '');
 

@@ -261,7 +261,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         // ── Body ─────────────────────────────────────────────────────────────
         Expanded(
           child: _query.isEmpty
-              ? _DiscoveryView(topTracks: topTracks.take(40).toList())
+              ? _DiscoveryView(
+                  topTracks: topTracks.take(40).toList(),
+                  onGenreSearch: (g) {
+                    _controller.text = g;
+                    _controller.selection =
+                        TextSelection.collapsed(offset: g.length);
+                    setState(() => _query = g);
+                    _search(g);
+                  },
+                )
               : _searching && _results.isEmpty && _youtubeResults.isEmpty
                   ? const Center(
                       child: Column(
@@ -301,8 +310,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
 // ── Discovery (no query) ──────────────────────────────────────────────────────
 
 class _DiscoveryView extends StatelessWidget {
-  const _DiscoveryView({required this.topTracks});
+  const _DiscoveryView({required this.topTracks, required this.onGenreSearch});
   final List<Track> topTracks;
+  final void Function(String genre) onGenreSearch;
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +335,12 @@ class _DiscoveryView extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: genres.map((g) => _GenreChip(label: g)).toList(),
+            children: genres
+                .map((g) => _GenreChip(
+                      label: g,
+                      onTap: () => onGenreSearch(g),
+                    ))
+                .toList(),
           ),
           const SizedBox(height: 32),
 
@@ -337,7 +352,7 @@ class _DiscoveryView extends StatelessWidget {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: trending.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (ctx, i) => _FirestoreTrackCard(track: trending[i], rank: i + 1),
               ),
             ),
@@ -352,7 +367,7 @@ class _DiscoveryView extends StatelessWidget {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 itemCount: recentTop.length,
-                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (ctx, i) => _FirestoreTrackCard(track: recentTop[i]),
               ),
             ),
@@ -382,8 +397,9 @@ class _SectionLabel extends StatelessWidget {
 }
 
 class _GenreChip extends StatelessWidget {
-  const _GenreChip({required this.label});
+  const _GenreChip({required this.label, required this.onTap});
   final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -391,9 +407,7 @@ class _GenreChip extends StatelessWidget {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(20),
-        onTap: () {
-          // TODO: trigger search with genre
-        },
+        onTap: onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
@@ -601,7 +615,7 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
                     ? CachedNetworkImage(
                         imageUrl: v.thumbnailUrl!,
                         fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _thumbPlaceholder(),
+                        errorWidget: (_, _, _) => _thumbPlaceholder(),
                       )
                     : _thumbPlaceholder(),
               ),
@@ -705,7 +719,7 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
                 height: 48,
                 child: r.artworkUrl != null
                     ? CachedNetworkImage(imageUrl: r.artworkUrl!, fit: BoxFit.cover,
-                        errorWidget: (_, __, ___) => _artPlaceholder())
+                        errorWidget: (_, _, _) => _artPlaceholder())
                     : _artPlaceholder(),
               ),
             ),

@@ -1,6 +1,16 @@
+import 'dart:developer' as developer;
+
+import '../core/utils/concurrency_limiter.dart';
 import '../services/spotify_artist_service.dart';
 import '../services/apple_music_artist_service.dart';
 import '../services/youtube_search_service.dart';
+
+/// Max concurrent external API calls (Spotify / Apple Music / YouTube) per
+/// `search()` invocation. Capped at 3 so a single search never hammers more
+/// than one request per platform simultaneously — this keeps us under each
+/// provider's burst rate limits and prevents a multi-query [searchByGenre]
+/// loop from fanning out dozens of in-flight HTTP requests.
+const int _platformSearchConcurrency = 3;
 
 /// A lightweight track result from platform search (not a full Firestore Track).
 class PlatformTrackResult {
@@ -44,11 +54,14 @@ class PlatformSearchService {
     String query, {
     int limit = 50,
   }) async {
-    final results = await Future.wait([
-      _searchSpotify(query, limit: limit),
-      _searchApple(query, limit: limit),
-      _searchYouTube(query, limit: (limit * 0.6).round().clamp(5, 30)),
-    ]);
+    final results = await runLimited<List<PlatformTrackResult>>(
+      [
+        () => _searchSpotify(query, limit: limit),
+        () => _searchApple(query, limit: limit),
+        () => _searchYouTube(query, limit: (limit * 0.6).round().clamp(5, 30)),
+      ],
+      maxConcurrent: _platformSearchConcurrency,
+    );
 
     final spotifyResults = results[0];
     final appleResults = results[1];
@@ -65,7 +78,7 @@ class PlatformSearchService {
     String? era,
   }) async {
     final queries = <String>[
-      '$genre',
+      genre,
       '$genre music',
       'best $genre songs',
       'top $genre hits',
@@ -146,7 +159,9 @@ class PlatformSearchService {
         durationMs: t.durationMs,
         popularity: t.popularity,
       )).toList();
-    } catch (_) {
+    } catch (error) {
+      developer.log('Spotify search failed for "$query"',
+          name: 'PlatformSearch', error: error);
       return [];
     }
   }
@@ -161,7 +176,9 @@ class PlatformSearchService {
         appleUrl: t.appleUrl,
         durationMs: t.durationMs,
       )).toList();
-    } catch (_) {
+    } catch (error) {
+      developer.log('Apple Music search failed for "$query"',
+          name: 'PlatformSearch', error: error);
       return [];
     }
   }
@@ -175,7 +192,9 @@ class PlatformSearchService {
         artworkUrl: v.thumbnailUrl,
         youtubeUrl: v.youtubeUrl,
       )).toList();
-    } catch (_) {
+    } catch (error) {
+      developer.log('YouTube search failed for "$query"',
+          name: 'PlatformSearch', error: error);
       return [];
     }
   }

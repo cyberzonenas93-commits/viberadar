@@ -391,7 +391,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 28),
               itemCount: _suggestions.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
               itemBuilder: (ctx, i) => GestureDetector(
                 onTap: () => _send(_suggestions[i]),
                 child: Container(

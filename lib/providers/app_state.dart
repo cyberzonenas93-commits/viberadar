@@ -141,11 +141,45 @@ final trackStreamProvider = StreamProvider<List<Track>>((ref) {
 });
 
 final userProfileProvider = StreamProvider<UserProfile>((ref) {
-  final session = ref.watch(sessionProvider).value ?? const SessionState.demo();
+  final session = ref.watch(sessionProvider).value;
+  if (session?.isAuthenticated != true && session?.isDemo != true) {
+    return Stream<UserProfile>.value(
+      UserProfile.empty(
+        id: 'public-guest',
+        displayName: 'Guest DJ',
+        preferredRegion: 'GH',
+      ),
+    );
+  }
+
+  final activeSession = session ?? const SessionState.demo();
   return ref
       .watch(userRepositoryProvider)
-      .watchUser(userId: session.userId, fallbackName: session.displayName);
+      .watchUser(
+        userId: activeSession.userId,
+        fallbackName: activeSession.displayName,
+      );
 });
+
+/// User-selected region override for region-aware views (e.g. the Home tab).
+///
+/// This is LOCAL UI state, deliberately decoupled from the Firestore user
+/// profile: region selection must work instantly for everyone — including
+/// unauthenticated "guest" sessions, which have no writable profile doc (and
+/// whose profile stream is a constant). `null` means "fall back to the
+/// signed-in profile's preferredRegion". Signed-in changes are also persisted
+/// to the profile for cross-session durability.
+class SelectedRegionController extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? region) => state = region;
+}
+
+final selectedRegionProvider =
+    NotifierProvider<SelectedRegionController, String?>(
+  SelectedRegionController.new,
+);
 
 final visibleTracksProvider = Provider<List<Track>>((ref) {
   final tracks = ref.watch(trackStreamProvider).value ?? const <Track>[];

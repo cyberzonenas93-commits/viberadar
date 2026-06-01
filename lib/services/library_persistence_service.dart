@@ -1,36 +1,30 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as p;
+
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/library_track.dart';
 
 /// Saves and restores the scanned library to/from a local JSON cache.
-/// Cache lives at ~/Documents/VibeRadar/library_cache.json
+/// On desktop this used to live under Documents; using SharedPreferences keeps
+/// the same app-level cache portable to Flutter Web.
 class LibraryPersistenceService {
-  static const _cacheFile = 'library_cache.json';
-
-  Future<File> _getCacheFile() async {
-    final dir = await getApplicationDocumentsDirectory();
-    final cacheDir = Directory(p.join(dir.path, 'VibeRadar'));
-    await cacheDir.create(recursive: true);
-    return File(p.join(cacheDir.path, _cacheFile));
-  }
+  static const _cacheKey = 'viberadar_library_cache_v1';
 
   Future<void> save(List<LibraryTrack> tracks, String? scannedPath) async {
-    final file = await _getCacheFile();
+    final prefs = await SharedPreferences.getInstance();
     final json = jsonEncode({
       'scannedPath': scannedPath,
       'savedAt': DateTime.now().toIso8601String(),
       'tracks': tracks.map(_trackToJson).toList(),
     });
-    await file.writeAsString(json);
+    await prefs.setString(_cacheKey, json);
   }
 
   Future<({List<LibraryTrack> tracks, String? scannedPath})?> load() async {
     try {
-      final file = await _getCacheFile();
-      if (!file.existsSync()) return null;
-      final raw = await file.readAsString();
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_cacheKey);
+      if (raw == null) return null;
       final json = jsonDecode(raw) as Map<String, dynamic>;
       final tracks = (json['tracks'] as List)
           .map((e) => _trackFromJson(e as Map<String, dynamic>))
@@ -42,8 +36,8 @@ class LibraryPersistenceService {
   }
 
   Future<void> clear() async {
-    final file = await _getCacheFile();
-    if (file.existsSync()) await file.delete();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_cacheKey);
   }
 
   Map<String, dynamic> _trackToJson(LibraryTrack t) => {

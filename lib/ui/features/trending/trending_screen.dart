@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../widgets/source_badges.dart';
@@ -74,30 +75,47 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
                   ),
                 ],
               ),
-              const Spacer(),
-              Flexible(
+              const SizedBox(width: 16),
+              // Filter cluster — shrinks the search field first, then the
+              // chips, as the window narrows. Previously this used
+              // `Spacer() + Flexible(Row(mainAxisSize.min, [chips, 160px search]))`
+              // which would overflow when chips + 160px exceeded Flexible's
+              // remaining width (~48px overflow at ~1100px window).
+              Expanded(
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _FilterChip(label: 'Genre', value: _selectedGenre, options: genres, onChanged: (v) => setState(() => _selectedGenre = v)),
+                    Flexible(
+                      child: _FilterChip(
+                        label: 'Genre', value: _selectedGenre, options: genres,
+                        onChanged: (v) => setState(() => _selectedGenre = v),
+                      ),
+                    ),
                     const SizedBox(width: 8),
-                    _FilterChip(label: 'Region', value: _selectedRegion, options: regions, onChanged: (v) => setState(() => _selectedRegion = v)),
+                    Flexible(
+                      child: _FilterChip(
+                        label: 'Region', value: _selectedRegion, options: regions,
+                        onChanged: (v) => setState(() => _selectedRegion = v),
+                      ),
+                    ),
                     const SizedBox(width: 12),
-                    SizedBox(
-                      width: 160,
-                      child: TextField(
-                        onChanged: (v) => setState(() => _search = v),
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-                        decoration: InputDecoration(
-                          hintText: 'Search...',
-                          hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                          prefixIcon: const Icon(Icons.search_rounded, size: 16, color: AppTheme.textTertiary),
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                          filled: true,
-                          fillColor: AppTheme.panelRaised,
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5))),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5))),
+                    Flexible(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 160),
+                        child: TextField(
+                          onChanged: (v) => setState(() => _search = v),
+                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                          decoration: InputDecoration(
+                            hintText: 'Search...',
+                            hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                            prefixIcon: const Icon(Icons.search_rounded, size: 16, color: AppTheme.textTertiary),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                            filled: true,
+                            fillColor: AppTheme.panelRaised,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5))),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5))),
+                          ),
                         ),
                       ),
                     ),
@@ -249,7 +267,7 @@ class _TrackCardState extends State<_TrackCard> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Text('${t.bpm}', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text(formatBpm(t.bpm), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
                         const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),

@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/social_profile.dart';
-import '../../../models/app_section.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/community_providers.dart';
+import 'profile_screen.dart';
 
 class DiscoverDJsScreen extends ConsumerStatefulWidget {
   const DiscoverDJsScreen({super.key});
@@ -96,8 +96,17 @@ class _DiscoverDJsScreenState extends ConsumerState<DiscoverDJsScreen> {
                   }
                 },
                 onTap: () {
-                  // Navigate to their profile — for now just open community
-                  ref.read(workspaceControllerProvider.notifier).setSection(AppSection.community);
+                  Navigator.of(context).push(MaterialPageRoute(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(
+                        backgroundColor: AppTheme.panel,
+                        foregroundColor: AppTheme.textPrimary,
+                        elevation: 0,
+                        title: Text(filtered[i].displayName),
+                      ),
+                      body: ProfileScreen(userId: filtered[i].userId),
+                    ),
+                  ));
                 },
               ),
             ),

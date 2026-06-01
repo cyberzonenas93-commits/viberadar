@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'secure_storage_service.dart';
 
 // ── Structured command model ──────────────────────────────────────────────────
 
@@ -39,7 +40,11 @@ class AiCopilotCommand {
 // ── AI Copilot service ────────────────────────────────────────────────────────
 
 class AiCopilotService {
-  static const _prefKeyApiKey = 'openai_api_key';
+  AiCopilotService({SecureStorageService? secureStorage})
+      : _secureStorage = secureStorage ?? SecureStorageService();
+
+  final SecureStorageService _secureStorage;
+
   static const _prefKeyModel = 'openai_model';
   static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
@@ -96,8 +101,7 @@ class AiCopilotService {
   // ── API key / model helpers ──────────────────────────────────────────────
 
   Future<String?> getApiKey() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userKey = prefs.getString(_prefKeyApiKey);
+    final userKey = await _secureStorage.readSecret(kOpenAiApiKey);
     if (userKey != null && userKey.trim().isNotEmpty) return userKey;
     final envKey = dotenv.env['OPENAI_API_KEY'];
     if (envKey != null && envKey.trim().isNotEmpty) return envKey;
@@ -105,8 +109,7 @@ class AiCopilotService {
   }
 
   Future<void> setApiKey(String key) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefKeyApiKey, key);
+    await _secureStorage.writeSecret(kOpenAiApiKey, key);
   }
 
   Future<String> getModel() async {

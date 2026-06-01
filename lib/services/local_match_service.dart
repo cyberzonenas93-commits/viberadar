@@ -240,7 +240,9 @@ class LocalMatchService {
       // Prefer FLAC/WAV over MP3
       final lossless = {'flac', 'wav', 'aiff'};
       if (lossless.contains(current.fileExtension.toLowerCase()) &&
-          !lossless.contains(best.fileExtension.toLowerCase())) return current;
+          !lossless.contains(best.fileExtension.toLowerCase())) {
+        return current;
+      }
       return best;
     });
   }

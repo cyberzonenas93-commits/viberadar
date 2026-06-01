@@ -49,18 +49,26 @@ class DuplicateDetectorService {
       }
     }
 
-    // 3. Similar filenames (Levenshtein <= 4)
+    // 3. Similar filenames (Levenshtein 1..4 — "similar but NOT identical").
+    //
+    // Distance 0 (identical filenames) is deliberately excluded: generic
+    // defaults like "track.mp3", "01.mp3" or "audio.mp3" are shared by
+    // completely unrelated files, so treating identical names as duplicates
+    // produces false positives. Genuine same-song / different-rip pairs are
+    // already caught by the exact-hash and title+artist passes above. We also
+    // skip very short names, where a 1-char edit is not a meaningful signal.
     final remaining = tracks.where((t) => !used.contains(t.id)).toList();
     final paired = <String>{};
     for (var i = 0; i < remaining.length; i++) {
+      if (paired.contains(remaining[i].id)) continue;
+      final nameI = _normalize(remaining[i].fileName);
       final group = [remaining[i]];
       for (var j = i + 1; j < remaining.length; j++) {
         if (paired.contains(remaining[j].id)) continue;
-        final dist = _levenshtein(
-          _normalize(remaining[i].fileName),
-          _normalize(remaining[j].fileName),
-        );
-        if (dist <= 4) {
+        final nameJ = _normalize(remaining[j].fileName);
+        if (nameI.length < 6 || nameJ.length < 6) continue;
+        final dist = _levenshtein(nameI, nameJ);
+        if (dist >= 1 && dist <= 4) {
           group.add(remaining[j]);
           paired.add(remaining[j].id);
         }

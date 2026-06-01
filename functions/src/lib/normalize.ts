@@ -97,10 +97,6 @@ export function mergeSignalsIntoTracks(
       }
 
       const score = rawScore * affinity;
-      // Debug: log unexpected high scores for non-matching genres
-      if (region === "GH" && score > 0.15 && !genreLower.includes("afrobeats") && !genreLower.includes("dancehall") && !genreLower.includes("highlife")) {
-        console.log(`[REGION DEBUG] GH: "${entry.title}" by ${entry.artist} | genre=${finalGenre} | raw=${rawScore.toFixed(3)} * affinity=${affinity} = ${score.toFixed(3)}`);
-      }
       if (score > 0.15) {
         adjusted[region] = score;
       }
@@ -158,11 +154,11 @@ export function mergeSignalsIntoTracks(
       title: entry.title,
       artist: entry.artist,
       artwork_url: entry.artworkUrl,
-      bpm: entry.bpm ?? estimateBpmFromGenre(
-        (entry.genre && entry.genre !== "Open Format"
-          ? entry.genre
-          : previous?.genre) || "Open Format",
-      ),
+      // Only store a BPM when a source actually supplied one (Audius /
+      // SoundCloud / Beatport carry real tempo). Otherwise write 0, which the
+      // app treats as "unknown". Never fabricate. This runs on every merge, so
+      // any previously-randomized BPM gets overwritten with the real-or-0 value.
+      bpm: entry.bpm ?? 0,
       key: entry.key,
       genre:
         (entry.genre && entry.genre !== "Open Format"
@@ -323,30 +319,6 @@ function inferGenreFromKeywords(keywords: string[]): string {
     return "Baile Funk";
   }
   return "Open Format";
-}
-
-function estimateBpmFromGenre(genre: string): number {
-  // Typical BPM ranges for DJ genres, returns midpoint with slight randomization
-  const bpmMap: Record<string, [number, number]> = {
-    "Afrobeats": [95, 115],
-    "Amapiano": [110, 120],
-    "House": [120, 130],
-    "Dance": [120, 135],
-    "Dancehall": [90, 110],
-    "Hip-Hop": [80, 100],
-    "R&B": [70, 95],
-    "Latin": [90, 110],
-    "Drill": [138, 148],
-    "UK Garage": [130, 140],
-    "Soca": [130, 145],
-    "Gqom": [115, 125],
-    "Baile Funk": [130, 150],
-    "Pop": [100, 130],
-    "Open Format": [110, 130],
-  };
-  const range = bpmMap[genre] ?? [110, 130];
-  // Deterministic-ish spread within the range
-  return Math.round(range[0] + Math.random() * (range[1] - range[0]));
 }
 
 function average(values: number[]): number {

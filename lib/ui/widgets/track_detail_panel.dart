@@ -393,7 +393,7 @@ class TrackDetailPanel extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '${similar.bpm} BPM',
+                          '${formatBpm(similar.bpm)} BPM',
                           style: theme.textTheme.labelLarge?.copyWith(
                             color: AppTheme.cyan,
                           ),

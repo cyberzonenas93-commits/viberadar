@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../services/greatest_of_service.dart';
@@ -630,7 +631,7 @@ class _HeroCardState extends State<_HeroCard> {
                           // Meta row
                           Row(
                             children: [
-                              _MetaPill(icon: Icons.speed_rounded, text: '${t.bpm}'),
+                              _MetaPill(icon: Icons.speed_rounded, text: formatBpm(t.bpm)),
                               const SizedBox(width: 6),
                               _MetaPill(icon: Icons.music_note_rounded, text: t.keySignature),
                               const SizedBox(width: 6),
@@ -790,7 +791,7 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Text('${t.bpm} BPM', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text('${formatBpm(t.bpm)} BPM', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
                         const SizedBox(width: 8),
                         Text(t.keySignature, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
                         const SizedBox(width: 8),
@@ -947,7 +948,7 @@ class _TrackCardState extends State<_TrackCard> {
                     Row(
                       children: [
                         Text(
-                          '${t.bpm}',
+                          formatBpm(t.bpm),
                           style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10, fontWeight: FontWeight.w500),
                         ),
                         const SizedBox(width: 4),
