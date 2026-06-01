@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../providers/setlist_provider.dart';
+import 'connect_computer_sheet.dart';
 import 'setlist_editor.dart';
 
 class SetlistsTab extends ConsumerWidget {
@@ -11,6 +12,7 @@ class SetlistsTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setlists = ref.watch(setlistsProvider);
+    final paired = ref.watch(pairedComputerProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.ink,
@@ -26,6 +28,48 @@ class SetlistsTab extends ConsumerWidget {
         backgroundColor: AppTheme.panel,
         elevation: 0,
         surfaceTintColor: Colors.transparent,
+        actions: [
+          if (paired == null)
+            // No computer connected — show link icon to open the sheet.
+            IconButton(
+              key: const Key('connect_computer_button'),
+              icon: const Icon(Icons.link, color: AppTheme.textSecondary),
+              tooltip: 'Connect a computer',
+              onPressed: () => showModalBottomSheet<void>(
+                context: context,
+                isScrollControlled: true,
+                backgroundColor: AppTheme.panel,
+                shape: const RoundedRectangleBorder(
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                builder: (_) => const ConnectComputerSheet(),
+              ),
+            )
+          else
+            // Connected — show the desktop name chip; tap to disconnect.
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: GestureDetector(
+                onTap: () =>
+                    ref.read(pairedComputerProvider.notifier).set(null),
+                child: Chip(
+                  key: const Key('paired_computer_chip'),
+                  label: Text(
+                    '\u{1F4F1} ${paired.desktopName}',
+                    style: const TextStyle(
+                      color: AppTheme.lime,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  backgroundColor: AppTheme.surface,
+                  side: BorderSide(color: AppTheme.lime.withValues(alpha: 0.35)),
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ),
+        ],
       ),
       body: setlists.isEmpty ? _buildEmpty() : _buildList(context, ref, setlists),
       floatingActionButton: FloatingActionButton(
@@ -54,7 +98,7 @@ class SetlistsTab extends ConsumerWidget {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: crates.length,
-      separatorBuilder: (_, __) => Divider(
+      separatorBuilder: (_, _) => Divider(
         height: 1,
         color: AppTheme.edge.withValues(alpha: 0.4),
         indent: 16,
@@ -64,7 +108,7 @@ class SetlistsTab extends ConsumerWidget {
         final crate = crates[index];
         final trackCount = crate.trackIds.length;
         final subtitle =
-            '${trackCount} tracks  ·  ${formatUpdatedAt(crate.updatedAt)}';
+            '$trackCount tracks  ·  ${formatUpdatedAt(crate.updatedAt)}';
 
         return InkWell(
           onTap: () {

@@ -7,6 +7,8 @@ import '../../models/crate.dart';
 import '../../models/track.dart';
 import '../../providers/app_state.dart';
 import '../../providers/setlist_provider.dart';
+import '../../services/pairing_service.dart';
+import 'connect_computer_sheet.dart';
 
 // ---------------------------------------------------------------------------
 // Pure helper — exposed for unit testing.
@@ -128,6 +130,22 @@ class _SetlistEditorState extends ConsumerState<SetlistEditor> {
     _save(widget.crate.copyWith(trackIds: _trackIds, name: newName));
   }
 
+  // ---- send to computer ----------------------------------------------------
+
+  Future<void> _sendToComputer(PairedComputer pairing) async {
+    final session = ref.read(sessionProvider).value;
+    if (session == null) return;
+    await ref.read(pairingServiceProvider).pushSetlist(
+          pairing.pairingId,
+          _current,
+          editorUid: session.userId,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Sent to ${pairing.desktopName}')),
+    );
+  }
+
   // ---- build ---------------------------------------------------------------
 
   @override
@@ -149,13 +167,36 @@ class _SetlistEditorState extends ConsumerState<SetlistEditor> {
   }
 
   AppBar _buildAppBar() {
+    final paired = ref.watch(pairedComputerProvider);
+
     return AppBar(
       backgroundColor: AppTheme.panel,
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       leading: BackButton(color: AppTheme.textSecondary),
-      // --- sync chip placeholder ---
+      // --- actions: sync chip + optional send button ---
       actions: [
+        if (paired != null)
+          Padding(
+            padding: const EdgeInsets.only(right: 4),
+            child: TextButton.icon(
+              key: const Key('send_to_computer_button'),
+              onPressed: () => _sendToComputer(paired),
+              icon: const Icon(
+                Icons.send_outlined,
+                size: 16,
+                color: AppTheme.violet,
+              ),
+              label: Text(
+                'Send to ${paired.desktopName}',
+                style: const TextStyle(
+                  color: AppTheme.violet,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(right: 12),
           child: Chip(
