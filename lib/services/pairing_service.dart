@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/crate.dart';
@@ -43,13 +44,21 @@ class PairingService {
   })  : _firestore = firestore ?? FirebaseFirestore.instance,
         _functions = functions ?? FirebaseFunctions.instance;
 
-  final FirebaseFirestore _firestore;
-  final FirebaseFunctions _functions;
+  /// No-Firebase constructor for use in tests and subclasses that override
+  /// every Firebase-touching method.  [_firestore] and [_functions] are `null`
+  /// — they must never be accessed.
+  @visibleForTesting
+  PairingService.testOnly()
+      : _firestore = null,
+        _functions = null;
+
+  final FirebaseFirestore? _firestore;
+  final FirebaseFunctions? _functions;
 
   // ── Callable helpers ───────────────────────────────────────────────────────
 
   HttpsCallable _callable(String name) =>
-      _functions.httpsCallable(name, options: HttpsCallableOptions(timeout: const Duration(seconds: 30)));
+      _functions!.httpsCallable(name, options: HttpsCallableOptions(timeout: const Duration(seconds: 30)));
 
   // ── Pairing handshake ──────────────────────────────────────────────────────
 
@@ -89,7 +98,7 @@ class PairingService {
   // ── Shared-setlist channel ─────────────────────────────────────────────────
 
   CollectionReference<Map<String, dynamic>> _setlistsRef(String pairingId) =>
-      _firestore
+      _firestore!
           .collection('pairings')
           .doc(pairingId)
           .collection('setlists');

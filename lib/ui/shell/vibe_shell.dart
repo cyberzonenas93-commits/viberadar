@@ -42,6 +42,7 @@ import '../features/exports/exports_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/trending/trending_screen.dart';
 import '../features/search/search_screen.dart';
+import 'pair_phone_screen.dart';
 
 class VibeShell extends ConsumerStatefulWidget {
   const VibeShell({
@@ -3390,6 +3391,32 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                   style: Theme.of(
                     context,
                   ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
+                ),
+              ),
+              const SizedBox(height: 14),
+              _settingsCard(
+                context,
+                title: 'Mobile companion',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pair your phone to share setlists wirelessly between the VibeRadar mobile app and this desktop.',
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodyMedium
+                          ?.copyWith(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 16),
+                    FilledButton.icon(
+                      onPressed: () => showDialog<void>(
+                        context: context,
+                        builder: (_) => const PairPhoneScreen(),
+                      ),
+                      icon: const Icon(Icons.phone_iphone_rounded),
+                      label: const Text('Pair a phone'),
+                    ),
+                  ],
                 ),
               ),
             ],
