@@ -38,4 +38,10 @@ class SetlistActions {
       updatedAt: now,
     ));
   }
+
+  /// Appends [trackId] to [setlist] (no duplicates) and persists.
+  Future<void> addTrack(Crate setlist, String trackId) {
+    if (setlist.trackIds.contains(trackId)) return Future.value();
+    return save(setlist.copyWith(trackIds: [...setlist.trackIds, trackId]));
+  }
 }
