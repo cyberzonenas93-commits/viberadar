@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'search_tab.dart';
 import 'setlists_tab.dart';
 
 class MobileShell extends ConsumerStatefulWidget {
@@ -18,7 +19,7 @@ class _MobileShellState extends ConsumerState<MobileShell> {
         index: _index,
         children: const [
           SetlistsTab(),
-          Center(child: Text('Search')),
+          SearchTab(),
           Center(child: Text('Trending')),
           Center(child: Text('AI')),
         ],
