@@ -15,6 +15,22 @@ class Crate {
   final DateTime createdAt;
   final DateTime updatedAt;
 
+  Crate copyWith({
+    String? name,
+    String? context,
+    List<String>? trackIds,
+    DateTime? updatedAt,
+  }) {
+    return Crate(
+      id: id,
+      name: name ?? this.name,
+      context: context ?? this.context,
+      trackIds: trackIds ?? this.trackIds,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,
