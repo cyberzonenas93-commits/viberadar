@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:viberadar/core/platform.dart';
+import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/ui/mobile/mobile_shell.dart';
 import 'package:viberadar/ui/shell/vibe_shell.dart';
 
@@ -53,14 +55,20 @@ class _AdaptiveShellUnderTest extends StatelessWidget {
   }
 }
 
+// ProviderScope with a no-op setlistsProvider override so MobileShell
+// (which now hosts SetlistsTab, a ConsumerWidget) can build in tests without
+// needing the full Firebase/Firestore dependency tree.
+Widget _wrap(Widget child) => ProviderScope(
+      overrides: [setlistsProvider.overrideWithValue(const [])],
+      child: MaterialApp(home: child),
+    );
+
 void main() {
   testWidgets('MobileShell shown on iOS; desktop placeholder absent',
       (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
-    await tester.pumpWidget(
-      const MaterialApp(home: _AdaptiveShellUnderTest()),
-    );
+    await tester.pumpWidget(_wrap(const _AdaptiveShellUnderTest()));
     await tester.pumpAndSettle();
 
     expect(find.byType(MobileShell), findsOneWidget);
@@ -74,9 +82,7 @@ void main() {
       (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
 
-    await tester.pumpWidget(
-      const MaterialApp(home: _AdaptiveShellUnderTest()),
-    );
+    await tester.pumpWidget(_wrap(const _AdaptiveShellUnderTest()));
     await tester.pumpAndSettle();
 
     expect(find.byType(_DesktopPlaceholder), findsOneWidget);
@@ -88,9 +94,7 @@ void main() {
   testWidgets('MobileShell renders all 4 nav destinations', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
-    await tester.pumpWidget(
-      const MaterialApp(home: MobileShell()),
-    );
+    await tester.pumpWidget(_wrap(const MobileShell()));
     await tester.pumpAndSettle();
 
     expect(find.text('Setlists'), findsWidgets);
@@ -104,13 +108,11 @@ void main() {
   testWidgets('MobileShell tab switching works', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
-    await tester.pumpWidget(
-      const MaterialApp(home: MobileShell()),
-    );
+    await tester.pumpWidget(_wrap(const MobileShell()));
     await tester.pumpAndSettle();
 
-    // Initially shows Setlists tab body
-    expect(find.text('Setlists').first, findsOneWidget);
+    // Initially shows Setlists tab body (AppBar title rendered by SetlistsTab)
+    expect(find.text('Setlists'), findsWidgets);
 
     // Tap Search destination in the NavigationBar
     // NavigationBar labels appear in both bar and body; tap the one in the bar
