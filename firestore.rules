@@ -37,5 +37,26 @@ service cloud.firestore {
       allow read: if true;
       allow write: if request.auth != null && request.auth.uid == userId;
     }
+
+    // ── Pairing (phone ↔ logged-out desktop) ──────────────────────────────
+    // Pairings are created/claimed ONLY via the createPairing/claimPairing
+    // Cloud Functions, so direct client writes to the pairing doc are denied.
+    // Both linked devices — the desktop's anonymous uid and the phone's uid —
+    // may read the pairing and read/write the shared setlists subcollection
+    // (this is the bidirectional "continue anywhere" channel).
+    match /pairings/{pairingId} {
+      allow read: if request.auth != null
+        && (request.auth.uid == resource.data.desktopUid
+            || request.auth.uid == resource.data.claimedByUid);
+      allow write: if false;
+
+      match /setlists/{setlistId} {
+        allow read, write: if request.auth != null
+          && request.auth.uid in [
+            get(/databases/$(database)/documents/pairings/$(pairingId)).data.desktopUid,
+            get(/databases/$(database)/documents/pairings/$(pairingId)).data.claimedByUid
+          ];
+      }
+    }
   }
 }

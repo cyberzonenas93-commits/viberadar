@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/config/firebase_runtime_config.dart';
+import '../core/platform.dart';
 import '../data/repositories/session_repository.dart';
 import '../data/repositories/track_repository.dart';
 import '../data/repositories/user_repository.dart';
@@ -24,6 +25,26 @@ class AppBootstrap {
             ? config.toOptions()
             : DefaultFirebaseOptions.currentPlatform,
       );
+
+      // Desktop devices sign in anonymously so each has a stable Firebase uid
+      // for phone pairing, without the DJ having to log in. Non-fatal: if
+      // Anonymous Auth isn't enabled in the project yet, pairing is simply
+      // unavailable and the app continues normally. (Phones use a real account.)
+      if (!kIsWeb && !isMobileForm) {
+        try {
+          if (FirebaseAuth.instance.currentUser == null) {
+            await FirebaseAuth.instance.signInAnonymously();
+          }
+        } catch (error, stackTrace) {
+          developer.log(
+            'Anonymous sign-in failed; pairing unavailable until Anonymous '
+            'Auth is enabled in the Firebase project.',
+            name: 'Bootstrap',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
+      }
 
       final trackRepository = FirestoreTrackRepository(
         FirebaseFirestore.instance,
