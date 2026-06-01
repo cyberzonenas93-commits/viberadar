@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'ai_tab.dart';
 import 'search_tab.dart';
 import 'setlists_tab.dart';
 import 'trending_tab.dart';
@@ -22,7 +23,7 @@ class _MobileShellState extends ConsumerState<MobileShell> {
           SetlistsTab(),
           SearchTab(),
           const TrendingTab(),
-          Center(child: Text('AI')),
+          const AiTab(),
         ],
       ),
       bottomNavigationBar: NavigationBar(
