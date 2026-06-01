@@ -4,6 +4,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../providers/setlist_provider.dart';
 import 'connect_computer_sheet.dart';
+import 'mobile_settings_sheet.dart';
 import 'setlist_editor.dart';
 
 class SetlistsTab extends ConsumerWidget {
@@ -29,6 +30,21 @@ class SetlistsTab extends ConsumerWidget {
         elevation: 0,
         surfaceTintColor: Colors.transparent,
         actions: [
+          // Account / settings icon — always visible.
+          IconButton(
+            key: const Key('account_settings_button'),
+            icon: const Icon(Icons.account_circle, color: AppTheme.textSecondary),
+            tooltip: 'Account & settings',
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: AppTheme.panel,
+              shape: const RoundedRectangleBorder(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+              ),
+              builder: (_) => const MobileSettingsSheet(),
+            ),
+          ),
           if (paired == null)
             // No computer connected — show link icon to open the sheet.
             IconButton(
