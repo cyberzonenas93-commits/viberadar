@@ -3,6 +3,8 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 
+export { createPairing, claimPairing } from "./pairing";
+
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
 import { fetchBillboardSignals } from "./clients/billboard";
 import { fetchAudiomackSignals } from "./clients/audiomack";
