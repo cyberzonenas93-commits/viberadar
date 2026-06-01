@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../providers/setlist_provider.dart';
+import 'setlist_editor.dart';
 
 class SetlistsTab extends ConsumerWidget {
   const SetlistsTab({super.key});
@@ -67,11 +68,10 @@ class SetlistsTab extends ConsumerWidget {
 
         return InkWell(
           onTap: () {
-            // TODO(Task 1.5): open SetlistEditor
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Editor coming soon'),
-                duration: Duration(seconds: 2),
+            Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (_) => SetlistEditor(crate: crate),
               ),
             );
           },
