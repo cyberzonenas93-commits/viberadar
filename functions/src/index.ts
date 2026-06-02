@@ -4,6 +4,7 @@ import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 
 export { createPairing, claimPairing } from "./pairing";
+export { spotifyProxy, appleProxy, youtubeProxy } from "./proxy";
 
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
 import { fetchBillboardSignals } from "./clients/billboard";
