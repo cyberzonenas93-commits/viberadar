@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import '../models/hot_cue.dart';
 import '../models/library_track.dart';
 import '../models/track.dart';
 import 'ai_copilot_service.dart';
+import 'audio_cue_detector.dart';
 
 // ── Genre family ───────────────────────────────────────────────────────────────
 enum _GenreFamily { houseEdm, amapiano, afrobeats, hipHopRnb, latin, unknown }
@@ -60,15 +62,113 @@ class CueAnalysisService {
   /// Generate cue candidates for a single local track.
   /// [cloudTrack] provides optional enrichment (genre, energy, bpm override).
   /// [useAi] enables GPT-assisted ranking of deterministic candidates.
+  ///
+  /// Analysis strategy (highest to lowest trust):
+  ///   0. Real audio-energy detection via ffmpeg — used when [localTrack.filePath]
+  ///      points to an existing file and ffmpeg can decode it.
+  ///   1. BPM-grid based bar/phrase timing (when BPM is known).
+  ///   2. Genre-specific structural templates.
+  ///   3. Duration-percentage fallbacks (when BPM is unknown).
+  ///   4. AI ranking of deterministic candidates (optional, never fabricates timestamps).
   Future<CueGenerationResult> analyzeTrack(
     LibraryTrack localTrack, {
     Track? cloudTrack,
     bool useAi = true,
   }) async {
+    final duration = localTrack.durationSeconds > 0 ? localTrack.durationSeconds : 0.0;
+
+    // ── Tier 0: real audio-energy detection ───────────────────────────────
+    // Only attempted when a non-empty filePath is present and the file exists.
+    final hasFile = localTrack.filePath.isNotEmpty &&
+        File(localTrack.filePath).existsSync();
+
+    if (hasFile) {
+      try {
+        final detector = AudioCueDetector();
+        final events = await detector.detectCues(
+          localTrack.filePath,
+          durationSeconds: duration > 0 ? duration : null,
+        );
+
+        if (events != null && events.isNotEmpty) {
+          // Build HotCues from detected events
+          var audioCues = events.map((ev) => HotCue(
+                trackId:     localTrack.id,
+                cueIndex:    0,
+                cueType:     ev.type,
+                label:       ev.type.label,
+                timeSeconds: ev.timeSeconds,
+                confidence:  ev.confidence,
+                source:      CueSource.audioEnergy,
+                notes:       'Detected from audio energy',
+              )).toList();
+
+          // Optional AI re-ranking of audio-detected cues
+          String? aiWarningAudio;
+          if (useAi && audioCues.isNotEmpty) {
+            final genre = localTrack.genre.isNotEmpty
+                ? localTrack.genre
+                : (cloudTrack?.genre ?? '');
+            final bpm = localTrack.bpm > 0
+                ? localTrack.bpm
+                : (cloudTrack?.bpm.toDouble() ?? 0.0);
+            try {
+              audioCues = await _aiRankCandidates(
+                candidates: audioCues,
+                title:      localTrack.title,
+                artist:     localTrack.artist,
+                genre:      genre,
+                bpm:        bpm,
+                duration:   duration,
+              );
+            } on TimeoutException catch (e, st) {
+              developer.log('AI re-ranking timed out for "${localTrack.title}"',
+                  name: 'CueAnalysisService', error: e, stackTrace: st);
+              aiWarningAudio = 'AI ranking timed out — showing audio-detected cues.';
+            } on FormatException catch (e, st) {
+              developer.log('AI re-ranking returned malformed JSON',
+                  name: 'CueAnalysisService', error: e, stackTrace: st);
+              aiWarningAudio = 'AI ranking returned unexpected data — showing audio-detected cues.';
+            } catch (e, st) {
+              developer.log('AI re-ranking failed for "${localTrack.title}"',
+                  name: 'CueAnalysisService', error: e, stackTrace: st);
+              aiWarningAudio = 'AI ranking unavailable — showing audio-detected cues.';
+            }
+          }
+
+          final finalCues = audioCues.take(maxCueSlots).toList();
+          for (var i = 0; i < finalCues.length; i++) {
+            finalCues[i] = finalCues[i].copyWith(cueIndex: i);
+          }
+          final hasWeak = finalCues.any((c) => c.confidence < weakConfidenceThreshold);
+
+          return CueGenerationResult(
+            trackId:           localTrack.id,
+            trackTitle:        localTrack.title,
+            trackArtist:       localTrack.artist,
+            cues:              finalCues,
+            hasWeakConfidence: hasWeak,
+            warning:           aiWarningAudio, // null = real detection; no estimate caveat
+            localFilePath:     localTrack.filePath,
+            generatedAt:       DateTime.now(),
+          );
+        }
+        // events == null or empty → fall through to estimate path
+        developer.log(
+            'Audio detection returned no events for "${localTrack.title}" — '
+            'falling back to BPM/template estimate.',
+            name: 'CueAnalysisService');
+      } catch (e, st) {
+        // Unexpected error in detector — always fall back gracefully
+        developer.log('Audio detection failed for "${localTrack.title}"',
+            name: 'CueAnalysisService', error: e, stackTrace: st);
+      }
+    }
+
+    // ── Tiers 1–3: BPM/template/duration estimate (original path) ─────────
     final bpm = localTrack.bpm > 0
         ? localTrack.bpm
         : (cloudTrack?.bpm.toDouble() ?? 0.0);
-    final duration = localTrack.durationSeconds > 0 ? localTrack.durationSeconds : 0.0;
     final genre = localTrack.genre.isNotEmpty
         ? localTrack.genre
         : (cloudTrack?.genre ?? '');

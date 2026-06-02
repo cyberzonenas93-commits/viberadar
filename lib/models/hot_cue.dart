@@ -54,6 +54,7 @@ enum CueSource {
   metadataHint,
   aiRanking,
   userDefined,
+  audioEnergy,
 }
 
 extension CueSourceX on CueSource {
@@ -68,6 +69,7 @@ extension CueSourceX on CueSource {
       case CueSource.metadataHint:      return 'Metadata';
       case CueSource.aiRanking:         return 'AI ranked';
       case CueSource.userDefined:       return 'User defined';
+      case CueSource.audioEnergy:       return 'Audio (detected)';
     }
   }
 }
