@@ -329,9 +329,11 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       ),
       const SizedBox(height: 12),
 
-      // Sign in with Apple — iOS only. Required by App Store Guideline 4.8
-      // when a third-party login (Google) is offered.
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) ...[
+      // Sign in with Apple — iOS (native), web (popup), Android (provider).
+      // Required by App Store Guideline 4.8 when a third-party login is offered.
+      if (kIsWeb ||
+          defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android) ...[
         SizedBox(
           width: double.infinity,
           child: SignInWithAppleButton(

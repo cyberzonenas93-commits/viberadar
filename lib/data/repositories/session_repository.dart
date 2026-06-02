@@ -212,53 +212,78 @@ class FirebaseSessionRepository implements SessionRepository {
   Future<void> signInWithApple() async {
     debugPrint('VIBERADAR: Starting Sign in with Apple...');
     try {
-      // Apple requires a nonce: the SHA-256 hash goes to Apple, the raw value
-      // goes to Firebase, which re-hashes and compares to bind the token.
-      final rawNonce = _generateNonce();
-      final hashedNonce = _sha256OfString(rawNonce);
-
-      final appleCredential = await SignInWithApple.getAppleIDCredential(
-        scopes: [
-          AppleIDAuthorizationScopes.email,
-          AppleIDAuthorizationScopes.fullName,
-        ],
-        nonce: hashedNonce,
-      );
-
-      final idToken = appleCredential.identityToken;
-      if (idToken == null || idToken.isEmpty) {
-        throw StateError(
-          'Apple Sign-In did not return an identity token. '
-          'Check the Sign in with Apple capability and Firebase Apple provider.',
-        );
-      }
-
-      debugPrint('VIBERADAR: Got Apple credential, signing into Firebase...');
-      final oauthCredential = OAuthProvider('apple.com').credential(
-        idToken: idToken,
-        rawNonce: rawNonce,
-      );
-      final userCredential = await _auth.signInWithCredential(oauthCredential);
-
-      // Apple returns the name only on the FIRST sign-in; persist it so the
-      // Firebase profile isn't left blank on subsequent logins.
-      final user = userCredential.user;
-      if (user != null &&
-          (user.displayName == null || user.displayName!.isEmpty)) {
-        final name = [appleCredential.givenName, appleCredential.familyName]
-            .whereType<String>()
-            .where((p) => p.isNotEmpty)
-            .join(' ')
-            .trim();
-        if (name.isNotEmpty) {
-          await user.updateDisplayName(name);
-        }
+      if (kIsWeb) {
+        // Web: Firebase drives Apple's OAuth popup flow, using the provider's
+        // Services ID + code-flow config set in the Firebase console.
+        final provider = OAuthProvider('apple.com')
+          ..addScope('email')
+          ..addScope('name');
+        await _auth.signInWithPopup(provider);
+      } else if (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.macOS) {
+        // Apple platforms: native ASAuthorization sheet (best UX; identified by
+        // the bundle id, so no Services ID needed).
+        await _signInWithAppleNative();
+      } else {
+        // Android (and other non-Apple platforms): Firebase opens Apple's web
+        // auth in a Custom Tab and returns through the Firebase handler. Needs
+        // the Apple provider's Services ID + code-flow config set in Firebase.
+        final provider = OAuthProvider('apple.com')
+          ..addScope('email')
+          ..addScope('name');
+        await _auth.signInWithProvider(provider);
       }
       debugPrint('VIBERADAR: Apple sign-in complete!');
     } catch (e, stack) {
       debugPrint('VIBERADAR: Apple Sign-In error: $e');
       debugPrint('VIBERADAR: Stack: $stack');
       rethrow;
+    }
+  }
+
+  /// Native Sign in with Apple (iOS/macOS): the on-device ASAuthorization sheet,
+  /// exchanging Apple's ID token for a Firebase credential.
+  Future<void> _signInWithAppleNative() async {
+    // Apple requires a nonce: the SHA-256 hash goes to Apple, the raw value
+    // goes to Firebase, which re-hashes and compares to bind the token.
+    final rawNonce = _generateNonce();
+    final hashedNonce = _sha256OfString(rawNonce);
+
+    final appleCredential = await SignInWithApple.getAppleIDCredential(
+      scopes: [
+        AppleIDAuthorizationScopes.email,
+        AppleIDAuthorizationScopes.fullName,
+      ],
+      nonce: hashedNonce,
+    );
+
+    final idToken = appleCredential.identityToken;
+    if (idToken == null || idToken.isEmpty) {
+      throw StateError(
+        'Apple Sign-In did not return an identity token. '
+        'Check the Sign in with Apple capability and Firebase Apple provider.',
+      );
+    }
+
+    final oauthCredential = OAuthProvider('apple.com').credential(
+      idToken: idToken,
+      rawNonce: rawNonce,
+    );
+    final userCredential = await _auth.signInWithCredential(oauthCredential);
+
+    // Apple returns the name only on the FIRST sign-in; persist it so the
+    // Firebase profile isn't left blank on subsequent logins.
+    final user = userCredential.user;
+    if (user != null &&
+        (user.displayName == null || user.displayName!.isEmpty)) {
+      final name = [appleCredential.givenName, appleCredential.familyName]
+          .whereType<String>()
+          .where((p) => p.isNotEmpty)
+          .join(' ')
+          .trim();
+      if (name.isNotEmpty) {
+        await user.updateDisplayName(name);
+      }
     }
   }
 
