@@ -1,31 +1,49 @@
-import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
 
-/// Apple Music artist service using the MusicKit REST API.
-/// The developer token is pre-generated (valid 180 days) and stored in .env.
+/// Apple Music artist service backed by the server-side [appleProxy]
+/// Cloud Function. No developer token is held in the app bundle.
+///
+/// Accepts an optional [functions] parameter so unit tests can supply a fake
+/// [FirebaseFunctions] without initialising a live Firebase app.
 class AppleMusicArtistService {
-  static const _baseUrl = 'https://api.music.apple.com/v1/catalog/us';
+  AppleMusicArtistService({FirebaseFunctions? functions})
+      : _injectedFunctions = functions;
 
-  String? get _token => dotenv.env['APPLE_MUSIC_TOKEN'];
+  final FirebaseFunctions? _injectedFunctions;
 
-  // NOTE: no Content-Type on GET requests — Apple Music returns 400 with it
-  Map<String, String> get _headers => {
-    'Authorization': 'Bearer ${_token ?? ''}',
-  };
+  /// Returns the injected instance if provided, otherwise falls back to
+  /// [FirebaseFunctions.instance]. The lazy lookup defers Firebase init
+  /// until the first actual API call.
+  FirebaseFunctions get _functions =>
+      _injectedFunctions ?? FirebaseFunctions.instance;
+
+  // ── Core proxy helper ──────────────────────────────────────────────────────
+
+  /// Calls the [appleProxy] callable with [path] and [query], returns the
+  /// parsed JSON map. Throws on network / Firebase errors.
+  Future<Map<String, dynamic>> _appleGet(
+    String path,
+    Map<String, dynamic> query,
+  ) async {
+    final callable = _functions.httpsCallable(
+      'appleProxy',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+    );
+    final result = await callable.call<Object?>({'path': path, 'query': query});
+    return Map<String, dynamic>.from(result.data as Map);
+  }
+
+  // ── Public API ─────────────────────────────────────────────────────────────
 
   /// Search Apple Music for songs matching [query]. Returns up to [limit] results.
-  Future<List<AppleMusicTrack>> searchSongs(String query, {int limit = 20}) async {
-    if (_token == null) return [];
+  Future<List<AppleMusicTrack>> searchSongs(String query,
+      {int limit = 20}) async {
     try {
-      final uri = Uri.parse('$_baseUrl/search').replace(queryParameters: {
+      final data = await _appleGet('catalog/us/search', {
         'term': query,
         'types': 'songs',
         'limit': '$limit',
       });
-      final response = await http.get(uri, headers: _headers);
-      if (response.statusCode != 200) return [];
-      final data = jsonDecode(response.body);
       final items = data['results']?['songs']?['data'] as List? ?? [];
       return items.map((item) => AppleMusicTrack.fromJson(item)).toList();
     } catch (_) {
@@ -35,18 +53,11 @@ class AppleMusicArtistService {
 
   /// Search for an artist by name. Returns the best-matching artist ID.
   Future<String?> findArtistId(String artistName) async {
-    if (_token == null) throw Exception('Apple Music token not configured in .env');
-    final uri = Uri.parse('$_baseUrl/search').replace(queryParameters: {
+    final data = await _appleGet('catalog/us/search', {
       'term': artistName,
       'types': 'artists',
       'limit': '1',
     });
-    final response = await http.get(uri, headers: _headers);
-    if (response.statusCode == 401) throw Exception('Apple Music token invalid or expired (401)');
-    if (response.statusCode != 200) {
-      throw Exception('Apple Music search failed: ${response.statusCode} — ${response.body}');
-    }
-    final data = jsonDecode(response.body);
     final items = data['results']?['artists']?['data'] as List?;
     if (items != null && items.isNotEmpty) {
       return items[0]['id'] as String;
@@ -54,51 +65,46 @@ class AppleMusicArtistService {
     return null;
   }
 
-  /// Get top songs (up to 20) for an artist ID. Returns empty on 400/404 (many artists lack this relationship).
+  /// Get top songs (up to 20) for an artist ID.
+  /// Returns empty on 400/404 (many artists lack this relationship).
   Future<List<AppleMusicTrack>> getTopSongs(String artistId) async {
-    if (_token == null) throw Exception('Apple Music token not configured');
-    final uri = Uri.parse('$_baseUrl/artists/$artistId/top-songs').replace(queryParameters: {
-      'limit': '20',
-    });
-    final response = await http.get(uri, headers: _headers);
-    if (response.statusCode == 401) throw Exception('Apple Music token invalid or expired (401)');
-    if (response.statusCode != 200) return []; // 400/404 = artist has no top-songs relationship
-    final data = jsonDecode(response.body);
-    final items = data['data'] as List? ?? [];
-    return items.map((item) => AppleMusicTrack.fromJson(item)).toList();
+    try {
+      final data = await _appleGet(
+        'catalog/us/artists/$artistId/top-songs',
+        {'limit': '20'},
+      );
+      final items = data['data'] as List? ?? [];
+      return items.map((item) => AppleMusicTrack.fromJson(item)).toList();
+    } catch (_) {
+      return []; // 400/404 = artist has no top-songs relationship
+    }
   }
 
-  /// Get all albums for an artist (paginated).
+  /// Get all albums for an artist (single page, up to 100).
   Future<List<AppleMusicAlbum>> getAlbums(String artistId) async {
-    if (_token == null) throw Exception('Apple Music token not configured');
     final albums = <AppleMusicAlbum>[];
-    String? nextUrl = '$_baseUrl/artists/$artistId/albums?limit=100';
-    while (nextUrl != null) {
-      final response = await http.get(Uri.parse(nextUrl), headers: _headers);
-      if (response.statusCode != 200) break;
-      final data = jsonDecode(response.body);
+    try {
+      final data = await _appleGet(
+        'catalog/us/artists/$artistId/albums',
+        {'limit': '100'},
+      );
       final items = data['data'] as List? ?? [];
       albums.addAll(items.map((a) => AppleMusicAlbum.fromJson(a)));
-      final next = data['next'] as String?;
-      nextUrl = next != null ? 'https://api.music.apple.com$next' : null;
-    }
+    } catch (_) {}
     return albums;
   }
 
-  /// Get all tracks in an album.
+  /// Get all tracks in an album (single page, up to 100).
   Future<List<AppleMusicTrack>> getAlbumTracks(String albumId) async {
-    if (_token == null) throw Exception('Apple Music token not configured');
     final tracks = <AppleMusicTrack>[];
-    String? nextUrl = '$_baseUrl/albums/$albumId/tracks?limit=100';
-    while (nextUrl != null) {
-      final response = await http.get(Uri.parse(nextUrl), headers: _headers);
-      if (response.statusCode != 200) break;
-      final data = jsonDecode(response.body);
+    try {
+      final data = await _appleGet(
+        'catalog/us/albums/$albumId/tracks',
+        {'limit': '100'},
+      );
       final items = data['data'] as List? ?? [];
       tracks.addAll(items.map((t) => AppleMusicTrack.fromJson(t)));
-      final next = data['next'] as String?;
-      nextUrl = next != null ? 'https://api.music.apple.com$next' : null;
-    }
+    } catch (_) {}
     return tracks;
   }
 
@@ -121,7 +127,8 @@ class AppleMusicArtistService {
     // Fetch album tracks in batches of 5
     for (var i = 0; i < albums.length; i += 5) {
       final batch = albums.skip(i).take(5);
-      final batchTracks = await Future.wait(batch.map((a) => getAlbumTracks(a.id)));
+      final batchTracks =
+          await Future.wait(batch.map((a) => getAlbumTracks(a.id)));
       for (final tracks in batchTracks) {
         for (final t in tracks) {
           if (seen.add(t.id)) all.add(t);
@@ -133,12 +140,23 @@ class AppleMusicArtistService {
   }
 
   /// Quick flow: just top tracks for an artist name (fast, used for initial load).
-  Future<List<AppleMusicTrack>> getTopTracksForArtist(String artistName) async {
+  Future<List<AppleMusicTrack>> getTopTracksForArtist(
+      String artistName) async {
     final artistId = await findArtistId(artistName);
     if (artistId == null) return [];
     return getTopSongs(artistId);
   }
+
+  /// Fetch Apple Music charts (top songs). Used by [PlaylistAggregationService].
+  Future<Map<String, dynamic>> getCharts({int limit = 100}) async {
+    return _appleGet('catalog/us/charts', {
+      'types': 'songs',
+      'limit': '$limit',
+    });
+  }
 }
+
+// ── Data models ────────────────────────────────────────────────────────────────
 
 class AppleMusicAlbum {
   final String id;
@@ -159,8 +177,8 @@ class AppleMusicAlbum {
     final attrs = json['attributes'] as Map<String, dynamic>? ?? {};
     final rawArt = attrs['artwork']?['url'] as String?;
     return AppleMusicAlbum(
-      id: json['id'] ?? '',
-      name: attrs['name'] ?? 'Unknown',
+      id: json['id'] as String? ?? '',
+      name: attrs['name'] as String? ?? 'Unknown',
       artworkUrl: rawArt?.replaceAll('{w}', '300').replaceAll('{h}', '300'),
       releaseDate: attrs['releaseDate'] as String?,
       trackCount: attrs['trackCount'] as int? ?? 0,
@@ -194,14 +212,16 @@ class AppleMusicTrack {
   factory AppleMusicTrack.fromJson(Map<String, dynamic> json) {
     final attrs = json['attributes'] as Map<String, dynamic>? ?? {};
     final rawArtwork = attrs['artwork']?['url'] as String?;
-    final artworkUrl = rawArtwork?.replaceAll('{w}', '300').replaceAll('{h}', '300');
+    final artworkUrl =
+        rawArtwork?.replaceAll('{w}', '300').replaceAll('{h}', '300');
     final previews = attrs['previews'] as List?;
-    final previewUrl = previews?.isNotEmpty == true ? previews![0]['url'] as String? : null;
+    final previewUrl =
+        previews?.isNotEmpty == true ? previews![0]['url'] as String? : null;
     return AppleMusicTrack(
-      id: json['id'] ?? '',
-      name: attrs['name'] ?? 'Unknown',
-      albumName: attrs['albumName'] ?? '',
-      artistName: attrs['artistName'] ?? '',
+      id: json['id'] as String? ?? '',
+      name: attrs['name'] as String? ?? 'Unknown',
+      albumName: attrs['albumName'] as String? ?? '',
+      artistName: attrs['artistName'] as String? ?? '',
       artworkUrl: artworkUrl,
       previewUrl: previewUrl,
       appleUrl: attrs['url'] as String?,

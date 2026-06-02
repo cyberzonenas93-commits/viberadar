@@ -1,5 +1,7 @@
 import 'dart:developer' as developer;
 
+import 'package:cloud_functions/cloud_functions.dart';
+
 import '../core/utils/concurrency_limiter.dart';
 import '../services/spotify_artist_service.dart';
 import '../services/apple_music_artist_service.dart';
@@ -43,10 +45,19 @@ class PlatformTrackResult {
 /// Searches Spotify, Apple Music, and YouTube for tracks by genre, artist, or
 /// freeform query. Returns merged, deduplicated results with URLs from all
 /// three platforms.
+///
+/// Accepts an optional [functions] parameter so tests can supply a fake
+/// [FirebaseFunctions] without initialising a live Firebase app.
 class PlatformSearchService {
-  final _spotify = SpotifyArtistService();
-  final _apple = AppleMusicArtistService();
-  final _youtube = YoutubeSearchService();
+  PlatformSearchService({FirebaseFunctions? functions})
+      : _spotify = SpotifyArtistService(functions: functions),
+        _apple = AppleMusicArtistService(functions: functions),
+        _youtube = YoutubeSearchService(functions: functions);
+
+  final SpotifyArtistService _spotify;
+  final AppleMusicArtistService _apple;
+  final YoutubeSearchService _youtube;
+
 
   /// Search all three platforms for tracks matching [query].
   /// Returns up to [limit] merged results.

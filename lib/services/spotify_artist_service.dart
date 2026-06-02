@@ -1,58 +1,51 @@
-import 'dart:convert';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
+import 'package:cloud_functions/cloud_functions.dart';
 
 /// A lightweight Spotify client that fetches an artist's full catalogue
-/// using Client Credentials flow (no user auth needed).
+/// via the server-side [spotifyProxy] Cloud Function. No API keys are
+/// held in the app bundle; authentication is handled server-side.
+///
+/// Accepts an optional [functions] parameter so unit tests can supply a fake
+/// [FirebaseFunctions] without initialising a live Firebase app.
 class SpotifyArtistService {
-  String? _accessToken;
-  DateTime? _tokenExpiry;
+  SpotifyArtistService({FirebaseFunctions? functions})
+      : _injectedFunctions = functions;
 
-  /// Public accessor for the Spotify access token (used by playlist service).
-  Future<String?> getAccessToken() => _getToken();
+  final FirebaseFunctions? _injectedFunctions;
 
-  Future<String?> _getToken() async {
-    if (_accessToken != null &&
-        _tokenExpiry != null &&
-        DateTime.now().isBefore(_tokenExpiry!)) {
-      return _accessToken;
-    }
+  /// Returns the injected instance if provided, otherwise falls back to
+  /// [FirebaseFunctions.instance]. The lazy lookup is intentional: it defers
+  /// the [Firebase.initializeApp] requirement until the first actual API call.
+  FirebaseFunctions get _functions =>
+      _injectedFunctions ?? FirebaseFunctions.instance;
 
-    final clientId = dotenv.env['SPOTIFY_CLIENT_ID'];
-    final clientSecret = dotenv.env['SPOTIFY_CLIENT_SECRET'];
-    if (clientId == null || clientSecret == null) return null;
+  // ── Core proxy helper ──────────────────────────────────────────────────────
 
-    try {
-      final response = await http.post(
-        Uri.parse('https://accounts.spotify.com/api/token'),
-        headers: {
-          'Authorization': 'Basic ${base64Encode(utf8.encode('$clientId:$clientSecret'))}',
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: 'grant_type=client_credentials',
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        _accessToken = data['access_token'];
-        _tokenExpiry = DateTime.now().add(Duration(seconds: data['expires_in'] ?? 3600));
-        return _accessToken;
-      }
-    } catch (_) {}
-    return null;
+  /// Calls the [spotifyProxy] callable with [path] and [query], returns the
+  /// parsed JSON map. Throws on network / Firebase errors.
+  Future<Map<String, dynamic>> _spotifyGet(
+    String path,
+    Map<String, dynamic> query,
+  ) async {
+    final callable = _functions.httpsCallable(
+      'spotifyProxy',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+    );
+    final result = await callable.call<Object?>({'path': path, 'query': query});
+    return Map<String, dynamic>.from(result.data as Map);
   }
 
+  // ── Public API ─────────────────────────────────────────────────────────────
+
   /// Search Spotify for tracks matching [query]. Returns up to [limit] results.
-  Future<List<SpotifyTrackInfo>> searchTracks(String query, {int limit = 20}) async {
-    final token = await _getToken();
-    if (token == null) return [];
+  Future<List<SpotifyTrackInfo>> searchTracks(String query,
+      {int limit = 20}) async {
     try {
-      final response = await http.get(
-        Uri.parse('https://api.spotify.com/v1/search?q=${Uri.encodeComponent(query)}&type=track&limit=$limit&market=US'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode != 200) return [];
-      final data = jsonDecode(response.body);
+      final data = await _spotifyGet('search', {
+        'q': query,
+        'type': 'track',
+        'limit': '$limit',
+        'market': 'US',
+      });
       final items = data['tracks']?['items'] as List? ?? [];
       return _parseTracks(items);
     } catch (_) {
@@ -62,133 +55,117 @@ class SpotifyArtistService {
 
   /// Search for artists by name, returns up to 20 results.
   Future<List<SpotifyArtistResult>> searchArtistsByName(String query) async {
-    final token = await _getToken();
-    if (token == null) return [];
-    final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/search?q=${Uri.encodeComponent(query)}&type=artist&limit=20'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode != 200) return [];
-    final data = jsonDecode(response.body);
-    final items = data['artists']?['items'] as List? ?? [];
-    return items.map((a) => SpotifyArtistResult(
-      id: a['id'] ?? '',
-      name: a['name'] ?? 'Unknown',
-      imageUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
-      genres: (a['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
-      followers: a['followers']?['total'] as int? ?? 0,
-      popularity: a['popularity'] as int? ?? 0,
-    )).toList();
+    try {
+      final data = await _spotifyGet('search', {
+        'q': query,
+        'type': 'artist',
+        'limit': '20',
+      });
+      final items = data['artists']?['items'] as List? ?? [];
+      return items
+          .map((a) => SpotifyArtistResult(
+                id: a['id'] ?? '',
+                name: a['name'] ?? 'Unknown',
+                imageUrl:
+                    (a['images'] as List?)?.firstOrNull?['url'] as String?,
+                genres: (a['genres'] as List?)
+                        ?.map((g) => g.toString())
+                        .toList() ??
+                    [],
+                followers: a['followers']?['total'] as int? ?? 0,
+                popularity: a['popularity'] as int? ?? 0,
+              ))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Search for a Spotify artist by name, return the best match artist ID.
   Future<String?> findArtistId(String artistName) async {
-    final token = await _getToken();
-    if (token == null) return null;
-
     try {
-      final response = await http.get(
-        Uri.parse('https://api.spotify.com/v1/search?q=${Uri.encodeComponent(artistName)}&type=artist&limit=1'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final items = data['artists']?['items'] as List?;
-        if (items != null && items.isNotEmpty) {
-          return items[0]['id'];
-        }
+      final data = await _spotifyGet('search', {
+        'q': artistName,
+        'type': 'artist',
+        'limit': '1',
+      });
+      final items = data['artists']?['items'] as List?;
+      if (items != null && items.isNotEmpty) {
+        return items[0]['id'] as String?;
       }
     } catch (_) {}
     return null;
   }
 
   /// Fetch an artist's top tracks.
-  Future<List<SpotifyTrackInfo>> getTopTracks(String artistId, {String market = 'US'}) async {
-    final token = await _getToken();
-    if (token == null) return [];
-
+  Future<List<SpotifyTrackInfo>> getTopTracks(String artistId,
+      {String market = 'US'}) async {
     try {
-      final response = await http.get(
-        Uri.parse('https://api.spotify.com/v1/artists/$artistId/top-tracks?market=$market'),
-        headers: {'Authorization': 'Bearer $token'},
+      final data = await _spotifyGet(
+        'artists/$artistId/top-tracks',
+        {'market': market},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return _parseTracks(data['tracks'] as List? ?? []);
-      }
-    } catch (_) {}
-    return [];
+      return _parseTracks(data['tracks'] as List? ?? []);
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Fetch ALL albums for an artist (singles, albums, compilations).
+  /// NOTE: The proxy does not support cursor-based pagination (`next` URLs),
+  /// so we fetch a single page of up to 50 items.
   Future<List<SpotifyAlbumInfo>> getAlbums(String artistId) async {
-    final token = await _getToken();
-    if (token == null) return [];
-
     final albums = <SpotifyAlbumInfo>[];
-    String? nextUrl = 'https://api.spotify.com/v1/artists/$artistId/albums?include_groups=album,single&limit=50';
-
-    while (nextUrl != null) {
-      try {
-        final response = await http.get(
-          Uri.parse(nextUrl),
-          headers: {'Authorization': 'Bearer $token'},
-        );
-
-        if (response.statusCode != 200) break;
-
-        final data = jsonDecode(response.body);
-        final items = data['items'] as List? ?? [];
-        for (final album in items) {
-          albums.add(SpotifyAlbumInfo(
-            id: album['id'],
-            name: album['name'],
-            type: album['album_type'] ?? 'album',
-            imageUrl: (album['images'] as List?)?.firstOrNull?['url'],
-            releaseDate: album['release_date'],
-            totalTracks: album['total_tracks'] ?? 0,
-          ));
-        }
-        nextUrl = data['next'];
-      } catch (_) {
-        break;
+    try {
+      final data = await _spotifyGet(
+        'artists/$artistId/albums',
+        {'include_groups': 'album,single', 'limit': '50'},
+      );
+      final items = data['items'] as List? ?? [];
+      for (final album in items) {
+        albums.add(SpotifyAlbumInfo(
+          id: album['id'] as String,
+          name: album['name'] as String,
+          type: album['album_type'] as String? ?? 'album',
+          imageUrl: (album['images'] as List?)?.firstOrNull?['url'] as String?,
+          releaseDate: album['release_date'] as String?,
+          totalTracks: album['total_tracks'] as int? ?? 0,
+        ));
       }
-    }
+    } catch (_) {}
     return albums;
   }
 
   /// Fetch all tracks from a specific album.
   Future<List<SpotifyTrackInfo>> getAlbumTracks(String albumId) async {
-    final token = await _getToken();
-    if (token == null) return [];
-
     try {
-      final response = await http.get(
-        Uri.parse('https://api.spotify.com/v1/albums/$albumId?market=US'),
-        headers: {'Authorization': 'Bearer $token'},
+      final data = await _spotifyGet(
+        'albums/$albumId',
+        {'market': 'US'},
       );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final albumArt = (data['images'] as List?)?.firstOrNull?['url'];
-        final tracks = data['tracks']?['items'] as List? ?? [];
-        return tracks.map((t) => SpotifyTrackInfo(
-          id: t['id'] ?? '',
-          name: t['name'] ?? 'Unknown',
-          artists: (t['artists'] as List?)?.map((a) => a['name'].toString()).join(', ') ?? '',
-          durationMs: t['duration_ms'] ?? 0,
-          spotifyUrl: t['external_urls']?['spotify'] ?? '',
-          albumName: data['name'] ?? '',
-          albumArt: albumArt,
-          releaseDate: data['release_date'],
-          popularity: 0, // album tracks don't have popularity
-          trackNumber: t['track_number'] ?? 0,
-        )).toList();
-      }
-    } catch (_) {}
-    return [];
+      final albumArt =
+          (data['images'] as List?)?.firstOrNull?['url'] as String?;
+      final tracks = data['tracks']?['items'] as List? ?? [];
+      return tracks
+          .map((t) => SpotifyTrackInfo(
+                id: t['id'] as String? ?? '',
+                name: t['name'] as String? ?? 'Unknown',
+                artists: (t['artists'] as List?)
+                        ?.map((a) => a['name'].toString())
+                        .join(', ') ??
+                    '',
+                durationMs: t['duration_ms'] as int? ?? 0,
+                spotifyUrl: t['external_urls']?['spotify'] as String? ?? '',
+                albumName: data['name'] as String? ?? '',
+                albumArt: albumArt,
+                releaseDate: data['release_date'] as String?,
+                popularity: 0, // album tracks don't have popularity
+                trackNumber: t['track_number'] as int? ?? 0,
+              ))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Full catalogue: top tracks + all album tracks, deduplicated.
@@ -226,27 +203,27 @@ class SpotifyArtistService {
 
     // Mark top tracks
     final topIds = topTracks.map((t) => t.id).toSet();
-    return allTracks.map((t) => t.copyWith(isTopTrack: topIds.contains(t.id))).toList();
+    return allTracks
+        .map((t) => t.copyWith(isTopTrack: topIds.contains(t.id)))
+        .toList();
   }
 
   /// Get artist profile (name, images, genres, followers, popularity).
   Future<SpotifyArtistProfile?> getArtistProfile(String artistId) async {
-    final token = await _getToken();
-    if (token == null) return null;
-    final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/artists/$artistId'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode != 200) return null;
-    final data = jsonDecode(response.body);
-    return SpotifyArtistProfile(
-      id: data['id'] ?? '',
-      name: data['name'] ?? '',
-      imageUrl: (data['images'] as List?)?.firstOrNull?['url'] as String?,
-      genres: (data['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
-      followers: data['followers']?['total'] as int? ?? 0,
-      popularity: data['popularity'] as int? ?? 0,
-    );
+    try {
+      final data = await _spotifyGet('artists/$artistId', {});
+      return SpotifyArtistProfile(
+        id: data['id'] as String? ?? '',
+        name: data['name'] as String? ?? '',
+        imageUrl: (data['images'] as List?)?.firstOrNull?['url'] as String?,
+        genres: (data['genres'] as List?)?.map((g) => g.toString()).toList() ??
+            [],
+        followers: data['followers']?['total'] as int? ?? 0,
+        popularity: data['popularity'] as int? ?? 0,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Get full artist profile by searching name first.
@@ -258,66 +235,78 @@ class SpotifyArtistService {
 
   /// Get artists related to a given artist ID.
   Future<List<SpotifyArtistProfile>> getRelatedArtists(String artistId) async {
-    final token = await _getToken();
-    if (token == null) return [];
-    final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/artists/$artistId/related-artists'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode != 200) return [];
-    final data = jsonDecode(response.body);
-    final items = data['artists'] as List? ?? [];
-    return items.map((a) => SpotifyArtistProfile(
-      id: a['id'] ?? '',
-      name: a['name'] ?? '',
-      imageUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
-      genres: (a['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
-      followers: a['followers']?['total'] as int? ?? 0,
-      popularity: a['popularity'] as int? ?? 0,
-    )).toList();
+    try {
+      final data = await _spotifyGet('artists/$artistId/related-artists', {});
+      final items = data['artists'] as List? ?? [];
+      return items
+          .map((a) => SpotifyArtistProfile(
+                id: a['id'] as String? ?? '',
+                name: a['name'] as String? ?? '',
+                imageUrl:
+                    (a['images'] as List?)?.firstOrNull?['url'] as String?,
+                genres: (a['genres'] as List?)
+                        ?.map((g) => g.toString())
+                        .toList() ??
+                    [],
+                followers: a['followers']?['total'] as int? ?? 0,
+                popularity: a['popularity'] as int? ?? 0,
+              ))
+          .toList();
+    } catch (_) {
+      return [];
+    }
   }
 
   /// Get the most recent album/single for an artist.
   Future<SpotifyAlbumInfo?> getLatestRelease(String artistId) async {
-    final token = await _getToken();
-    if (token == null) return null;
-    final response = await http.get(
-      Uri.parse('https://api.spotify.com/v1/artists/$artistId/albums?include_groups=album,single&limit=1&market=US'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
-    if (response.statusCode != 200) return null;
-    final data = jsonDecode(response.body);
-    final items = data['items'] as List? ?? [];
-    if (items.isEmpty) return null;
-    final album = items[0];
-    return SpotifyAlbumInfo(
-      id: album['id'],
-      name: album['name'],
-      type: album['album_type'] ?? 'album',
-      imageUrl: (album['images'] as List?)?.firstOrNull?['url'],
-      releaseDate: album['release_date'],
-      totalTracks: album['total_tracks'] ?? 0,
-    );
+    try {
+      final data = await _spotifyGet(
+        'artists/$artistId/albums',
+        {'include_groups': 'album,single', 'limit': '1', 'market': 'US'},
+      );
+      final items = data['items'] as List? ?? [];
+      if (items.isEmpty) return null;
+      final album = items[0] as Map;
+      return SpotifyAlbumInfo(
+        id: album['id'] as String,
+        name: album['name'] as String,
+        type: album['album_type'] as String? ?? 'album',
+        imageUrl:
+            (album['images'] as List?)?.firstOrNull?['url'] as String?,
+        releaseDate: album['release_date'] as String?,
+        totalTracks: album['total_tracks'] as int? ?? 0,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
-  List<SpotifyTrackInfo> _parseTracks(List items) {
+  // ── Private helpers ────────────────────────────────────────────────────────
+
+  List<SpotifyTrackInfo> _parseTracks(List<dynamic> items) {
     return items.map((t) {
-      final albumArt = (t['album']?['images'] as List?)?.firstOrNull?['url'];
+      final albumArt =
+          (t['album']?['images'] as List?)?.firstOrNull?['url'] as String?;
       return SpotifyTrackInfo(
-        id: t['id'] ?? '',
-        name: t['name'] ?? 'Unknown',
-        artists: (t['artists'] as List?)?.map((a) => a['name'].toString()).join(', ') ?? '',
-        durationMs: t['duration_ms'] ?? 0,
-        spotifyUrl: t['external_urls']?['spotify'] ?? '',
-        albumName: t['album']?['name'] ?? '',
+        id: t['id'] as String? ?? '',
+        name: t['name'] as String? ?? 'Unknown',
+        artists: (t['artists'] as List?)
+                ?.map((a) => a['name'].toString())
+                .join(', ') ??
+            '',
+        durationMs: t['duration_ms'] as int? ?? 0,
+        spotifyUrl: t['external_urls']?['spotify'] as String? ?? '',
+        albumName: t['album']?['name'] as String? ?? '',
         albumArt: albumArt,
-        releaseDate: t['album']?['release_date'],
-        popularity: t['popularity'] ?? 0,
-        trackNumber: t['track_number'] ?? 0,
+        releaseDate: t['album']?['release_date'] as String?,
+        popularity: t['popularity'] as int? ?? 0,
+        trackNumber: t['track_number'] as int? ?? 0,
       );
     }).toList();
   }
 }
+
+// ── Data models ────────────────────────────────────────────────────────────────
 
 class SpotifyTrackInfo {
   final String id;
@@ -347,18 +336,18 @@ class SpotifyTrackInfo {
   });
 
   SpotifyTrackInfo copyWith({bool? isTopTrack}) => SpotifyTrackInfo(
-    id: id,
-    name: name,
-    artists: artists,
-    durationMs: durationMs,
-    spotifyUrl: spotifyUrl,
-    albumName: albumName,
-    albumArt: albumArt,
-    releaseDate: releaseDate,
-    popularity: popularity,
-    trackNumber: trackNumber,
-    isTopTrack: isTopTrack ?? this.isTopTrack,
-  );
+        id: id,
+        name: name,
+        artists: artists,
+        durationMs: durationMs,
+        spotifyUrl: spotifyUrl,
+        albumName: albumName,
+        albumArt: albumArt,
+        releaseDate: releaseDate,
+        popularity: popularity,
+        trackNumber: trackNumber,
+        isTopTrack: isTopTrack ?? this.isTopTrack,
+      );
 
   String get durationFormatted {
     final minutes = durationMs ~/ 60000;
