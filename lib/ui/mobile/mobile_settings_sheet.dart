@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
 import '../../services/account_deletion_service.dart';
+import '../../services/secure_storage_service.dart';
 
 /// Bottom-sheet with basic account info, sign-out, and account deletion.
 ///
@@ -65,7 +66,15 @@ class MobileSettingsSheet extends ConsumerWidget {
               ),
             ),
 
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
+
+          // OpenAI API key — powers the AI tab. On iOS the Keychain is separate
+          // from the desktop's, so the key must be settable here too.
+          const OpenAiKeySection(),
+
+          const SizedBox(height: 28),
+          Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
+          const SizedBox(height: 20),
 
           // Sign out
           OutlinedButton.icon(
@@ -201,5 +210,136 @@ class MobileSettingsSheet extends ConsumerWidget {
         );
       }
     }
+  }
+}
+
+/// Lets the user store their personal OpenAI API key, used by the AI tab.
+///
+/// The key is written to this device's Keychain via [SecureStorageService] and
+/// is never bundled or synced. Saving an empty value clears the stored key.
+class OpenAiKeySection extends StatefulWidget {
+  const OpenAiKeySection({super.key, this.storage});
+
+  /// Injectable backend for tests; defaults to the real Keychain-backed service.
+  final SecureStorageService? storage;
+
+  @override
+  State<OpenAiKeySection> createState() => _OpenAiKeySectionState();
+}
+
+class _OpenAiKeySectionState extends State<OpenAiKeySection> {
+  late final SecureStorageService _storage =
+      widget.storage ?? SecureStorageService();
+  final _controller = TextEditingController();
+  bool _loading = true;
+  bool _saved = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final key = await _storage.readSecret(kOpenAiApiKey);
+    if (!mounted) return;
+    setState(() {
+      if (key != null) _controller.text = key;
+      _saved = key != null && key.trim().isNotEmpty;
+      _loading = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final key = _controller.text.trim();
+    if (key.isEmpty) {
+      await _storage.deleteSecret(kOpenAiApiKey);
+    } else {
+      await _storage.writeSecret(kOpenAiApiKey, key);
+    }
+    if (!mounted) return;
+    setState(() => _saved = key.isNotEmpty);
+    FocusScope.of(context).unfocus();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(key.isEmpty ? 'OpenAI key cleared' : 'OpenAI key saved'),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'OpenAI API Key',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
+            const SizedBox(width: 8),
+            if (_saved)
+              const Icon(Icons.check_circle, size: 16, color: AppTheme.lime),
+          ],
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Powers the AI tab. Stored only on this device.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('openai_key_field'),
+                controller: _controller,
+                obscureText: true,
+                enabled: !_loading,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 14,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'sk-…',
+                  hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                  filled: true,
+                  fillColor: AppTheme.panel,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide:
+                        BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            ElevatedButton(
+              key: const Key('save_openai_key_button'),
+              onPressed: _loading ? null : _save,
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }
