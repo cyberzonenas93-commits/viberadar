@@ -23,7 +23,7 @@ import {
 // Path allowlists — prevent open-relay abuse
 // ---------------------------------------------------------------------------
 
-const SPOTIFY_ALLOWED_PREFIXES = ["search", "artists", "tracks", "albums"];
+const SPOTIFY_ALLOWED_PREFIXES = ["search", "artists", "tracks", "albums", "browse", "playlists"];
 const APPLE_ALLOWED_PREFIXES = ["catalog"];
 const YOUTUBE_ALLOWED_PREFIXES = ["search", "videos"];
 
