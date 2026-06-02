@@ -103,7 +103,9 @@ class LibraryScannerService {
         } else {
           newFiles.add(file);
         }
-      } catch (_) {}
+      } catch (e, st) {
+        dev.log('Failed to stat file during scan: ${file.path}', name: 'LibraryScanner', error: e, stackTrace: st);
+      }
     }
 
     final cachedCount = tracks.length;

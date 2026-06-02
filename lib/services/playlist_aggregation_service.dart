@@ -430,7 +430,9 @@ class PlaylistAggregationService {
 
             if (allTracks.length >= limit) break;
           }
-        } catch (_) {}
+        } catch (e, st) {
+          dev.log('Spotify search/parse failed for query "$searchQuery"', name: 'PlaylistAggregation', error: e, stackTrace: st);
+        }
         if (allTracks.length >= limit) break;
       }
 

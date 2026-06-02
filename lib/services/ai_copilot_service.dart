@@ -333,7 +333,11 @@ class AiCopilotService {
               buffer.write(delta);
               yield buffer.toString();
             }
-          } catch (_) {}
+          } catch (_) {
+            // intentional: individual SSE lines may be incomplete or malformed
+            // (e.g. heartbeat pings, partial chunks); skipping them silently is
+            // correct — the stream continues with the next line.
+          }
         }
       }
       client.close();

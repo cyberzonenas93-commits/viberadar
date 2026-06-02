@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +30,9 @@ class _DiscoverDJsScreenState extends ConsumerState<DiscoverDJsScreen> {
     setState(() => _loading = true);
     try {
       _profiles = await getTopProfiles(limit: 100);
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to load DJ profiles', name: 'DiscoverDJs', error: e, stackTrace: st);
+    }
     if (mounted) setState(() => _loading = false);
   }
 

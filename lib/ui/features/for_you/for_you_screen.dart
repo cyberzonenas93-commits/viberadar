@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -65,7 +66,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
         _loadedRecommended = true;
         _loadRecommendations(artistId);
       }
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to load artist data for $name', name: 'ForYou', error: e, stackTrace: st);
+    }
   }
 
   Future<void> _loadRecommendations(String seedArtistId) async {
@@ -82,7 +85,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
           .take(12)
           .toList();
       setState(() => _recommended = filtered);
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to load artist recommendations', name: 'ForYou', error: e, stackTrace: st);
+    }
   }
 
   void _followArtist(UserProfile profile, String artistName) {
@@ -821,7 +826,9 @@ class _ArtistPickerDialogState extends State<_ArtistPickerDialog> {
           if (results.isNotEmpty && mounted) {
             setState(() => _popularImages[name] = results.first.imageUrl);
           }
-        } catch (_) {}
+        } catch (e, st) {
+          developer.log('Failed to fetch image for popular artist $name', name: 'ForYou', error: e, stackTrace: st);
+        }
       }));
       if (!mounted) return;
     }

@@ -18,6 +18,7 @@ import '../../providers/app_state.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/repositories.dart';
 import 'dart:async';
+import 'dart:developer' as developer;
 import '../../models/library_track.dart';
 import '../../services/export_service.dart';
 import '../../services/greatest_of_service.dart';
@@ -1642,7 +1643,9 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
           );
           added++;
         }
-      } catch (_) {}
+      } catch (e, st) {
+        developer.log('Platform search slot failed', name: 'VibeShell', error: e, stackTrace: st);
+      }
 
       // Update UI after each slot completes
       if (mounted) {

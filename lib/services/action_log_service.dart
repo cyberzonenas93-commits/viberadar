@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as p;
@@ -28,7 +29,9 @@ class ActionLogService {
           '\t${entry.errors.length}'
           '\t${entry.summary}\n';
       await file.writeAsString(line, mode: FileMode.append);
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to write action log entry', name: 'ActionLog', error: e, stackTrace: st);
+    }
   }
 
   /// Log a crate creation.

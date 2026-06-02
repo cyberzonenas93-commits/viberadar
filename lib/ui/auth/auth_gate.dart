@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,7 +79,9 @@ class _AuthGateState extends ConsumerState<AuthGate> {
               artists: pending,
             );
       }
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to sync pending followed artists', name: 'AuthGate', error: e, stackTrace: st);
+    }
   }
 
   @override

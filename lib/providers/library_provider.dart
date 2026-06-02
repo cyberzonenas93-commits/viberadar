@@ -304,7 +304,9 @@ class LibraryNotifier extends Notifier<LibraryState> {
         if (results.isNotEmpty && (results.first.albumArt ?? '').isNotEmpty) {
           artworkUrl = results.first.albumArt;
         }
-      } catch (_) {}
+      } catch (e, st) {
+        dev.log('Spotify artwork search failed for "$query"', name: 'Library', error: e, stackTrace: st);
+      }
 
       // Fallback to Apple Music
       if (artworkUrl == null) {
@@ -314,7 +316,9 @@ class LibraryNotifier extends Notifier<LibraryState> {
           if (results.isNotEmpty && (results.first.artworkUrl ?? '').isNotEmpty) {
             artworkUrl = results.first.artworkUrl;
           }
-        } catch (_) {}
+        } catch (e, st) {
+          dev.log('Apple Music artwork search failed for "$query"', name: 'Library', error: e, stackTrace: st);
+        }
       }
 
       if (artworkUrl != null) {
@@ -409,7 +413,9 @@ Future<void> _saveCratesToDisk(Map<String, List<String>> crates) async {
   try {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_cratesCacheKey, jsonEncode(crates));
-  } catch (_) {}
+  } catch (e, st) {
+    dev.log('Failed to save crates to disk', name: 'Library', error: e, stackTrace: st);
+  }
 }
 
 // ── Crate State ───────────────────────────────────────────────────────────────
@@ -572,7 +578,11 @@ class AiCrateNotifier extends Notifier<AiCrateState> {
             .toList();
       }
       state = AiCrateState(crates: loaded);
-    } catch (_) {}
+    } catch (_) {
+      // intentional: best-effort local disk-cache load for AI crates;
+      // data may be absent, corrupt, or unreadable — starting with an empty
+      // state is the correct safe fallback.
+    }
   }
 
   Future<void> _saveToDisk(Map<String, List<AiCrateTrack>> crates) async {
@@ -580,7 +590,9 @@ class AiCrateNotifier extends Notifier<AiCrateState> {
       final prefs = await SharedPreferences.getInstance();
       final json = crates.map((k, v) => MapEntry(k, v.map((t) => t.toJson()).toList()));
       await prefs.setString(_aiCratesCacheKey, jsonEncode(json));
-    } catch (_) {}
+    } catch (e, st) {
+      dev.log('Failed to save AI crates to disk', name: 'Library', error: e, stackTrace: st);
+    }
   }
 }
 

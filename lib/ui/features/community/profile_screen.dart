@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -206,7 +208,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       if (profile != null) {
         await updateProfile(profile.copyWith(photoUrl: url));
       }
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to upload profile photo', name: 'ProfileScreen', error: e, stackTrace: st);
+    }
   }
 
   void _showEditDialog(BuildContext context, SocialProfile profile) {

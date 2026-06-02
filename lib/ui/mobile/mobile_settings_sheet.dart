@@ -171,7 +171,10 @@ class MobileSettingsSheet extends ConsumerWidget {
       // Sign out after deletion to clear local auth state.
       try {
         await ref.read(sessionRepositoryProvider).signOut();
-      } catch (_) {}
+      } catch (_) {
+        // intentional: best-effort sign-out cleanup after account deletion;
+        // the account is already deleted, so a sign-out failure is harmless.
+      }
       if (context.mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }

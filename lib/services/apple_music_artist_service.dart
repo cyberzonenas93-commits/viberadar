@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:cloud_functions/cloud_functions.dart';
 
 /// Apple Music artist service backed by the server-side [appleProxy]
@@ -90,7 +92,9 @@ class AppleMusicArtistService {
       );
       final items = data['data'] as List? ?? [];
       albums.addAll(items.map((a) => AppleMusicAlbum.fromJson(a)));
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to fetch Apple Music albums for artist "$artistId"', name: 'AppleMusicArtist', error: e, stackTrace: st);
+    }
     return albums;
   }
 
@@ -104,7 +108,9 @@ class AppleMusicArtistService {
       );
       final items = data['data'] as List? ?? [];
       tracks.addAll(items.map((t) => AppleMusicTrack.fromJson(t)));
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to fetch Apple Music tracks for album "$albumId"', name: 'AppleMusicArtist', error: e, stackTrace: st);
+    }
     return tracks;
   }
 

@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -151,7 +153,9 @@ class FirebaseSessionRepository implements SessionRepository {
     );
     try {
       await credential.user?.updateDisplayName(displayName);
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to set display name after registration', name: 'SessionRepository', error: e, stackTrace: st);
+    }
   }
 
   @override
@@ -199,7 +203,10 @@ class FirebaseSessionRepository implements SessionRepository {
   Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();
-    } catch (_) {}
+    } catch (_) {
+      // intentional: best-effort Google session cleanup; Firebase sign-out
+      // below will still run, so the user is effectively signed out regardless.
+    }
     await _auth.signOut();
   }
 }

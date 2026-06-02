@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:cloud_functions/cloud_functions.dart';
 
 /// A lightweight Spotify client that fetches an artist's full catalogue
@@ -93,7 +95,9 @@ class SpotifyArtistService {
       if (items != null && items.isNotEmpty) {
         return items[0]['id'] as String?;
       }
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to find Spotify artist ID for "$artistName"', name: 'SpotifyArtist', error: e, stackTrace: st);
+    }
     return null;
   }
 
@@ -132,7 +136,9 @@ class SpotifyArtistService {
           totalTracks: album['total_tracks'] as int? ?? 0,
         ));
       }
-    } catch (_) {}
+    } catch (e, st) {
+      developer.log('Failed to fetch Spotify albums for artist "$artistId"', name: 'SpotifyArtist', error: e, stackTrace: st);
+    }
     return albums;
   }
 

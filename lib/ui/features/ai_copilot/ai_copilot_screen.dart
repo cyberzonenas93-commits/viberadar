@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -816,7 +817,11 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             if (title.isNotEmpty) tracks.add((title: title, artist: artist, bpm: bpm, key: key));
           }
         }
-      } catch (_) {}
+      } catch (_) {
+        // intentional: JSON parse of the ```crate block may fail for any AI
+        // response that isn't valid JSON; the caller falls through to Try 2
+        // (numbered-list regex), so this is expected graceful degradation.
+      }
     }
 
     // Try 2: Parse numbered list
@@ -959,7 +964,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           youtubeUrl = ytResults.first.youtubeUrl;
           artworkUrl ??= ytResults.first.thumbnailUrl;
         }
-      } catch (_) {}
+      } catch (e, st) {
+        developer.log('YouTube search failed during track resolution', name: 'AiCopilot', error: e, stackTrace: st);
+      }
 
       final resolved = spotifyUrl != null || appleUrl != null || youtubeUrl != null;
       if (resolved) found++;

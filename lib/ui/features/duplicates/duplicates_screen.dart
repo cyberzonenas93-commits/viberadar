@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -77,7 +78,9 @@ class _DuplicatesScreenState extends ConsumerState<DuplicatesScreen> {
         final dest = p.join(reviewDir.path, t.fileName);
         try {
           await src.copy(dest);
-        } catch (_) {}
+        } catch (e, st) {
+          developer.log('Failed to copy duplicate file to review folder: ${src.path}', name: 'Duplicates', error: e, stackTrace: st);
+        }
       }
 
       if (mounted) {
