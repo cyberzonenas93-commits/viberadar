@@ -47,6 +47,7 @@ dependencies:
   cross_file: ^0.3.4+2
   cloud_functions: ^6.3.2
   qr_flutter: ^4.1.0
+  sign_in_with_apple: ^8.1.0
 
 dev_dependencies:
   flutter_test:

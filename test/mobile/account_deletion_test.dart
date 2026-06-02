@@ -89,6 +89,9 @@ class _FakeSessionRepository implements SessionRepository {
   Future<void> signInWithGoogle() async {}
 
   @override
+  Future<void> signInWithApple() async {}
+
+  @override
   Future<void> signInAnonymously() async {}
 
   @override

@@ -1,9 +1,13 @@
+import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:math';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../models/session_state.dart';
 
@@ -16,6 +20,8 @@ abstract class SessionRepository {
   });
 
   Future<void> signInWithGoogle();
+
+  Future<void> signInWithApple();
 
   Future<void> signInAnonymously();
 
@@ -48,6 +54,9 @@ class DemoSessionRepository implements SessionRepository {
 
   @override
   Future<void> signInWithGoogle() async {}
+
+  @override
+  Future<void> signInWithApple() async {}
 
   @override
   Future<void> signInAnonymously() async {}
@@ -200,6 +209,60 @@ class FirebaseSessionRepository implements SessionRepository {
   }
 
   @override
+  Future<void> signInWithApple() async {
+    debugPrint('VIBERADAR: Starting Sign in with Apple...');
+    try {
+      // Apple requires a nonce: the SHA-256 hash goes to Apple, the raw value
+      // goes to Firebase, which re-hashes and compares to bind the token.
+      final rawNonce = _generateNonce();
+      final hashedNonce = _sha256OfString(rawNonce);
+
+      final appleCredential = await SignInWithApple.getAppleIDCredential(
+        scopes: [
+          AppleIDAuthorizationScopes.email,
+          AppleIDAuthorizationScopes.fullName,
+        ],
+        nonce: hashedNonce,
+      );
+
+      final idToken = appleCredential.identityToken;
+      if (idToken == null || idToken.isEmpty) {
+        throw StateError(
+          'Apple Sign-In did not return an identity token. '
+          'Check the Sign in with Apple capability and Firebase Apple provider.',
+        );
+      }
+
+      debugPrint('VIBERADAR: Got Apple credential, signing into Firebase...');
+      final oauthCredential = OAuthProvider('apple.com').credential(
+        idToken: idToken,
+        rawNonce: rawNonce,
+      );
+      final userCredential = await _auth.signInWithCredential(oauthCredential);
+
+      // Apple returns the name only on the FIRST sign-in; persist it so the
+      // Firebase profile isn't left blank on subsequent logins.
+      final user = userCredential.user;
+      if (user != null &&
+          (user.displayName == null || user.displayName!.isEmpty)) {
+        final name = [appleCredential.givenName, appleCredential.familyName]
+            .whereType<String>()
+            .where((p) => p.isNotEmpty)
+            .join(' ')
+            .trim();
+        if (name.isNotEmpty) {
+          await user.updateDisplayName(name);
+        }
+      }
+      debugPrint('VIBERADAR: Apple sign-in complete!');
+    } catch (e, stack) {
+      debugPrint('VIBERADAR: Apple Sign-In error: $e');
+      debugPrint('VIBERADAR: Stack: $stack');
+      rethrow;
+    }
+  }
+
+  @override
   Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();
@@ -210,3 +273,18 @@ class FirebaseSessionRepository implements SessionRepository {
     await _auth.signOut();
   }
 }
+
+/// Generates a cryptographically secure random nonce for Sign in with Apple.
+String _generateNonce([int length = 32]) {
+  const charset =
+      '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._';
+  final random = Random.secure();
+  return List.generate(
+    length,
+    (_) => charset[random.nextInt(charset.length)],
+  ).join();
+}
+
+/// SHA-256 of [input], hex-encoded — used to hash the Apple nonce.
+String _sha256OfString(String input) =>
+    sha256.convert(utf8.encode(input)).toString();

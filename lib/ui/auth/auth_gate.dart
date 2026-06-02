@@ -1,8 +1,10 @@
 import 'dart:developer' as developer;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../core/platform.dart';
 import '../../core/theme/app_theme.dart';
@@ -327,6 +329,21 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       ),
       const SizedBox(height: 12),
 
+      // Sign in with Apple — iOS only. Required by App Store Guideline 4.8
+      // when a third-party login (Google) is offered.
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) ...[
+        SizedBox(
+          width: double.infinity,
+          child: SignInWithAppleButton(
+            onPressed: _isLoading ? () {} : _signInWithApple,
+            style: SignInWithAppleButtonStyle.white,
+            height: 52,
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        const SizedBox(height: 12),
+      ],
+
       // Email sign-in
       _OutlineButton(
         onPressed: _isLoading
@@ -546,6 +563,26 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     try {
       await ref.read(sessionRepositoryProvider).signInWithGoogle();
       await _saveRememberMe();
+    } catch (e) {
+      if (mounted) setState(() => _error = _friendly(e));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _signInWithApple() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      await ref.read(sessionRepositoryProvider).signInWithApple();
+      await _saveRememberMe();
+    } on SignInWithAppleAuthorizationException catch (e) {
+      // User cancelling the Apple sheet is not an error worth showing.
+      if (e.code != AuthorizationErrorCode.canceled && mounted) {
+        setState(() => _error = _friendly(e));
+      }
     } catch (e) {
       if (mounted) setState(() => _error = _friendly(e));
     } finally {
