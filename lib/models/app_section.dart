@@ -19,6 +19,7 @@ enum AppSection {
   greatestOf,
   setBuilder,
   aiCopilot,
+  setlists,
 
   // LIBRARY
   library,
@@ -51,6 +52,7 @@ extension AppSectionLabel on AppSection {
       case AppSection.greatestOf: return 'Greatest Of';
       case AppSection.setBuilder: return 'Set Builder';
       case AppSection.aiCopilot: return 'AI Copilot';
+      case AppSection.setlists: return 'Setlists';
       case AppSection.library: return 'My Library';
       case AppSection.duplicates: return 'Duplicates';
       case AppSection.savedCrates: return 'Saved Crates';

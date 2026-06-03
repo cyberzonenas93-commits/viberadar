@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../core/platform.dart';
 import '../../core/theme/app_theme.dart';
 import '../../providers/library_provider.dart';
 
@@ -149,6 +150,10 @@ class _DropTargetShellState extends ConsumerState<DropTargetShell>
 
   @override
   Widget build(BuildContext context) {
+    // Drag-and-drop library import is desktop-only: the desktop_drop plugin has
+    // no mobile implementation, so on phones/tablets we pass the child through
+    // unchanged (the shell still renders; you import via the Library screen).
+    if (isMobileForm) return widget.child;
     return DropTarget(
       onDragEntered: (_) => _setDragging(true),
       onDragExited: (_) => _setDragging(false),

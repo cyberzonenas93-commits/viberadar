@@ -21,14 +21,15 @@ import 'dart:async';
 import 'dart:developer' as developer;
 import '../../models/library_track.dart';
 import '../../services/export_service.dart';
-import '../../services/greatest_of_service.dart';
 import '../../services/platform_search_service.dart';
 import '../../services/playlist_aggregation_service.dart';
 import '../../services/ingest_service.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/drop_target_shell.dart';
+import '../mobile/setlists_tab.dart';
 import '../widgets/sidebar_nav.dart';
 import '../widgets/track_detail_panel.dart';
+import '../widgets/vibe_backdrop.dart';
 import '../features/artists/artists_screen.dart';
 import '../features/for_you/for_you_screen.dart';
 import '../features/greatest_of/greatest_of_screen.dart';
@@ -245,7 +246,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                   drawerScrimColor: Colors.black.withValues(alpha: 0.62),
                   drawer: Drawer(
                     width: drawerWidth,
-                    backgroundColor: AppTheme.panel,
+                    backgroundColor: AppTheme.panel.withValues(alpha: 0.98),
                     surfaceTintColor: Colors.transparent,
                     child: SafeArea(
                       child: Builder(
@@ -256,7 +257,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                   ),
                   appBar: AppBar(
                     toolbarHeight: 56,
-                    backgroundColor: AppTheme.panel,
+                    backgroundColor: AppTheme.panel.withValues(alpha: 0.92),
                     surfaceTintColor: Colors.transparent,
                     elevation: 0,
                     leading: Builder(
@@ -319,21 +320,26 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                       ),
                     ),
                   ),
-                  body: SafeArea(top: false, child: body),
+                  body: VibeBackdrop(
+                    compact: true,
+                    child: SafeArea(top: false, child: body),
+                  ),
                 );
               }
 
               return Scaffold(
                 backgroundColor: AppTheme.ink,
-                body: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        SizedBox(width: 262, child: sidebar()),
-                        const SizedBox(width: 20),
-                        Expanded(child: body),
-                      ],
+                body: VibeBackdrop(
+                  child: SafeArea(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        children: [
+                          SizedBox(width: 262, child: sidebar()),
+                          const SizedBox(width: 20),
+                          Expanded(child: body),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -435,6 +441,8 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         return const GreatestOfScreen();
       case AppSection.aiCopilot:
         return const AiCopilotScreen();
+      case AppSection.setlists:
+        return const SetlistsTab();
       case AppSection.playlists:
         return const _PlaylistsView();
       case AppSection.community:
