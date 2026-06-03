@@ -1,9 +1,15 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:video_player/video_player.dart';
 
 import '../../core/theme/app_theme.dart';
 
+/// Launch splash: the animated VibeRadar mark — a Veo 3.1 generated equalizer
+/// clip (pure white bars on pure black) screen-blended over the brand gradient,
+/// so the black is fully transparent and only the bars float on the gradient.
+///
+/// Degrades gracefully: if the clip can't load, the gradient + wordmark still
+/// show and launch is never blocked.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key, required this.onFinished});
 
@@ -13,269 +19,135 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
-    with TickerProviderStateMixin {
-  late final AnimationController _pulseController;
-  late final AnimationController _sequenceController;
-  late final Animation<double> _logoScale;
-  late final Animation<double> _logoOpacity;
-  late final Animation<double> _titleOpacity;
-  late final Animation<double> _subtitleOpacity;
-  late final Animation<double> _barsOpacity;
-  late final Animation<double> _glowRadius;
+class _SplashScreenState extends State<SplashScreen> {
+  VideoPlayerController? _controller;
+  bool _done = false;
 
   @override
   void initState() {
     super.initState();
-
-    _pulseController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-
-    _sequenceController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2800),
-    );
-
-    _logoScale = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _sequenceController,
-        curve: const Interval(0.0, 0.35, curve: Curves.elasticOut),
-      ),
-    );
-    _logoOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _sequenceController,
-        curve: const Interval(0.0, 0.2, curve: Curves.easeOut),
-      ),
-    );
-    _barsOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _sequenceController,
-        curve: const Interval(0.15, 0.45, curve: Curves.easeOut),
-      ),
-    );
-    _titleOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _sequenceController,
-        curve: const Interval(0.35, 0.55, curve: Curves.easeOut),
-      ),
-    );
-    _subtitleOpacity = Tween(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(
-        parent: _sequenceController,
-        curve: const Interval(0.5, 0.7, curve: Curves.easeOut),
-      ),
-    );
-    _glowRadius = Tween(begin: 0.0, end: 180.0).animate(
-      CurvedAnimation(
-        parent: _sequenceController,
-        curve: const Interval(0.0, 0.6, curve: Curves.easeOut),
-      ),
-    );
-
-    _sequenceController.forward();
-
-    Future.delayed(const Duration(milliseconds: 3200), () {
-      if (mounted) widget.onFinished();
+    final c = VideoPlayerController.asset('assets/splash/splash_motion.mp4');
+    _controller = c;
+    c.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+      c
+        ..setVolume(0)
+        ..play();
+    }).catchError((_) {
+      _finish(); // clip unavailable — don't block launch
     });
+    c.addListener(_onTick);
+    // Safety net: never hold the launch longer than the clip + a beat.
+    Future.delayed(const Duration(milliseconds: 4400), _finish);
+  }
+
+  void _onTick() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    if (c.value.duration > Duration.zero &&
+        c.value.position >= c.value.duration) {
+      _finish();
+    }
+  }
+
+  void _finish() {
+    if (_done) return;
+    _done = true;
+    if (mounted) widget.onFinished();
   }
 
   @override
   void dispose() {
-    _pulseController.dispose();
-    _sequenceController.dispose();
+    _controller?.removeListener(_onTick);
+    _controller?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final c = _controller;
+    final ready = c != null && c.value.isInitialized;
     return Scaffold(
       backgroundColor: AppTheme.ink,
-      body: AnimatedBuilder(
-        animation: Listenable.merge([_sequenceController, _pulseController]),
-        builder: (context, _) {
-          return Stack(
-            children: [
-              // Animated background glow
-              Center(
-                child: Container(
-                  width: _glowRadius.value * 2.5,
-                  height: _glowRadius.value * 2.5,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [
-                        AppTheme.violet.withValues(
-                          alpha: 0.15 + _pulseController.value * 0.08,
-                        ),
-                        AppTheme.cyan.withValues(alpha: 0.05),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Brand gradient backdrop — matches the app icon.
+          const DecoratedBox(
+            decoration: BoxDecoration(gradient: AppTheme.brandGradient),
+          ),
+          // Animated bars: screen-blend renders the clip's pure black as
+          // transparent, leaving the white bars floating on the gradient.
+          if (ready)
+            _BlendMask(
+              blendMode: BlendMode.screen,
+              child: FittedBox(
+                fit: BoxFit.cover,
+                child: SizedBox(
+                  width: c.value.size.width,
+                  height: c.value.size.height,
+                  child: VideoPlayer(c),
                 ),
               ),
-              // Secondary glow
-              Center(
-                child: Transform.translate(
-                  offset: const Offset(60, -40),
-                  child: Container(
-                    width: _glowRadius.value * 1.8,
-                    height: _glowRadius.value * 1.8,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      gradient: RadialGradient(
-                        colors: [
-                          AppTheme.pink.withValues(
-                            alpha: 0.1 + _pulseController.value * 0.06,
-                          ),
-                          Colors.transparent,
-                        ],
-                      ),
-                    ),
-                  ),
+            ),
+          // Wordmark.
+          Align(
+            alignment: const Alignment(0, 0.8),
+            child: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [AppTheme.textPrimary, AppTheme.cyan, AppTheme.lime],
+              ).createShader(bounds),
+              child: const Text(
+                'VibeRadar',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 34,
+                  letterSpacing: 0.5,
                 ),
               ),
-              // Main content
-              Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Logo icon with EQ bars
-                    Opacity(
-                      opacity: _logoOpacity.value,
-                      child: Transform.scale(
-                        scale: _logoScale.value,
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                AppTheme.violet,
-                                AppTheme.pink,
-                                AppTheme.cyan,
-                              ],
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppTheme.violet.withValues(alpha: 0.4),
-                                blurRadius: 30,
-                                spreadRadius: 2,
-                              ),
-                              BoxShadow(
-                                color: AppTheme.cyan.withValues(alpha: 0.2),
-                                blurRadius: 40,
-                                spreadRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: Opacity(
-                            opacity: _barsOpacity.value,
-                            child: CustomPaint(
-                              painter: _EqBarsPainter(
-                                progress: _pulseController.value,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 28),
-                    // Title
-                    Opacity(
-                      opacity: _titleOpacity.value,
-                      child: Transform.translate(
-                        offset: Offset(0, (1 - _titleOpacity.value) * 16),
-                        child: ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Colors.white, AppTheme.cyan],
-                          ).createShader(bounds),
-                          child: Text(
-                            'VibeRadar',
-                            style: Theme.of(context)
-                                .textTheme
-                                .displayLarge
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -2,
-                                  fontSize: 48,
-                                ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    // Subtitle
-                    Opacity(
-                      opacity: _subtitleOpacity.value,
-                      child: Transform.translate(
-                        offset: Offset(0, (1 - _subtitleOpacity.value) * 12),
-                        child: Text(
-                          'DJ Trend Intelligence',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(
-                                color: Colors.white54,
-                                letterSpacing: 4,
-                                fontWeight: FontWeight.w400,
-                              ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _EqBarsPainter extends CustomPainter {
-  _EqBarsPainter({required this.progress, required this.color});
+/// Composites [child] onto the backdrop using [blendMode]. With
+/// [BlendMode.screen], pure black in the child becomes transparent and pure
+/// white stays white — perfect for keying a black-background clip.
+class _BlendMask extends SingleChildRenderObjectWidget {
+  const _BlendMask({required this.blendMode, required Widget super.child});
 
-  final double progress;
-  final Color color;
+  final BlendMode blendMode;
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color.withValues(alpha: 0.9)
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = 5;
+  _RenderBlendMask createRenderObject(BuildContext context) =>
+      _RenderBlendMask(blendMode);
 
-    const barCount = 5;
-    final barSpacing = size.width * 0.12;
-    final totalWidth = barCount * paint.strokeWidth + (barCount - 1) * barSpacing;
-    final startX = (size.width - totalWidth) / 2;
-    final centerY = size.height / 2;
-    final maxHeight = size.height * 0.32;
+  @override
+  void updateRenderObject(BuildContext context, _RenderBlendMask renderObject) {
+    renderObject.blendMode = blendMode;
+  }
+}
 
-    for (var i = 0; i < barCount; i++) {
-      final phase = (progress + i * 0.2) % 1.0;
-      final height =
-          maxHeight * (0.3 + 0.7 * math.sin(phase * math.pi));
-      final x = startX + i * (paint.strokeWidth + barSpacing);
-      canvas.drawLine(
-        Offset(x, centerY - height / 2),
-        Offset(x, centerY + height / 2),
-        paint,
-      );
-    }
+class _RenderBlendMask extends RenderProxyBox {
+  _RenderBlendMask(this._blendMode);
+
+  BlendMode _blendMode;
+  set blendMode(BlendMode value) {
+    if (value == _blendMode) return;
+    _blendMode = value;
+    markNeedsPaint();
   }
 
   @override
-  bool shouldRepaint(covariant _EqBarsPainter old) =>
-      old.progress != progress;
+  void paint(PaintingContext context, Offset offset) {
+    if (child == null) return;
+    context.canvas.saveLayer(offset & size, Paint()..blendMode = _blendMode);
+    super.paint(context, offset);
+    context.canvas.restore();
+  }
 }

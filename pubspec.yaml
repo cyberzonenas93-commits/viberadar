@@ -48,6 +48,7 @@ dependencies:
   cloud_functions: ^6.3.2
   qr_flutter: ^4.1.0
   sign_in_with_apple: ^8.1.0
+  video_player: ^2.11.1
 
 dev_dependencies:
   flutter_test:
@@ -58,6 +59,8 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/splash/splash_motion.mp4
 
 flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
