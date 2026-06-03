@@ -11,6 +11,7 @@ import '../../core/theme/app_theme.dart';
 import '../../models/session_state.dart';
 import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
+import '../mobile/mobile_shell.dart';
 import '../shell/vibe_shell.dart';
 import 'onboarding_screen.dart';
 import 'splash_screen.dart';
@@ -123,14 +124,16 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       }
       // On phones the user must be signed in (no guest); desktop keeps its
       // existing behavior of admitting any resolved session.
-      // Phones/tablets get the SAME full responsive shell as desktop (mirror) —
-      // they just still require a real sign-in (no guest/demo on mobile).
-      if (isMobileForm && session?.isAuthenticated != true) {
-        return _LoginScreen(statusMessage: widget.statusMessage);
+      // Phones get the mobile-native shell (bottom-nav, touch-first) that
+      // mirrors the macOS feature set; desktop keeps the full sidebar shell.
+      if (isMobileForm) {
+        return session?.isAuthenticated == true
+            ? const MobileShell()
+            : _LoginScreen(statusMessage: widget.statusMessage);
       }
       return VibeShell(
         statusMessage: widget.statusMessage,
-        isDemoMode: isMobileForm ? false : widget.isDemoMode,
+        isDemoMode: widget.isDemoMode,
       );
     }
 

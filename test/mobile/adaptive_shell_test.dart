@@ -4,37 +4,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:viberadar/core/platform.dart';
+import 'package:viberadar/models/session_state.dart';
+import 'package:viberadar/models/track.dart';
+import 'package:viberadar/models/user_profile.dart';
+import 'package:viberadar/providers/app_state.dart';
 import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/ui/mobile/mobile_shell.dart';
-import 'package:viberadar/ui/shell/vibe_shell.dart';
 
 // ---------------------------------------------------------------------------
-// Wrapper widget that exercises the same branching logic as auth_gate.dart
-// without pulling in the full VibeShell dependency tree.
+// Verifies the platform routing (MobileShell on phones, not on desktop) and
+// the mobile-native shell's nav structure.
 //
-// We use the wrapper fallback (as permitted by the task spec) because
-// VibeShell requires dozens of provider overrides (Firebase, Firestore,
-// platform channels) that would make this test brittle and slow. The wrapper
-// still exercises: (a) isMobileForm reads debugDefaultTargetPlatformOverride,
-// and (b) MobileShell builds correctly on iOS; VibeShell is bypassed on desktop
-// by returning a stand-in Scaffold so we can assert its absence in the iOS case
-// and its presence in the macOS case without standing up Firebase.
+// MobileShell now mirrors the macOS app by hosting the real feature screens,
+// which open Firebase-backed provider subscriptions. We override the handful
+// the default (Home) tab needs so it renders with empty data instead of a
+// perpetual spinner, and we use pump() (not pumpAndSettle) since some screens
+// never "settle" without a live backend. We assert the shell + nav structure,
+// not async screen content.
 // ---------------------------------------------------------------------------
-
-/// A lightweight stand-in that has the same *type* identity as the real
-/// VibeShell without needing its Firebase/platform-channel dependencies.
-/// We just need `find.byType(VibeShell)` to work, so we pump the real
-/// VibeShell class selector inside a builder that avoids constructing it
-/// by using a Key-based type check. Instead, we use a different approach:
-/// we test the branching by pumping an _AdaptiveShellUnderTest which mirrors
-/// the production if/else and returns:
-///   - real MobileShell on mobile
-///   - a plain _DesktopPlaceholder (not VibeShell) on desktop so we can
-///     still assert absence of MobileShell and confirm platform routing works.
-//
-// Note: We assert that MobileShell IS found on iOS and IS NOT found on macOS.
-// For the macOS side we assert a desktop-sentinel widget IS found (proving
-// the branch ran) and MobileShell is NOT found.
 
 class _DesktopPlaceholder extends StatelessWidget {
   const _DesktopPlaceholder();
@@ -44,22 +31,29 @@ class _DesktopPlaceholder extends StatelessWidget {
 }
 
 class _AdaptiveShellUnderTest extends StatelessWidget {
-  const _AdaptiveShellUnderTest({super.key});
-
+  const _AdaptiveShellUnderTest();
   @override
   Widget build(BuildContext context) {
-    if (isMobileForm) {
-      return const MobileShell();
-    }
+    if (isMobileForm) return const MobileShell();
     return const _DesktopPlaceholder();
   }
 }
 
-// ProviderScope with a no-op setlistsProvider override so MobileShell
-// (which now hosts SetlistsTab, a ConsumerWidget) can build in tests without
-// needing the full Firebase/Firestore dependency tree.
 Widget _wrap(Widget child) => ProviderScope(
-      overrides: [setlistsProvider.overrideWithValue(const [])],
+      overrides: [
+        setlistsProvider.overrideWithValue(const []),
+        sessionProvider.overrideWith((ref) => Stream.value(
+              const SessionState.demo(),
+            )),
+        userProfileProvider.overrideWith((ref) => Stream.value(
+              UserProfile.empty(
+                id: 'test',
+                displayName: 'Test DJ',
+                preferredRegion: 'GH',
+              ),
+            )),
+        trackStreamProvider.overrideWith((ref) => Stream.value(const <Track>[])),
+      ],
       child: MaterialApp(home: child),
     );
 
@@ -69,12 +63,11 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
     await tester.pumpWidget(_wrap(const _AdaptiveShellUnderTest()));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.byType(MobileShell), findsOneWidget);
     expect(find.byType(_DesktopPlaceholder), findsNothing);
 
-    // Reset before test framework invariant check fires.
     debugDefaultTargetPlatformOverride = null;
   });
 
@@ -83,7 +76,7 @@ void main() {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
 
     await tester.pumpWidget(_wrap(const _AdaptiveShellUnderTest()));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
     expect(find.byType(_DesktopPlaceholder), findsOneWidget);
     expect(find.byType(MobileShell), findsNothing);
@@ -91,36 +84,35 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('MobileShell renders all 4 nav destinations', (tester) async {
+  testWidgets('MobileShell renders all 5 nav destinations', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
     await tester.pumpWidget(_wrap(const MobileShell()));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    expect(find.text('Setlists'), findsWidgets);
-    expect(find.text('Search'), findsWidgets);
+    expect(find.text('Home'), findsWidgets);
     expect(find.text('Trending'), findsWidgets);
     expect(find.text('AI'), findsWidgets);
+    expect(find.text('Library'), findsWidgets);
+    expect(find.text('More'), findsWidgets);
 
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('MobileShell tab switching works', (tester) async {
+  testWidgets('tapping More opens its (static) menu', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
     await tester.pumpWidget(_wrap(const MobileShell()));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
-    // Initially shows Setlists tab body (AppBar title rendered by SetlistsTab)
-    expect(find.text('Setlists'), findsWidgets);
+    // More is the only tab with purely static content (no async spinners).
+    await tester.tap(find.text('More').last);
+    await tester.pump();
 
-    // Tap Search destination in the NavigationBar
-    // NavigationBar labels appear in both bar and body; tap the one in the bar
-    final searchDestinations = find.text('Search');
-    await tester.tap(searchDestinations.last);
-    await tester.pumpAndSettle();
-
-    expect(find.text('Search').first, findsOneWidget);
+    // Assert items near the top of the menu — a test viewport can't show the
+    // whole scrolling list, and the lazy ListView won't build off-screen rows.
+    expect(find.text('For You'), findsOneWidget);
+    expect(find.text('Artists'), findsOneWidget);
 
     debugDefaultTargetPlatformOverride = null;
   });
