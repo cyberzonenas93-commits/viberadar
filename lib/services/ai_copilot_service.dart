@@ -1,6 +1,6 @@
 import 'dart:convert';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'secure_storage_service.dart';
 
@@ -46,7 +46,6 @@ class AiCopilotService {
   final SecureStorageService _secureStorage;
 
   static const _prefKeyModel = 'openai_model';
-  static const _endpoint = 'https://api.openai.com/v1/chat/completions';
 
   static const _baseSystemPrompt =
       'You are VibeRadar AI Copilot — an expert DJ intelligence assistant '
@@ -122,6 +121,27 @@ class AiCopilotService {
   Future<void> setModel(String model) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKeyModel, model);
+  }
+
+  /// Calls the server-side `openaiProxy` callable — the OpenAI key lives in the
+  /// backend (Secret Manager), never in the app bundle. Returns the assistant
+  /// message content. Throws on transport/auth errors (callers fall back).
+  Future<String> _callProxy(
+    List<Map<String, String>> messages, {
+    bool jsonObject = false,
+  }) async {
+    final model = await getModel();
+    final callable = FirebaseFunctions.instanceFor(region: 'us-central1')
+        .httpsCallable('openaiProxy');
+    final result = await callable.call(<String, dynamic>{
+      'messages': messages,
+      'model': model,
+      'maxCompletionTokens': jsonObject ? 400 : 1500,
+      'temperature': jsonObject ? 0.3 : 0.7,
+      'jsonObject': jsonObject,
+    });
+    final data = Map<String, dynamic>.from(result.data as Map);
+    return (data['content'] as String?) ?? '';
   }
 
   // ── Prompt builders ──────────────────────────────────────────────────────
@@ -215,12 +235,6 @@ class AiCopilotService {
     int? yearFrom,
     int? yearTo,
   }) async {
-    final apiKey = await getApiKey();
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      return _simulateResponse(userMessage);
-    }
-
-    final model = await getModel();
     final messages = [
       {
         'role': 'system',
@@ -230,35 +244,10 @@ class AiCopilotService {
       ...history,
       {'role': 'user', 'content': userMessage},
     ];
-
     try {
-      final response = await http
-          .post(
-            Uri.parse(_endpoint),
-            headers: {
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'model': model,
-              'messages': messages,
-              'max_completion_tokens': 1500,
-              'temperature': 0.7,
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        return json['choices'][0]['message']['content'] as String;
-      } else {
-        final err = jsonDecode(response.body);
-        final errMsg =
-            err['error']?['message'] ?? 'API error ${response.statusCode}';
-        return '⚠️ OpenAI error: $errMsg';
-      }
+      return await _callProxy(messages);
     } catch (e) {
-      return '⚠️ Network error — check your connection and try again.';
+      return _simulateResponse(userMessage);
     }
   }
 
@@ -274,13 +263,6 @@ class AiCopilotService {
     int? yearFrom,
     int? yearTo,
   }) async* {
-    final apiKey = await getApiKey();
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      yield _simulateResponse(userMessage);
-      return;
-    }
-
-    final model = await getModel();
     final messages = [
       {
         'role': 'system',
@@ -290,59 +272,11 @@ class AiCopilotService {
       ...history,
       {'role': 'user', 'content': userMessage},
     ];
-
-    final request = http.Request('POST', Uri.parse(_endpoint));
-    request.headers['Authorization'] = 'Bearer $apiKey';
-    request.headers['Content-Type'] = 'application/json';
-    request.body = jsonEncode({
-      'model': model,
-      'messages': messages,
-      'max_completion_tokens': 1500,
-      'temperature': 0.7,
-      'stream': true,
-    });
-
+    // The proxy returns the full completion (no token streaming) — yield once.
     try {
-      final client = http.Client();
-      final response = await client.send(request).timeout(const Duration(seconds: 60));
-
-      if (response.statusCode != 200) {
-        final body = await response.stream.bytesToString();
-        try {
-          final err = jsonDecode(body);
-          yield '⚠️ OpenAI error: ${err['error']?['message'] ?? 'API error ${response.statusCode}'}';
-        } catch (_) {
-          yield '⚠️ API error ${response.statusCode}';
-        }
-        client.close();
-        return;
-      }
-
-      final buffer = StringBuffer();
-      await for (final chunk in response.stream.transform(utf8.decoder)) {
-        // SSE: each line starts with "data: "
-        for (final line in chunk.split('\n')) {
-          final trimmed = line.trim();
-          if (trimmed.isEmpty || trimmed == 'data: [DONE]') continue;
-          if (!trimmed.startsWith('data: ')) continue;
-
-          try {
-            final json = jsonDecode(trimmed.substring(6)) as Map<String, dynamic>;
-            final delta = json['choices']?[0]?['delta']?['content'] as String?;
-            if (delta != null && delta.isNotEmpty) {
-              buffer.write(delta);
-              yield buffer.toString();
-            }
-          } catch (_) {
-            // intentional: individual SSE lines may be incomplete or malformed
-            // (e.g. heartbeat pings, partial chunks); skipping them silently is
-            // correct — the stream continues with the next line.
-          }
-        }
-      }
-      client.close();
+      yield await _callProxy(messages);
     } catch (e) {
-      yield '⚠️ Network error — check your connection and try again.';
+      yield _simulateResponse(userMessage);
     }
   }
 
@@ -358,60 +292,20 @@ class AiCopilotService {
     int? yearFrom,
     int? yearTo,
   }) async {
-    final apiKey = await getApiKey();
-    if (apiKey == null || apiKey.trim().isEmpty) {
-      // No API key — return a general intent with simulated text.
-      return AiCopilotCommand(
-        intent: CopilotIntent.general,
-        params: const {},
-        naturalResponse: _simulateResponse(userMessage),
-      );
-    }
-
-    final model = await getModel();
     final systemPrompt = _buildParseCommandContext(trackContext,
         yearFrom: yearFrom, yearTo: yearTo);
-
+    final messages = [
+      {'role': 'system', 'content': systemPrompt},
+      {'role': 'user', 'content': userMessage},
+    ];
     try {
-      final response = await http
-          .post(
-            Uri.parse(_endpoint),
-            headers: {
-              'Authorization': 'Bearer $apiKey',
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'model': model,
-              'messages': [
-                {'role': 'system', 'content': systemPrompt},
-                {'role': 'user', 'content': userMessage},
-              ],
-              'max_completion_tokens': 400,
-              'temperature': 0.3,
-              'response_format': {'type': 'json_object'},
-            }),
-          )
-          .timeout(const Duration(seconds: 30));
-
-      if (response.statusCode == 200) {
-        final json = jsonDecode(response.body) as Map<String, dynamic>;
-        final content = json['choices'][0]['message']['content'] as String;
-        return _parseCommandJson(content, userMessage);
-      } else {
-        final err = jsonDecode(response.body);
-        final errMsg =
-            err['error']?['message'] ?? 'API error ${response.statusCode}';
-        return AiCopilotCommand(
-          intent: CopilotIntent.general,
-          params: const {},
-          naturalResponse: '⚠️ OpenAI error: $errMsg',
-        );
-      }
+      final content = await _callProxy(messages, jsonObject: true);
+      return _parseCommandJson(content, userMessage);
     } catch (e) {
       return AiCopilotCommand(
         intent: CopilotIntent.general,
         params: const {},
-        naturalResponse: '⚠️ Network error — check your connection and try again.',
+        naturalResponse: _simulateResponse(userMessage),
       );
     }
   }
