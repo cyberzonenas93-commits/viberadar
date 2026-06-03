@@ -14,6 +14,7 @@ class DefaultFirebaseOptions {
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.android:
+        return android;
       case TargetPlatform.windows:
       case TargetPlatform.linux:
       case TargetPlatform.fuchsia:
@@ -55,5 +56,13 @@ class DefaultFirebaseOptions {
     iosBundleId: 'com.viberadar.viberadar',
     iosClientId:
         '927344201419-7daqi4nk04m84f3de0677eti4lmo15ll.apps.googleusercontent.com',
+  );
+
+  static const android = FirebaseOptions(
+    apiKey: 'AIzaSyAC01nIiMGWU70D2UXy_GyInyIh3u5owkI',
+    appId: '1:927344201419:android:e1e3dd1e988c583d53d54e',
+    messagingSenderId: '927344201419',
+    projectId: 'viberadar-462b8',
+    storageBucket: 'viberadar-462b8.firebasestorage.app',
   );
 }

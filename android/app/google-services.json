@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "927344201419",
+    "project_id": "viberadar-462b8",
+    "storage_bucket": "viberadar-462b8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:927344201419:android:e1e3dd1e988c583d53d54e",
+        "android_client_info": {
+          "package_name": "com.viberadar.viberadar"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "927344201419-s2c53ufatt3cjcj9uk2gthcshkrtm2gi.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAC01nIiMGWU70D2UXy_GyInyIh3u5owkI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "927344201419-s2c53ufatt3cjcj9uk2gthcshkrtm2gi.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "927344201419-7daqi4nk04m84f3de0677eti4lmo15ll.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.viberadar.viberadar"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
