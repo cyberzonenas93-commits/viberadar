@@ -41,6 +41,10 @@
 		<true/>
 		<key>NSCameraUsageDescription</key>
 		<string>VibeRadar uses the camera to scan desktop pairing QR codes.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>VibeRadar needs photo library access so you can choose cover art for your uploads and a profile picture.</string>
+		<key>NSMicrophoneUsageDescription</key>
+		<string>VibeRadar's media picker requests microphone access only when you record or attach video.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

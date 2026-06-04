@@ -6,6 +6,7 @@ import * as admin from "firebase-admin";
 export { createPairing, claimPairing } from "./pairing";
 export { spotifyProxy, appleProxy, youtubeProxy } from "./proxy";
 export { openaiProxy } from "./openai";
+export { onUserDeleted } from "./accountCleanup";
 
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
 import { fetchBillboardSignals } from "./clients/billboard";

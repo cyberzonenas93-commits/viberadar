@@ -388,6 +388,13 @@ class _TrackCard extends StatefulWidget {
 class _TrackCardState extends State<_TrackCard> {
   bool _hovered = false;
 
+  // On touch platforms hover never fires, so the play affordance would be
+  // invisible/unreachable. Always reveal it there; keep hover-gating on desktop.
+  bool get _isTouch =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+
   @override
   Widget build(BuildContext context) {
     final t = widget.track;
@@ -448,7 +455,7 @@ class _TrackCardState extends State<_TrackCard> {
                         AppTheme.cyan.withValues(alpha: 0.9),
                       ),
                     ),
-                    if (_hovered)
+                    if (_hovered || _isTouch)
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(

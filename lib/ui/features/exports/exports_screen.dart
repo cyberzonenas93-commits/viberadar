@@ -230,17 +230,14 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
         .whereType<LibraryTrack>()
         .toList();
 
-    return Row(
+    // Phones can't fit the two-pane layout; below this width we show a single
+    // pane (crate list, or the selected crate's detail with a back button).
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+
+    // ── Left: crate list panel ─────────────────────────────────────────────
+    final crateListColumn = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── Left: crate list panel ───────────────────────────────────────────
-        Container(
-          width: 240,
-          decoration: const BoxDecoration(
-            border: Border(right: BorderSide(color: AppTheme.edge)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                 child: Column(
@@ -410,24 +407,22 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                       ),
               ),
             ],
-          ),
-        ),
+          );
 
-        // ── Right: crate content + export ───────────────────────────────────
-        Expanded(
-          child: _selectedCrate == null
-              ? const Center(
-                  child: Text(
-                    'Select or create a crate',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 14,
-                    ),
-                  ),
-                )
-              : Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    // ── Right: crate content + export ───────────────────────────────────────
+    final detailChild = _selectedCrate == null
+        ? const Center(
+            child: Text(
+              'Select or create a crate',
+              style: TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 14,
+              ),
+            ),
+          )
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
                       child: Row(
@@ -1026,8 +1021,57 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                       ),
                     ),
                   ],
+                );
+
+    if (narrow) {
+      // Single-pane: crate list, or the selected crate's detail with a back bar.
+      if (_selectedCrate == null) return crateListColumn;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_rounded,
+                    color: AppTheme.textPrimary,
+                  ),
+                  tooltip: 'Back to crates',
+                  onPressed: () => setState(() {
+                    _selectedCrate = null;
+                    _physResult = null;
+                  }),
                 ),
+                Expanded(
+                  child: Text(
+                    _selectedCrate!,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(child: detailChild),
+        ],
+      );
+    }
+
+    // Two-pane (desktop / wide): fixed crate list + detail.
+    return Row(
+      children: [
+        Container(
+          width: 240,
+          decoration: const BoxDecoration(
+            border: Border(right: BorderSide(color: AppTheme.edge)),
+          ),
+          child: crateListColumn,
         ),
+        Expanded(child: detailChild),
       ],
     );
   }

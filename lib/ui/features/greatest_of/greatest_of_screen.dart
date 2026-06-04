@@ -124,15 +124,19 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                 children: [
                   const Icon(Icons.emoji_events_rounded, color: AppTheme.amber, size: 24),
                   const SizedBox(width: 10),
-                  Text('Greatest Of',
-                      style: theme.textTheme.headlineSmall
-                          ?.copyWith(color: AppTheme.textPrimary)),
+                  Flexible(
+                    child: Text('Greatest Of',
+                        style: theme.textTheme.headlineSmall
+                            ?.copyWith(color: AppTheme.textPrimary),
+                        overflow: TextOverflow.ellipsis),
+                  ),
                   const SizedBox(width: 12),
                   Text(
                     '${topTracks.length} tracks',
                     style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                   ),
                   const Spacer(),
+                  const SizedBox(width: 8),
                   // Era grouping toggle
                   _ToggleChip(
                     label: 'Group by Era',

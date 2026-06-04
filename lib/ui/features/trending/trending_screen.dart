@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -174,6 +175,13 @@ class _TrackCard extends StatefulWidget {
 class _TrackCardState extends State<_TrackCard> {
   bool _hovered = false;
 
+  // On touch platforms hover never fires, so the play affordance would be
+  // invisible/unreachable. Always reveal it there; keep hover-gating on desktop.
+  bool get _isTouch =>
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.iOS ||
+          defaultTargetPlatform == TargetPlatform.android);
+
   @override
   Widget build(BuildContext context) {
     final t = widget.track;
@@ -233,8 +241,8 @@ class _TrackCardState extends State<_TrackCard> {
                         child: Text('$score', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 10)),
                       ),
                     ),
-                    // Play hover
-                    if (_hovered)
+                    // Play affordance (hover on desktop, always on touch)
+                    if (_hovered || _isTouch)
                       Positioned.fill(
                         child: Container(
                           decoration: BoxDecoration(

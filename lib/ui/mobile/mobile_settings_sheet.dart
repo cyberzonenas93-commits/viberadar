@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../providers/app_state.dart';
@@ -67,12 +68,6 @@ class MobileSettingsSheet extends ConsumerWidget {
             ),
 
           const SizedBox(height: 28),
-
-          // OpenAI API key — powers the AI tab. On iOS the Keychain is separate
-          // from the desktop's, so the key must be settable here too.
-          const OpenAiKeySection(),
-
-          const SizedBox(height: 28),
           Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
           const SizedBox(height: 20),
 
@@ -108,6 +103,21 @@ class MobileSettingsSheet extends ConsumerWidget {
               ),
             ),
             onPressed: () => _confirmDelete(context, ref),
+          ),
+
+          const SizedBox(height: 16),
+          // Privacy policy — App Store requires an in-app link for data apps.
+          Center(
+            child: TextButton(
+              onPressed: () => launchUrl(
+                Uri.parse('https://viberadar-462b8.web.app/privacy.html'),
+                mode: LaunchMode.externalApplication,
+              ),
+              child: const Text(
+                'Privacy Policy',
+                style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+              ),
+            ),
           ),
 
           const SizedBox(height: 8),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/platform.dart';
 import '../../core/theme/app_theme.dart';
@@ -390,7 +391,20 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
 
       if (_error != null) ...[const SizedBox(height: 16), _errorBanner(theme)],
 
-      const SizedBox(height: 16),
+      const SizedBox(height: 8),
+      TextButton(
+        onPressed: () => launchUrl(
+          Uri.parse('https://viberadar-462b8.web.app/privacy.html'),
+          mode: LaunchMode.externalApplication,
+        ),
+        child: Text(
+          'Privacy Policy',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppTheme.textTertiary,
+            fontSize: 11,
+          ),
+        ),
+      ),
       Text(
         'Built by Angelo Nartey.',
         style: theme.textTheme.bodySmall?.copyWith(

@@ -47,105 +47,118 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       return matchSearch && matchGenre && matchYear;
     }).toList();
 
+    // On narrow phones the title + action buttons cramp on one line; stack the
+    // buttons below the title there while keeping the single-row layout on wide.
+    final narrowHeader = MediaQuery.sizeOf(context).width < 520;
+
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'My Library',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            color: Colors.white,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          lib.hasLibrary
+              ? '${lib.tracks.length} tracks  •  '
+                    '${lib.duplicateCount} duplicates found'
+              : kIsWeb
+              ? 'Import audio files from your browser to index tracks'
+              : 'Scan your local music folder to index tracks',
+          style: const TextStyle(
+            color: AppTheme.textSecondary,
+            fontSize: 13,
+          ),
+        ),
+      ],
+    );
+
+    final Widget headerActions = lib.isScanning
+        ? _ScanProgressChip(
+            scanned: lib.scanProgress,
+            total: lib.scanTotal,
+          )
+        : Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              if (lib.hasLibrary)
+                ElevatedButton.icon(
+                  onPressed: () {
+                    unawaited(
+                      showCueCrateSheet(
+                        context: context,
+                        ref: ref,
+                        tracks: lib.tracks,
+                        crateName: 'My Library',
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.piano_rounded, size: 16),
+                  label: const Text('Auto Cue All'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.cyan.withValues(
+                      alpha: 0.18,
+                    ),
+                    foregroundColor: AppTheme.cyan,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ElevatedButton.icon(
+                onPressed: _pickAndScan,
+                icon: const Icon(Icons.folder_open_rounded, size: 16),
+                label: Text(
+                  kIsWeb
+                      ? (lib.hasLibrary
+                            ? 'Import More Files'
+                            : 'Select Files')
+                      : (lib.hasLibrary
+                            ? 'Rescan Folder'
+                            : 'Select Folder'),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.violet,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 12,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+            ],
+          );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
+          child: narrowHeader
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'My Library',
-                      style: theme.textTheme.headlineMedium?.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      lib.hasLibrary
-                          ? '${lib.tracks.length} tracks  •  '
-                                '${lib.duplicateCount} duplicates found'
-                          : kIsWeb
-                          ? 'Import audio files from your browser to index tracks'
-                          : 'Scan your local music folder to index tracks',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                      ),
-                    ),
+                    titleBlock,
+                    const SizedBox(height: 12),
+                    headerActions,
                   ],
-                ),
-              ),
-              if (lib.isScanning)
-                _ScanProgressChip(
-                  scanned: lib.scanProgress,
-                  total: lib.scanTotal,
                 )
-              else
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+              : Row(
                   children: [
-                    if (lib.hasLibrary) ...[
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          unawaited(
-                            showCueCrateSheet(
-                              context: context,
-                              ref: ref,
-                              tracks: lib.tracks,
-                              crateName: 'My Library',
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.piano_rounded, size: 16),
-                        label: const Text('Auto Cue All'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.cyan.withValues(
-                            alpha: 0.18,
-                          ),
-                          foregroundColor: AppTheme.cyan,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    ElevatedButton.icon(
-                      onPressed: _pickAndScan,
-                      icon: const Icon(Icons.folder_open_rounded, size: 16),
-                      label: Text(
-                        kIsWeb
-                            ? (lib.hasLibrary
-                                  ? 'Import More Files'
-                                  : 'Select Files')
-                            : (lib.hasLibrary
-                                  ? 'Rescan Folder'
-                                  : 'Select Folder'),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.violet,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                    ),
+                    Expanded(child: titleBlock),
+                    headerActions,
                   ],
                 ),
-            ],
-          ),
         ),
         // ── Error / empty states ───────────────────────────────────────────────
         if (lib.isLoading)

@@ -40,61 +40,90 @@ class _ArtistGridScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final narrow = MediaQuery.sizeOf(context).width < 600;
+
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.people_rounded, color: AppTheme.violet, size: 22),
+            const SizedBox(width: 10),
+            Text('Artists',
+                style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${artists.length} artists from ${allTracks.length} tracks  ·  Tap an artist to see their full catalog',
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+
+    final searchField = SizedBox(
+      width: 200,
+      child: TextField(
+        onChanged: onSearchChanged,
+        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+        decoration: InputDecoration(
+          hintText: 'Search artists...',
+          hintStyle: const TextStyle(color: AppTheme.textTertiary),
+          prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textTertiary),
+          contentPadding: const EdgeInsets.symmetric(vertical: 10),
+          isDense: true,
+          filled: true,
+          fillColor: AppTheme.panelRaised,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+          ),
+        ),
+      ),
+    );
+
+    final filterToolbar = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _FilterDropdown(label: 'Genre', value: filterGenre, options: allGenres, onChanged: onGenreChanged),
+        const SizedBox(width: 8),
+        _FilterDropdown(label: 'Region', value: filterRegion, options: allRegions, onChanged: onRegionChanged),
+        const SizedBox(width: 12),
+        searchField,
+      ],
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-          child: Row(
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.people_rounded, color: AppTheme.violet, size: 22),
-                      const SizedBox(width: 10),
-                      Text('Artists', style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${artists.length} artists from ${allTracks.length} tracks  ·  Tap an artist to see their full catalog',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              _FilterDropdown(label: 'Genre', value: filterGenre, options: allGenres, onChanged: onGenreChanged),
-              const SizedBox(width: 8),
-              _FilterDropdown(label: 'Region', value: filterRegion, options: allRegions, onChanged: onRegionChanged),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 200,
-                child: TextField(
-                  onChanged: onSearchChanged,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Search artists...',
-                    hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                    prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textTertiary),
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                    isDense: true,
-                    filled: true,
-                    fillColor: AppTheme.panelRaised,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+          child: narrow
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    titleBlock,
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: filterToolbar,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
-                    ),
-                  ),
+                  ],
+                )
+              : Row(
+                  children: [
+                    titleBlock,
+                    const Spacer(),
+                    filterToolbar,
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
         const SizedBox(height: 16),
         Expanded(

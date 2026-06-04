@@ -355,32 +355,12 @@ class AiCopilotService {
 
   // ── Fallback simulation ──────────────────────────────────────────────────
 
+  /// Honest fallback when the AI proxy is unreachable. The OpenAI key lives in
+  /// the backend, so a failure here is a transient network/service error — we
+  /// say so plainly rather than presenting canned content as real AI output
+  /// (App Store Guideline 2.1, accurate functionality).
   String _simulateResponse(String query) {
-    final q = query.toLowerCase();
-    if (q.contains('trending') &&
-        (q.contains('ghana') || q.contains('nigeria') || q.contains('afrobeat'))) {
-      return 'Right now in West Africa, Rema\'s "Calm Down" is still commanding '
-          'dancefloors globally. Watch for newer drops from Asake gaining ground. '
-          'BPM sweet spot: 95–105 for peak-hour Afrobeats.';
-    }
-    if (q.contains('amapiano') || q.contains('south africa')) {
-      return 'Amapiano continues to dominate. Kabza De Small & DJ Maphorisa\'s '
-          '"Sponono" remains a floor-stopper. Uncle Waffles is pushing the sound '
-          'into mainstream House crossover territory. Log drum: 130–135 BPM.';
-    }
-    if (q.contains('mix') || q.contains('harmonic') || q.contains('camelot')) {
-      return 'For harmonic mixing, move within ±1 on the Camelot wheel. '
-          '10A (Burna Boy "Last Last") mixes cleanly into 9A, 11A, or 10B. '
-          'Avoid jumping more than 3 positions without a key-neutral bridge track.';
-    }
-    if (q.contains('set') || q.contains('playlist') || q.contains('crate')) {
-      return 'Peak-hour Afrobeats set: Open with Rema – Calm Down (93 BPM, 7A) '
-          '→ build through Wizkid – Essence (88 BPM) → peak with Burna Boy – '
-          'Last Last (93 BPM, 10A) → transition to Amapiano with Black Coffee '
-          '(126 BPM).';
-    }
-    return 'Connect your OpenAI API key in Settings to unlock the full AI Copilot. '
-        'In the meantime: the Afrobeats/Amapiano scene is at peak global influence '
-        '— now is the time to deep-dive the catalog.';
+    return "I couldn't reach the AI service just now — please check your "
+        "connection and try again in a moment.";
   }
 }

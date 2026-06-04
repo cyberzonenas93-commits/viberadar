@@ -575,32 +575,6 @@ class _ActionsRow extends StatelessWidget {
             onConfirm: onWriteVdj,
             onCancel: onCancelVdjConfirm,
           ),
-        const SizedBox(height: 8),
-        // Serato — intentionally blocked pending fixture validation
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppTheme.panelRaised,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.edge),
-          ),
-          child: Row(
-            children: const [
-              Icon(
-                Icons.album_rounded,
-                color: AppTheme.textSecondary,
-                size: 16,
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Serato cue writing — coming soon (fixture validation required).',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
