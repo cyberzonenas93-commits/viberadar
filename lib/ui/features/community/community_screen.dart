@@ -7,6 +7,8 @@ import '../../../models/uploaded_track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/community_providers.dart';
 import '../../../models/app_section.dart';
+import 'blocked_users_sheet.dart';
+import 'moderation_actions.dart';
 
 class CommunityScreen extends ConsumerStatefulWidget {
   const CommunityScreen({super.key});
@@ -44,6 +46,12 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen>
               const SizedBox(width: 10),
               Text('Community', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
               const Spacer(),
+              IconButton(
+                onPressed: () => showBlockedUsersDialog(context),
+                icon: const Icon(Icons.block_rounded, size: 18, color: AppTheme.textSecondary),
+                tooltip: 'Blocked users',
+              ),
+              const SizedBox(width: 4),
               FilledButton.icon(
                 onPressed: () => ref.read(workspaceControllerProvider.notifier).setSection(AppSection.upload),
                 icon: const Icon(Icons.cloud_upload_rounded, size: 16),
@@ -86,18 +94,22 @@ class _FeedTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final uploadsAsync = ref.watch(recentUploadsProvider);
+    final blocked = ref.watch(blockedUidsProvider).value ?? const {};
     return uploadsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.textTertiary))),
-      data: (uploads) => uploads.isEmpty
-          ? _EmptyFeed()
-          : GridView.builder(
-              padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220, childAspectRatio: 0.75, crossAxisSpacing: 12, mainAxisSpacing: 12),
-              itemCount: uploads.length,
-              itemBuilder: (ctx, i) => _UploadCard(track: uploads[i]),
-            ),
+      data: (all) {
+        final uploads = all.where((u) => !blocked.contains(u.uploadedBy)).toList();
+        return uploads.isEmpty
+            ? _EmptyFeed()
+            : GridView.builder(
+                padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 220, childAspectRatio: 0.75, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                itemCount: uploads.length,
+                itemBuilder: (ctx, i) => _UploadCard(track: uploads[i]),
+              );
+      },
     );
   }
 }
@@ -106,18 +118,22 @@ class _FeaturedTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final uploadsAsync = ref.watch(featuredUploadsProvider);
+    final blocked = ref.watch(blockedUidsProvider).value ?? const {};
     return uploadsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.textTertiary))),
-      data: (uploads) => uploads.isEmpty
-          ? const Center(child: Text('No featured tracks yet', style: TextStyle(color: AppTheme.textTertiary)))
-          : GridView.builder(
-              padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
-              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 220, childAspectRatio: 0.75, crossAxisSpacing: 12, mainAxisSpacing: 12),
-              itemCount: uploads.length,
-              itemBuilder: (ctx, i) => _UploadCard(track: uploads[i]),
-            ),
+      data: (all) {
+        final uploads = all.where((u) => !blocked.contains(u.uploadedBy)).toList();
+        return uploads.isEmpty
+            ? const Center(child: Text('No featured tracks yet', style: TextStyle(color: AppTheme.textTertiary)))
+            : GridView.builder(
+                padding: const EdgeInsets.fromLTRB(28, 16, 28, 28),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 220, childAspectRatio: 0.75, crossAxisSpacing: 12, mainAxisSpacing: 12),
+                itemCount: uploads.length,
+                itemBuilder: (ctx, i) => _UploadCard(track: uploads[i]),
+              );
+      },
     );
   }
 }
@@ -126,11 +142,13 @@ class _TrendingTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final uploadsAsync = ref.watch(recentUploadsProvider);
+    final blocked = ref.watch(blockedUidsProvider).value ?? const {};
     return uploadsAsync.when(
       loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
       error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: AppTheme.textTertiary))),
       data: (uploads) {
-        final sorted = [...uploads]..sort((a, b) => b.likeCount.compareTo(a.likeCount));
+        final sorted = uploads.where((u) => !blocked.contains(u.uploadedBy)).toList()
+          ..sort((a, b) => b.likeCount.compareTo(a.likeCount));
         return sorted.isEmpty
             ? const Center(child: Text('No uploads yet', style: TextStyle(color: AppTheme.textTertiary)))
             : GridView.builder(
@@ -172,6 +190,7 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
             if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
           }
         },
+        onLongPress: () => _showModerationMenu(context),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           decoration: BoxDecoration(
@@ -219,6 +238,12 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
                           )),
                         ),
                       ),
+                    // Moderation overflow menu (report / block)
+                    Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: _ModerationMenuButton(onSelected: (v) => _onModerationSelected(context, v)),
+                    ),
                   ],
                 ),
               ),
@@ -268,6 +293,37 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
     );
   }
 
+  void _onModerationSelected(BuildContext context, String value) {
+    final t = widget.track;
+    if (value == 'report') {
+      showReportDialog(context, ref,
+          contentType: 'upload', contentId: t.id, reportedUid: t.uploadedBy);
+    } else if (value == 'block') {
+      showBlockDialog(context, ref,
+          blockedUid: t.uploadedBy, blockedName: t.uploaderName);
+    }
+  }
+
+  Future<void> _showModerationMenu(BuildContext context) async {
+    final box = context.findRenderObject() as RenderBox?;
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final pos = RelativeRect.fromRect(
+      Rect.fromPoints(
+        box.localToGlobal(box.size.center(Offset.zero), ancestor: overlay),
+        box.localToGlobal(box.size.center(Offset.zero), ancestor: overlay),
+      ),
+      Offset.zero & overlay.size,
+    );
+    final value = await showMenu<String>(
+      context: context,
+      position: pos,
+      color: AppTheme.panelRaised,
+      items: _moderationMenuItems(),
+    );
+    if (value != null && context.mounted) _onModerationSelected(context, value);
+  }
+
   Widget _artPlaceholder() => Container(
     decoration: BoxDecoration(
       gradient: LinearGradient(
@@ -276,6 +332,47 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
       ),
     ),
     child: const Center(child: Icon(Icons.headphones_rounded, color: AppTheme.textTertiary, size: 36)),
+  );
+}
+
+List<PopupMenuEntry<String>> _moderationMenuItems() => const [
+  PopupMenuItem(
+    value: 'report',
+    child: Row(children: [
+      Icon(Icons.flag_outlined, size: 16, color: AppTheme.textSecondary),
+      SizedBox(width: 10),
+      Text('Report', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+    ]),
+  ),
+  PopupMenuItem(
+    value: 'block',
+    child: Row(children: [
+      Icon(Icons.block_rounded, size: 16, color: AppTheme.pink),
+      SizedBox(width: 10),
+      Text('Block user', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+    ]),
+  ),
+];
+
+class _ModerationMenuButton extends StatelessWidget {
+  const _ModerationMenuButton({required this.onSelected});
+  final ValueChanged<String> onSelected;
+  @override
+  Widget build(BuildContext context) => PopupMenuButton<String>(
+    tooltip: 'More',
+    color: AppTheme.panelRaised,
+    padding: EdgeInsets.zero,
+    onSelected: onSelected,
+    itemBuilder: (_) => _moderationMenuItems(),
+    child: Container(
+      width: 26,
+      height: 26,
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.45),
+        shape: BoxShape.circle,
+      ),
+      child: const Icon(Icons.more_vert_rounded, size: 16, color: Colors.white),
+    ),
   );
 }
 

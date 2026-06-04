@@ -27,6 +27,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   bool _uploading = false;
   double _progress = 0;
   String? _error;
+  bool _agreedToPolicy = false;
 
   @override
   void dispose() {
@@ -147,11 +148,49 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                   const SizedBox(height: 12),
                 ],
 
+                // No-tolerance content policy notice + required agreement
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.amber.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppTheme.amber.withValues(alpha: 0.25)),
+                  ),
+                  child: InkWell(
+                    onTap: () => setState(() => _agreedToPolicy = !_agreedToPolicy),
+                    borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: _agreedToPolicy,
+                            onChanged: (v) => setState(() => _agreedToPolicy = v ?? false),
+                            activeColor: AppTheme.violet,
+                            side: const BorderSide(color: AppTheme.textTertiary),
+                            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'I agree not to post objectionable, illegal, or copyrighted content. Violations result in removal and a ban.',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
                 // Upload button
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton.icon(
-                    onPressed: _uploading || _audioPath == null || _titleController.text.trim().isEmpty
+                    onPressed: _uploading || _audioPath == null || _titleController.text.trim().isEmpty || !_agreedToPolicy
                         ? null
                         : () => _upload(session),
                     icon: _uploading

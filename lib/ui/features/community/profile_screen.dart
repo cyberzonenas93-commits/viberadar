@@ -9,6 +9,7 @@ import '../../../models/social_profile.dart';
 import '../../../models/uploaded_track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/community_providers.dart';
+import 'moderation_actions.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key, this.userId});
@@ -230,30 +231,92 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         ),
                       )
                     else
-                      FilledButton.icon(
-                        onPressed: () {
-                          if (isFollowing) {
-                            unfollowUser(myUserId, profile.userId);
-                          } else {
-                            followUser(myUserId, profile.userId);
-                          }
-                        },
-                        icon: Icon(
-                          isFollowing
-                              ? Icons.check_rounded
-                              : Icons.person_add_rounded,
-                          size: 14,
-                        ),
-                        label: Text(isFollowing ? 'Following' : 'Follow'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: isFollowing
-                              ? AppTheme.edge
-                              : AppTheme.pink,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 10,
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          FilledButton.icon(
+                            onPressed: () {
+                              if (isFollowing) {
+                                unfollowUser(myUserId, profile.userId);
+                              } else {
+                                followUser(myUserId, profile.userId);
+                              }
+                            },
+                            icon: Icon(
+                              isFollowing
+                                  ? Icons.check_rounded
+                                  : Icons.person_add_rounded,
+                              size: 14,
+                            ),
+                            label: Text(isFollowing ? 'Following' : 'Follow'),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: isFollowing
+                                  ? AppTheme.edge
+                                  : AppTheme.pink,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 6),
+                          PopupMenuButton<String>(
+                            tooltip: 'More',
+                            color: AppTheme.panelRaised,
+                            icon: const Icon(
+                              Icons.more_vert_rounded,
+                              color: AppTheme.textSecondary,
+                            ),
+                            onSelected: (v) {
+                              if (v == 'report') {
+                                showReportDialog(
+                                  context,
+                                  ref,
+                                  contentType: 'profile',
+                                  contentId: profile.userId,
+                                  reportedUid: profile.userId,
+                                );
+                              } else if (v == 'block') {
+                                showBlockDialog(
+                                  context,
+                                  ref,
+                                  blockedUid: profile.userId,
+                                  blockedName: profile.displayName,
+                                );
+                              }
+                            },
+                            itemBuilder: (_) => const [
+                              PopupMenuItem(
+                                value: 'report',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.flag_outlined,
+                                        size: 16, color: AppTheme.textSecondary),
+                                    SizedBox(width: 10),
+                                    Text('Report',
+                                        style: TextStyle(
+                                            color: AppTheme.textPrimary,
+                                            fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem(
+                                value: 'block',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.block_rounded,
+                                        size: 16, color: AppTheme.pink),
+                                    SizedBox(width: 10),
+                                    Text('Block user',
+                                        style: TextStyle(
+                                            color: AppTheme.textPrimary,
+                                            fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                   ],
                 ),
@@ -371,8 +434,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             'Edit Profile',
             style: TextStyle(color: AppTheme.textPrimary),
           ),
-          content: SizedBox(
-            width: 400,
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,

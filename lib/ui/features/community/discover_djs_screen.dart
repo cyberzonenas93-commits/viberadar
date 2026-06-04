@@ -41,10 +41,12 @@ class _DiscoverDJsScreenState extends ConsumerState<DiscoverDJsScreen> {
     final session = ref.watch(sessionProvider).value;
     final myId = session?.userId ?? '';
     final followingIds = ref.watch(followingIdsProvider).value ?? {};
+    final blocked = ref.watch(blockedUidsProvider).value ?? const {};
 
+    final visible = _profiles.where((p) => !blocked.contains(p.userId)).toList();
     final filtered = _search.isEmpty
-        ? _profiles
-        : _profiles.where((p) =>
+        ? visible
+        : visible.where((p) =>
             p.displayName.toLowerCase().contains(_search.toLowerCase()) ||
             p.genres.any((g) => g.toLowerCase().contains(_search.toLowerCase()))).toList();
 
@@ -56,10 +58,12 @@ class _DiscoverDJsScreenState extends ConsumerState<DiscoverDJsScreen> {
           child: Row(children: [
             const Icon(Icons.explore_rounded, color: AppTheme.cyan, size: 24),
             const SizedBox(width: 10),
-            Text('Discover DJs & Artists', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
-            const Spacer(),
+            Expanded(
+              child: Text('Discover DJs & Artists', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary), overflow: TextOverflow.ellipsis),
+            ),
+            const SizedBox(width: 12),
             SizedBox(
-              width: 240,
+              width: 150,
               child: TextField(
                 onChanged: (v) => setState(() => _search = v),
                 style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),

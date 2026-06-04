@@ -38,6 +38,26 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == userId;
     }
 
+    // ── Moderation: reports (App Store Guideline 1.2) ─────────────────────
+    // Any signed-in user may file a report. Reports are write-only from the
+    // client; they can only be read/actioned by moderators via the console
+    // or a trusted backend (Admin SDK bypasses rules).
+    match /reports/{reportId} {
+      allow create: if request.auth != null;
+      allow read, update, delete: if false;
+    }
+
+    // ── Moderation: blocks ────────────────────────────────────────────────
+    // A user may create/read/delete only their own block records. The doc id
+    // is `${blockerUid}_${blockedUid}`; ownership is enforced via the
+    // blockerUid field on the document.
+    match /blocks/{blockDoc} {
+      allow create: if request.auth != null
+                    && request.resource.data.blockerUid == request.auth.uid;
+      allow read, delete: if request.auth != null
+                          && resource.data.blockerUid == request.auth.uid;
+    }
+
     // ── Pairing (phone ↔ logged-out desktop) ──────────────────────────────
     // Pairings are created/claimed ONLY via the createPairing/claimPairing
     // Cloud Functions, so direct client writes to the pairing doc are denied.

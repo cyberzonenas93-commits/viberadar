@@ -176,6 +176,55 @@ Future<void> unfollowUser(String followerId, String followeeId) async {
   }).catchError((_) {});
 }
 
+// ── Moderation: Reports ───────────────────────────────────────────────────────
+
+/// Writes a moderation report to the `reports` collection. [contentType] is
+/// either 'upload' or 'profile'; [contentId] is the upload id or the profile
+/// uid; [reportedUid] is the uid of the user who owns the content.
+Future<void> reportContent({
+  required String reportedBy,
+  required String contentType,
+  required String contentId,
+  required String reportedUid,
+  required String reason,
+}) async {
+  await _db.collection('reports').add({
+    'reportedBy': reportedBy,
+    'contentType': contentType,
+    'contentId': contentId,
+    'reportedUid': reportedUid,
+    'reason': reason,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+// ── Moderation: Blocks ────────────────────────────────────────────────────────
+
+/// Stream of uids the current user has blocked. Used to filter blocked users'
+/// uploads and profiles out of community feeds and discovery.
+final blockedUidsProvider = StreamProvider<Set<String>>((ref) {
+  final session = ref.watch(sessionProvider).value;
+  if (session == null || !session.isAuthenticated) return Stream.value({});
+  return _db.collection('blocks')
+      .where('blockerUid', isEqualTo: session.userId)
+      .snapshots()
+      .map((snap) => snap.docs.map((d) => d.data()['blockedUid'] as String).toSet());
+});
+
+Future<void> blockUser(String blockerUid, String blockedUid) async {
+  final docId = '${blockerUid}_$blockedUid';
+  await _db.collection('blocks').doc(docId).set({
+    'blockerUid': blockerUid,
+    'blockedUid': blockedUid,
+    'createdAt': FieldValue.serverTimestamp(),
+  });
+}
+
+Future<void> unblockUser(String blockerUid, String blockedUid) async {
+  final docId = '${blockerUid}_$blockedUid';
+  await _db.collection('blocks').doc(docId).delete();
+}
+
 // ── Likes ───────────────────────────────────────────────────────────────────
 
 final likedUploadIdsProvider = StreamProvider<Set<String>>((ref) {
