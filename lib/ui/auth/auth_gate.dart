@@ -331,11 +331,10 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       ),
       const SizedBox(height: 12),
 
-      // Sign in with Apple — iOS (native), web (popup), Android (provider).
-      // Required by App Store Guideline 4.8 when a third-party login is offered.
-      if (kIsWeb ||
-          defaultTargetPlatform == TargetPlatform.iOS ||
-          defaultTargetPlatform == TargetPlatform.android) ...[
+      // Sign in with Apple — iOS only (native flow, works). Web/Android need a
+      // real Sign-in-with-Apple key in Firebase; the one configured is an ASC
+      // API key, not a Sign-in key — so they're gated off until that's swapped.
+      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) ...[
         SizedBox(
           width: double.infinity,
           child: SignInWithAppleButton(
