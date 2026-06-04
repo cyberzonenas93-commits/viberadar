@@ -6,7 +6,7 @@ import '../models/hot_cue.dart';
 /// Persists cue suggestions inside VibeRadar using SharedPreferences.
 ///
 /// Cues are stored as JSON per-track under the key:
-///   hot_cues_v1_<trackId>
+///   hot_cues_v1_trackId
 ///
 /// A manifest key tracks which track IDs have stored cues:
 ///   hot_cues_track_ids_v1
@@ -14,8 +14,8 @@ import '../models/hot_cue.dart';
 /// This storage is for VibeRadar's internal cue database only.
 /// Writing cues to external DJ software is handled by [VirtualDjCueWriter].
 class CueStorageService {
-  static const _kPrefix    = 'hot_cues_v1_';
-  static const _kIndexKey  = 'hot_cues_track_ids_v1';
+  static const _kPrefix = 'hot_cues_v1_';
+  static const _kIndexKey = 'hot_cues_track_ids_v1';
 
   /// Persist [cues] for [trackId], replacing any previously stored set.
   Future<void> saveCues(String trackId, List<HotCue> cues) async {
@@ -55,8 +55,8 @@ class CueStorageService {
   /// lookups against an in-memory map.
   Future<Map<String, List<HotCue>>> loadAllCues() async {
     final prefs = await SharedPreferences.getInstance();
-    final ids   = await _allTrackIds(prefs);
-    final out   = <String, List<HotCue>>{};
+    final ids = await _allTrackIds(prefs);
+    final out = <String, List<HotCue>>{};
     for (final id in ids) {
       out[id] = _decodeCues(prefs.getString('$_kPrefix$id'), id);
     }
@@ -87,12 +87,20 @@ class CueStorageService {
           .map(HotCue.fromJson)
           .toList();
     } on FormatException catch (e, st) {
-      developer.log('Corrupt cue JSON for track $trackId — returning empty',
-          name: 'CueStorageService', error: e, stackTrace: st);
+      developer.log(
+        'Corrupt cue JSON for track $trackId — returning empty',
+        name: 'CueStorageService',
+        error: e,
+        stackTrace: st,
+      );
       return const [];
     } catch (e, st) {
-      developer.log('Failed to decode cues for track $trackId',
-          name: 'CueStorageService', error: e, stackTrace: st);
+      developer.log(
+        'Failed to decode cues for track $trackId',
+        name: 'CueStorageService',
+        error: e,
+        stackTrace: st,
+      );
       return const [];
     }
   }
@@ -103,14 +111,20 @@ class CueStorageService {
     try {
       final decoded = jsonDecode(raw);
       if (decoded is! List) {
-        developer.log('Cue track index is not a JSON array — resetting',
-            name: 'CueStorageService');
+        developer.log(
+          'Cue track index is not a JSON array — resetting',
+          name: 'CueStorageService',
+        );
         return [];
       }
       return decoded.whereType<String>().toList();
     } on FormatException catch (e, st) {
-      developer.log('Corrupt cue track index — returning empty',
-          name: 'CueStorageService', error: e, stackTrace: st);
+      developer.log(
+        'Corrupt cue track index — returning empty',
+        name: 'CueStorageService',
+        error: e,
+        stackTrace: st,
+      );
       return [];
     }
   }

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/crate.dart';
+import '../../providers/setlist_provider.dart';
 import '../../services/pairing_service.dart';
 
 /// Desktop "Pair a Phone" screen.
@@ -32,6 +33,12 @@ class _PairPhoneScreenState extends ConsumerState<PairPhoneScreen> {
 
   StreamSubscription<List<Crate>>? _setlistSub;
   List<Crate> _receivedSetlists = const [];
+
+  /// Crate ids currently being saved into the desktop's local crates.
+  final Set<String> _importingIds = {};
+
+  /// Crate ids already imported into the desktop's local crates.
+  final Set<String> _importedIds = {};
 
   // ──────────────────────────────────────────────────────────────────────────
 
@@ -71,6 +78,29 @@ class _PairPhoneScreenState extends ConsumerState<PairPhoneScreen> {
               'Pairing unavailable — enable Anonymous Auth in Firebase.';
         });
       }
+    }
+  }
+
+  /// Saves a received [crate] into the desktop's own saved crates so the DJ can
+  /// actually use it. Idempotent — re-importing updates the same crate.
+  Future<void> _importSetlist(Crate crate) async {
+    setState(() => _importingIds.add(crate.id));
+    try {
+      await ref.read(setlistActionsProvider).save(crate);
+      if (!mounted) return;
+      setState(() {
+        _importingIds.remove(crate.id);
+        _importedIds.add(crate.id);
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Imported "${crate.name}" to your crates')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _importingIds.remove(crate.id));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not import "${crate.name}"')),
+      );
     }
   }
 
@@ -174,15 +204,32 @@ class _PairPhoneScreenState extends ConsumerState<PairPhoneScreen> {
           if (_receivedSetlists.isNotEmpty) ...[
             const SizedBox(height: 12),
             ..._receivedSetlists.map(
-              (crate) => ListTile(
-                leading: const Icon(Icons.queue_music_rounded),
-                title: Text(crate.name),
-                subtitle: Text(
-                  '${crate.trackIds.length} '
-                  '${crate.trackIds.length == 1 ? "track" : "tracks"}',
-                ),
-                // TODO: merge into local crates
-              ),
+              (crate) {
+                final importing = _importingIds.contains(crate.id);
+                final imported = _importedIds.contains(crate.id);
+                return ListTile(
+                  leading: const Icon(Icons.queue_music_rounded),
+                  title: Text(crate.name),
+                  subtitle: Text(
+                    '${crate.trackIds.length} '
+                    '${crate.trackIds.length == 1 ? "track" : "tracks"}',
+                  ),
+                  trailing: importing
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : imported
+                          ? const Icon(Icons.check_circle_rounded,
+                              color: Colors.green)
+                          : TextButton.icon(
+                              onPressed: () => _importSetlist(crate),
+                              icon: const Icon(Icons.download_rounded, size: 18),
+                              label: const Text('Import'),
+                            ),
+                );
+              },
             ),
           ],
         ],

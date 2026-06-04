@@ -33,8 +33,7 @@ class _FakeUserRepository implements UserRepository {
   Stream<UserProfile> watchUser({
     required String userId,
     required String fallbackName,
-  }) =>
-      Stream.value(UserProfile.empty(id: userId, displayName: fallbackName));
+  }) => Stream.value(UserProfile.empty(id: userId, displayName: fallbackName));
 
   @override
   Future<void> toggleWatchlist({
@@ -104,13 +103,13 @@ Track _track(
 }
 
 Crate _crate({required String id, required String name}) => Crate(
-      id: id,
-      name: name,
-      context: 'Open format',
-      trackIds: const [],
-      createdAt: DateTime(2025, 1, 1),
-      updatedAt: DateTime(2025, 6, 1),
-    );
+  id: id,
+  name: name,
+  context: 'Open format',
+  trackIds: const [],
+  createdAt: DateTime(2025, 1, 1),
+  updatedAt: DateTime(2025, 6, 1),
+);
 
 // ---------------------------------------------------------------------------
 // Widget wrapper
@@ -131,7 +130,8 @@ Crate _crate({required String id, required String name}) => Crate(
   SessionState? session,
 }) {
   final fakeRepo = userRepo ?? _FakeUserRepository();
-  final effectiveSession = session ??
+  final effectiveSession =
+      session ??
       const SessionState(
         userId: 'user-1',
         displayName: 'DJ Test',
@@ -142,6 +142,7 @@ Crate _crate({required String id, required String name}) => Crate(
       );
 
   final sessionCtrl = StreamController<SessionState>.broadcast();
+  addTearDown(sessionCtrl.close);
 
   // _SessionKeepalive watches sessionProvider so that the StreamProvider
   // maintains an active subscription and caches the latest emitted value.
@@ -202,8 +203,9 @@ Widget _wrap({
 
 void main() {
   group('TrendingTab — render', () {
-    testWidgets('displays tracks sorted by trendScore descending',
-        (tester) async {
+    testWidgets('displays tracks sorted by trendScore descending', (
+      tester,
+    ) async {
       final t1 = _track('t1', title: 'Low Score', trendScore: 0.3);
       final t2 = _track('t2', title: 'Top Track', trendScore: 0.9);
       final t3 = _track('t3', title: 'Middle Track', trendScore: 0.6);
@@ -246,7 +248,9 @@ void main() {
       expect(find.text('No trending tracks yet.'), findsOneWidget);
     });
 
-    testWidgets('shows loading spinner while stream is pending', (tester) async {
+    testWidgets('shows loading spinner while stream is pending', (
+      tester,
+    ) async {
       // Never-completing stream simulates loading
       await tester.pumpWidget(
         ProviderScope(
@@ -256,14 +260,16 @@ void main() {
             ),
             setlistsProvider.overrideWithValue(const []),
             sessionProvider.overrideWith(
-              (ref) => Stream.value(const SessionState(
-                userId: 'u',
-                displayName: 'DJ',
-                email: 'dj@test.com',
-                providerLabel: 'Google',
-                isAuthenticated: true,
-                isDemo: false,
-              )),
+              (ref) => Stream.value(
+                const SessionState(
+                  userId: 'u',
+                  displayName: 'DJ',
+                  email: 'dj@test.com',
+                  providerLabel: 'Google',
+                  isAuthenticated: true,
+                  isDemo: false,
+                ),
+              ),
             ),
             userRepositoryProvider.overrideWithValue(_FakeUserRepository()),
           ],
@@ -295,8 +301,9 @@ void main() {
   });
 
   group('TrendingTab — add flow', () {
-    testWidgets('tapping + opens bottom sheet with setlist names',
-        (tester) async {
+    testWidgets('tapping + opens bottom sheet with setlist names', (
+      tester,
+    ) async {
       final tracks = [_track('t1', title: 'Track One', trendScore: 0.9)];
       final setlists = [
         _crate(id: 's1', name: 'Friday Night'),
@@ -315,8 +322,9 @@ void main() {
       expect(find.text('New setlist…'), findsOneWidget);
     });
 
-    testWidgets('tapping setlist in sheet calls saveCrate with track id',
-        (tester) async {
+    testWidgets('tapping setlist in sheet calls saveCrate with track id', (
+      tester,
+    ) async {
       final fakeRepo = _FakeUserRepository();
       const session = SessionState(
         userId: 'user-42',
@@ -358,14 +366,13 @@ void main() {
       expect(fakeRepo.capturedCrate!.trackIds, contains('t1'));
     });
 
-    testWidgets('tapping setlist shows SnackBar with setlist name',
-        (tester) async {
+    testWidgets('tapping setlist shows SnackBar with setlist name', (
+      tester,
+    ) async {
       final tracks = [_track('t1', title: 'Anthem', trendScore: 0.8)];
       final setlist = _crate(id: 's1', name: 'Late Night');
 
-      await tester.pumpWidget(
-        _wrap(tracks: tracks, setlists: [setlist]),
-      );
+      await tester.pumpWidget(_wrap(tracks: tracks, setlists: [setlist]));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byIcon(Icons.add_circle_outline).first);
@@ -377,8 +384,9 @@ void main() {
       expect(find.textContaining('Added to Late Night'), findsOneWidget);
     });
 
-    testWidgets('shows only "New setlist…" when user has no setlists',
-        (tester) async {
+    testWidgets('shows only "New setlist…" when user has no setlists', (
+      tester,
+    ) async {
       final tracks = [_track('t1', title: 'Solo Track', trendScore: 0.5)];
 
       await tester.pumpWidget(_wrap(tracks: tracks, setlists: []));
@@ -390,6 +398,47 @@ void main() {
       expect(find.text('New setlist…'), findsOneWidget);
       // No other ListTile text visible besides the option
       expect(find.textContaining('Weekend'), findsNothing);
+    });
+
+    testWidgets('creating a new setlist from the sheet includes the track', (
+      tester,
+    ) async {
+      final fakeRepo = _FakeUserRepository();
+      const session = SessionState(
+        userId: 'user-42',
+        displayName: 'DJ Test',
+        email: 'dj@test.com',
+        providerLabel: 'Google',
+        isAuthenticated: true,
+        isDemo: false,
+      );
+      final tracks = [_track('t1', title: 'Fresh Find', trendScore: 0.9)];
+
+      final (widget, seedSession) = _wrapWithSession(
+        tracks: tracks,
+        setlists: const [],
+        userRepo: fakeRepo,
+        session: session,
+      );
+
+      await tester.pumpWidget(widget);
+      seedSession();
+      await tester.pump(Duration.zero);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.add_circle_outline).first);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('New setlist…'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, 'Fresh Crate');
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(fakeRepo.capturedCrate, isNotNull);
+      expect(fakeRepo.capturedCrate!.name, 'Fresh Crate');
+      expect(fakeRepo.capturedCrate!.trackIds, contains('t1'));
     });
   });
 
@@ -472,6 +521,45 @@ void main() {
 
       // saveCrate should NOT have been called
       expect(fakeRepo.capturedCrate, isNull);
+    });
+  });
+
+  group('SetlistActions.createWithTrack', () {
+    test('creates a setlist already containing the selected track', () async {
+      final fakeRepo = _FakeUserRepository();
+      const session = SessionState(
+        userId: 'user-99',
+        displayName: 'DJ',
+        email: 'dj@test.com',
+        providerLabel: 'Google',
+        isAuthenticated: true,
+        isDemo: false,
+      );
+
+      final sessionCtrl = StreamController<SessionState>()..add(session);
+
+      final container = ProviderContainer(
+        overrides: [
+          sessionProvider.overrideWith((ref) => sessionCtrl.stream),
+          userRepositoryProvider.overrideWithValue(fakeRepo),
+        ],
+      );
+      addTearDown(container.dispose);
+      addTearDown(sessionCtrl.close);
+
+      container.listen(sessionProvider, (_, __) {});
+
+      for (var i = 0; i < 10; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+
+      await container
+          .read(setlistActionsProvider)
+          .createWithTrack('New Heat', 'track-1');
+
+      expect(fakeRepo.capturedCrate, isNotNull);
+      expect(fakeRepo.capturedCrate!.name, 'New Heat');
+      expect(fakeRepo.capturedCrate!.trackIds, ['track-1']);
     });
   });
 }

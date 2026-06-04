@@ -58,22 +58,28 @@ class ExportService {
     final buf = StringBuffer();
     buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
     buf.writeln('<DJ_PLAYLISTS Version="1.0.0">');
-    buf.writeln('  <PRODUCT Name="VibeRadar" Version="1.0.0" Company="VibeRadar"/>');
+    buf.writeln(
+      '  <PRODUCT Name="VibeRadar" Version="1.0.0" Company="VibeRadar"/>',
+    );
     buf.writeln('  <COLLECTION Entries="${crate.tracks.length}">');
     for (var i = 0; i < crate.tracks.length; i++) {
       final t = crate.tracks[i];
-      buf.writeln('    <TRACK TrackID="${i + 1}" Name="${_esc(t.title)}" '
-          'Artist="${_esc(t.artist)}" Album="${_esc(t.album)}" '
-          'Genre="${_esc(t.genre)}" '
-          'TotalTime="${t.durationSeconds.toStringAsFixed(0)}" '
-          'AverageBpm="${t.bpm.toStringAsFixed(2)}" Tonality="${t.key}" '
-          'Location="${Uri.file(t.filePath)}" Size="${t.fileSizeBytes}"/>');
+      buf.writeln(
+        '    <TRACK TrackID="${i + 1}" Name="${_esc(t.title)}" '
+        'Artist="${_esc(t.artist)}" Album="${_esc(t.album)}" '
+        'Genre="${_esc(t.genre)}" '
+        'TotalTime="${t.durationSeconds.toStringAsFixed(0)}" '
+        'AverageBpm="${t.bpm.toStringAsFixed(2)}" Tonality="${t.key}" '
+        'Location="${Uri.file(t.filePath)}" Size="${t.fileSizeBytes}"/>',
+      );
     }
     buf.writeln('  </COLLECTION>');
     buf.writeln('  <PLAYLISTS>');
     buf.writeln('    <NODE Type="0" Name="ROOT" Count="1">');
-    buf.writeln('      <NODE Name="${_esc(crate.name)}" Type="1" KeyType="0" '
-        'Entries="${crate.tracks.length}">');
+    buf.writeln(
+      '      <NODE Name="${_esc(crate.name)}" Type="1" KeyType="0" '
+      'Entries="${crate.tracks.length}">',
+    );
     for (var i = 0; i < crate.tracks.length; i++) {
       buf.writeln('        <TRACK Key="${i + 1}"/>');
     }
@@ -87,12 +93,16 @@ class ExportService {
   /// Serato-compatible CSV with extended metadata columns.
   Future<String> exportSeratoCsv(ExportCrate crate) async {
     final buf = StringBuffer();
-    buf.writeln('name,artist,album,genre,bpm,key,duration,year,bitrate,filepath');
+    buf.writeln(
+      'name,artist,album,genre,bpm,key,duration,year,bitrate,filepath',
+    );
     for (final t in crate.tracks) {
-      buf.writeln('"${_csv(t.title)}","${_csv(t.artist)}","${_csv(t.album)}",'
-          '"${_csv(t.genre)}","${t.bpm.toStringAsFixed(0)}","${t.key}",'
-          '"${t.durationFormatted}","${t.year ?? ''}","${t.bitrate}",'
-          '"${_csv(t.filePath)}"');
+      buf.writeln(
+        '"${_csv(t.title)}","${_csv(t.artist)}","${_csv(t.album)}",'
+        '"${_csv(t.genre)}","${t.bpm.toStringAsFixed(0)}","${t.key}",'
+        '"${t.durationFormatted}","${t.year ?? ''}","${t.bitrate}",'
+        '"${_csv(t.filePath)}"',
+      );
     }
     return _save('${_safeName(crate.name)}_serato.csv', buf.toString());
   }
@@ -103,7 +113,8 @@ class ExportService {
     buf.writeln('#PLAYLIST:${crate.name}');
     for (final t in crate.tracks) {
       buf.writeln(
-          '#EXTINF:${t.durationSeconds.toStringAsFixed(0)},${t.artist} - ${t.title}');
+        '#EXTINF:${t.durationSeconds.toStringAsFixed(0)},${t.artist} - ${t.title}',
+      );
       buf.writeln(t.filePath);
     }
     return _save('${_safeName(crate.name)}.m3u', buf.toString());
@@ -117,12 +128,16 @@ class ExportService {
     for (final t in crate.tracks) {
       final dir = p.dirname(t.filePath);
       final file = p.basename(t.filePath);
-      buf.writeln('    <ENTRY TITLE="${_esc(t.title)}" ARTIST="${_esc(t.artist)}">');
       buf.writeln(
-          '      <LOCATION DIR="${_esc(dir)}/" FILE="${_esc(file)}" VOLUME="/" VOLUMEID=""/>');
+        '    <ENTRY TITLE="${_esc(t.title)}" ARTIST="${_esc(t.artist)}">',
+      );
+      buf.writeln(
+        '      <LOCATION DIR="${_esc(dir)}/" FILE="${_esc(file)}" VOLUME="/" VOLUMEID=""/>',
+      );
       buf.writeln('      <INFO GENRE="${_esc(t.genre)}" KEY="${t.key}"/>');
       buf.writeln(
-          '      <TEMPO BPM="${t.bpm.toStringAsFixed(6)}" BPM_QUALITY="100"/>');
+        '      <TEMPO BPM="${t.bpm.toStringAsFixed(6)}" BPM_QUALITY="100"/>',
+      );
       buf.writeln('    </ENTRY>');
     }
     buf.writeln('  </COLLECTION>');
@@ -131,10 +146,12 @@ class ExportService {
     buf.writeln('      <SUBNODES COUNT="1">');
     buf.writeln('        <NODE TYPE="PLAYLIST" NAME="${_esc(crate.name)}">');
     buf.writeln(
-        '          <PLAYLIST ENTRIES="${crate.tracks.length}" TYPE="LIST">');
+      '          <PLAYLIST ENTRIES="${crate.tracks.length}" TYPE="LIST">',
+    );
     for (final t in crate.tracks) {
       buf.writeln(
-          '            <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="${_esc(t.filePath)}"/></ENTRY>');
+        '            <ENTRY><PRIMARYKEY TYPE="TRACK" KEY="${_esc(t.filePath)}"/></ENTRY>',
+      );
     }
     buf.writeln('          </PLAYLIST>');
     buf.writeln('        </NODE>');
@@ -146,24 +163,26 @@ class ExportService {
   }
 
   /// VirtualDJ-compatible XML database export.
-  /// VirtualDJ uses a simple XML format with <Song> entries inside a <VirtualFolder>.
+  /// VirtualDJ uses a simple XML format with Song entries inside a VirtualFolder.
   Future<String> exportVirtualDjXml(ExportCrate crate) async {
     final buf = StringBuffer();
     buf.writeln('<?xml version="1.0" encoding="UTF-8"?>');
     buf.writeln('<VirtualDJ_Database Version="8">');
     for (final t in crate.tracks) {
       final fileUrl = Uri.file(t.filePath).toString();
-      buf.writeln('  <Song FilePath="${_esc(fileUrl)}" '
-          'Title="${_esc(t.title)}" '
-          'Artist="${_esc(t.artist)}" '
-          'Album="${_esc(t.album)}" '
-          'Genre="${_esc(t.genre)}" '
-          'Year="${t.year ?? ''}" '
-          'Bpm="${t.bpm.toStringAsFixed(2)}" '
-          'Key="${t.key}" '
-          'Bitrate="${t.bitrate}" '
-          'SongLength="${t.durationSeconds.toStringAsFixed(1)}" '
-          'FileSize="${t.fileSizeBytes}"/>');
+      buf.writeln(
+        '  <Song FilePath="${_esc(fileUrl)}" '
+        'Title="${_esc(t.title)}" '
+        'Artist="${_esc(t.artist)}" '
+        'Album="${_esc(t.album)}" '
+        'Genre="${_esc(t.genre)}" '
+        'Year="${t.year ?? ''}" '
+        'Bpm="${t.bpm.toStringAsFixed(2)}" '
+        'Key="${t.key}" '
+        'Bitrate="${t.bitrate}" '
+        'SongLength="${t.durationSeconds.toStringAsFixed(1)}" '
+        'FileSize="${t.fileSizeBytes}"/>',
+      );
     }
     buf.writeln('</VirtualDJ_Database>');
     return _save('${_safeName(crate.name)}_virtualdj.xml', buf.toString());
@@ -172,7 +191,8 @@ class ExportService {
   /// TIDAL-aware M3U export.
   /// Annotates each track with TIDAL search hints so DJ software with TIDAL
   /// integration can locate streaming versions of tracks the user doesn't own locally.
-  Future<String> exportTidalAwareM3u(ExportCrate crate, {
+  Future<String> exportTidalAwareM3u(
+    ExportCrate crate, {
     List<String> missingTrackHints = const [],
   }) async {
     final buf = StringBuffer();
@@ -182,9 +202,12 @@ class ExportService {
 
     for (final t in crate.tracks) {
       buf.writeln(
-          '#EXTINF:${t.durationSeconds.toStringAsFixed(0)},${t.artist} - ${t.title}');
+        '#EXTINF:${t.durationSeconds.toStringAsFixed(0)},${t.artist} - ${t.title}',
+      );
       // TIDAL search hint as extended comment
-      buf.writeln('#EXTVLCOPT:tidal-search=${Uri.encodeComponent('${t.artist} ${t.title}')}');
+      buf.writeln(
+        '#EXTVLCOPT:tidal-search=${Uri.encodeComponent('${t.artist} ${t.title}')}',
+      );
       buf.writeln(t.filePath);
     }
 
@@ -203,7 +226,10 @@ class ExportService {
   }
 
   /// Generate a manifest of missing tracks (tracks requested but not in library).
-  Future<String> exportMissingManifest(String crateName, List<String> missingTracks) async {
+  Future<String> exportMissingManifest(
+    String crateName,
+    List<String> missingTracks,
+  ) async {
     final buf = StringBuffer();
     buf.writeln('# VibeRadar — Missing Track Manifest');
     buf.writeln('# Crate: $crateName');
@@ -214,7 +240,9 @@ class ExportService {
       buf.writeln('${i + 1}. ${missingTracks[i]}');
     }
     buf.writeln('');
-    buf.writeln('# Search these on: Apple Music, Spotify, YouTube, TIDAL, Beatport');
+    buf.writeln(
+      '# Search these on: Apple Music, Spotify, YouTube, TIDAL, Beatport',
+    );
     return _save('${_safeName(crateName)}_missing.txt', buf.toString());
   }
 
@@ -309,8 +337,9 @@ class ExportService {
     void Function(int done, int total)? onProgress,
   }) async {
     if (type == CrateType.virtualOnly) {
-      final m3uPath =
-          await exportM3u(ExportCrate(name: crateName, tracks: tracks));
+      final m3uPath = await exportM3u(
+        ExportCrate(name: crateName, tracks: tracks),
+      );
       return PhysicalCrateResult(
         cratePath: m3uPath,
         filesCopied: 0,
@@ -419,13 +448,15 @@ class ExportService {
       .replaceAll('<', '&lt;')
       .replaceAll('>', '&gt;');
   String _csv(String s) => s.replaceAll('"', '""');
-  String _safeName(String s) =>
-      s.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+  String _safeName(String s) => s.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
 
   // ── AI Crate exports (metadata-only, no local files) ─────────────────────
 
   /// Export an AI-generated crate as M3U with platform URLs.
-  Future<String> exportAiCrateM3u(String crateName, List<dynamic> tracks) async {
+  Future<String> exportAiCrateM3u(
+    String crateName,
+    List<dynamic> tracks,
+  ) async {
     final buf = StringBuffer();
     buf.writeln('#EXTM3U');
     buf.writeln('#PLAYLIST:$crateName');
@@ -445,20 +476,28 @@ class ExportService {
   }
 
   /// Export an AI crate as CSV (importable to Serato/VirtualDJ/Rekordbox).
-  Future<String> exportAiCrateCsv(String crateName, List<dynamic> tracks) async {
+  Future<String> exportAiCrateCsv(
+    String crateName,
+    List<dynamic> tracks,
+  ) async {
     final buf = StringBuffer();
     buf.writeln('title,artist,bpm,key,spotify_url,apple_url,status');
     for (final t in tracks) {
-      buf.writeln('"${_csv(t.title as String)}","${_csv(t.artist as String)}",'
-          '"${t.bpm}","${t.key}",'
-          '"${_csv(t.spotifyUrl as String? ?? '')}","${_csv(t.appleUrl as String? ?? '')}",'
-          '"${(t.resolved as bool) ? 'found' : 'missing'}"');
+      buf.writeln(
+        '"${_csv(t.title as String)}","${_csv(t.artist as String)}",'
+        '"${t.bpm}","${t.key}",'
+        '"${_csv(t.spotifyUrl as String? ?? '')}","${_csv(t.appleUrl as String? ?? '')}",'
+        '"${(t.resolved as bool) ? 'found' : 'missing'}"',
+      );
     }
     return _save('${_safeName(crateName)}_ai.csv', buf.toString());
   }
 
   /// Export an AI crate as a text manifest (human-readable).
-  Future<String> exportAiCrateManifest(String crateName, List<dynamic> tracks) async {
+  Future<String> exportAiCrateManifest(
+    String crateName,
+    List<dynamic> tracks,
+  ) async {
     final buf = StringBuffer();
     buf.writeln('# VibeRadar AI Crate: $crateName');
     buf.writeln('# Generated: ${DateTime.now().toIso8601String()}');
@@ -467,10 +506,14 @@ class ExportService {
     for (var i = 0; i < tracks.length; i++) {
       final t = tracks[i];
       final status = (t.resolved as bool) ? 'FOUND' : 'MISSING';
-      buf.writeln('${i + 1}. ${t.artist} - ${t.title} (${t.bpm} BPM, ${t.key}) [$status]');
+      buf.writeln(
+        '${i + 1}. ${t.artist} - ${t.title} (${t.bpm} BPM, ${t.key}) [$status]',
+      );
       if (t.spotifyUrl != null) buf.writeln('   Spotify: ${t.spotifyUrl}');
       if (t.appleUrl != null) buf.writeln('   Apple Music: ${t.appleUrl}');
-      if (!(t.resolved as bool)) buf.writeln('   ⚠️ Not found — search manually');
+      if (!(t.resolved as bool)) {
+        buf.writeln('   ⚠️ Not found — search manually');
+      }
       buf.writeln('');
     }
     return _save('${_safeName(crateName)}_ai_manifest.txt', buf.toString());

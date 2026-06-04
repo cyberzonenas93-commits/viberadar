@@ -38,6 +38,7 @@ class Track {
   final DateTime updatedAt;
   final double energyLevel;
   final List<TrendPoint> trendHistory;
+
   /// Which ingestion sources contributed to this track (e.g. ["spotify","youtube","billboard"]).
   final List<String> sources;
 
@@ -143,15 +144,13 @@ class Track {
   }
 
   static List<TrendPoint> _parseTrendHistory(dynamic input) {
-    if (input is! List) {
+    if (input is! List<Object?>) {
       return const [];
     }
 
     return input
-        .whereType<Map>()
-        .map(
-          (item) => TrendPoint.fromMap(Map<String, dynamic>.from(item.cast())),
-        )
+        .whereType<Map<Object?, Object?>>()
+        .map((item) => TrendPoint.fromMap(Map<String, dynamic>.from(item)))
         .toList();
   }
 }

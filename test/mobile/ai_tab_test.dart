@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
 import 'package:viberadar/models/session_state.dart';
-import 'package:viberadar/providers/app_state.dart';
 import 'package:viberadar/providers/repositories.dart';
 import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/services/ai_copilot_service.dart';
@@ -47,15 +46,15 @@ class _FakeAiCopilotService extends AiCopilotService {
 class _FakeSessionRepository implements SessionRepository {
   @override
   Stream<SessionState> sessionChanges() => Stream.value(
-        const SessionState(
-          userId: 'test-user',
-          displayName: 'Test DJ',
-          email: 'test@viberadar.local',
-          providerLabel: 'Test',
-          isAuthenticated: true,
-          isDemo: false,
-        ),
-      );
+    const SessionState(
+      userId: 'test-user',
+      displayName: 'Test DJ',
+      email: 'test@viberadar.local',
+      providerLabel: 'Test',
+      isAuthenticated: true,
+      isDemo: false,
+    ),
+  );
 
   @override
   Future<void> signInWithEmail({
@@ -103,14 +102,13 @@ class _FakeUserRepository implements UserRepository {
   Stream<UserProfile> watchUser({
     required String userId,
     required String fallbackName,
-  }) =>
-      Stream.value(
-        UserProfile.empty(
-          id: userId,
-          displayName: fallbackName,
-          preferredRegion: 'GH',
-        ),
-      );
+  }) => Stream.value(
+    UserProfile.empty(
+      id: userId,
+      displayName: fallbackName,
+      preferredRegion: 'GH',
+    ),
+  );
 
   @override
   Future<void> toggleWatchlist({
@@ -153,10 +151,7 @@ class _FakeUserRepository implements UserRepository {
 // ---------------------------------------------------------------------------
 
 class _CapturingSetlistActions extends SetlistActions {
-  _CapturingSetlistActions(
-    super.ref,
-    this._fakeRepo,
-  );
+  _CapturingSetlistActions(super.ref, this._fakeRepo);
 
   final _FakeUserRepository _fakeRepo;
 
@@ -174,9 +169,7 @@ class _CapturingSetlistActions extends SetlistActions {
 // Widget wrapper
 // ---------------------------------------------------------------------------
 
-Widget _buildTestApp({
-  required _FakeUserRepository fakeRepo,
-}) {
+Widget _buildTestApp({required _FakeUserRepository fakeRepo}) {
   return ProviderScope(
     overrides: [
       aiCopilotServiceProvider.overrideWithValue(_FakeAiCopilotService()),
@@ -218,8 +211,9 @@ void main() {
   });
 
   group('AiTab — build flow', () {
-    testWidgets('entering a prompt and tapping Build shows 2 draft tracks',
-        (tester) async {
+    testWidgets('entering a prompt and tapping Build shows 2 draft tracks', (
+      tester,
+    ) async {
       final repo = _FakeUserRepository();
       await tester.pumpWidget(_buildTestApp(fakeRepo: repo));
       await tester.pumpAndSettle();
@@ -252,41 +246,41 @@ void main() {
 
   group('AiTab — save flow', () {
     testWidgets(
-        'after building, Save as setlist creates Crate with correct name and 2 trackIds',
-        (tester) async {
-      final repo = _FakeUserRepository();
-      await tester.pumpWidget(_buildTestApp(fakeRepo: repo));
-      await tester.pumpAndSettle();
+      'after building, Save as setlist creates Crate with correct name and 2 trackIds',
+      (tester) async {
+        final repo = _FakeUserRepository();
+        await tester.pumpWidget(_buildTestApp(fakeRepo: repo));
+        await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField), 'Build me a set');
-      await tester.tap(find.text('Build'));
-      await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), 'Build me a set');
+        await tester.tap(find.text('Build'));
+        await tester.pumpAndSettle();
 
-      // Save button should now be enabled
-      final saveButton = tester.widget<ElevatedButton>(
-        find.widgetWithText(ElevatedButton, 'Save as setlist'),
-      );
-      expect(saveButton.onPressed, isNotNull);
+        // Save button should now be enabled
+        final saveButton = tester.widget<ElevatedButton>(
+          find.widgetWithText(ElevatedButton, 'Save as setlist'),
+        );
+        expect(saveButton.onPressed, isNotNull);
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Save as setlist'));
-      await tester.pumpAndSettle();
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, 'Save as setlist'),
+        );
+        await tester.pumpAndSettle();
 
-      // Exactly one crate should have been saved
-      expect(repo.savedCrates, hasLength(1));
+        // Exactly one crate should have been saved
+        expect(repo.savedCrates, hasLength(1));
 
-      final saved = repo.savedCrates.first;
-      expect(saved.name, equals('Test Vibes'));
-      expect(saved.trackIds, hasLength(2));
+        final saved = repo.savedCrates.first;
+        expect(saved.name, equals('Test Vibes'));
+        expect(saved.trackIds, hasLength(2));
 
-      // Synthesized ids follow 'ai:<artist - title>' pattern (lowercased, trimmed)
-      expect(
-        saved.trackIds,
-        containsAll([
-          'ai:burna boy - last last',
-          'ai:rema - calm down',
-        ]),
-      );
-    });
+        // Synthesized ids follow 'ai:<artist - title>' pattern (lowercased, trimmed)
+        expect(
+          saved.trackIds,
+          containsAll(['ai:burna boy - last last', 'ai:rema - calm down']),
+        );
+      },
+    );
 
     testWidgets('shows SnackBar with crate name after saving', (tester) async {
       final repo = _FakeUserRepository();
@@ -305,8 +299,9 @@ void main() {
   });
 
   group('AiTab — non-crate response', () {
-    testWidgets('shows plain text reply when no crate block present',
-        (tester) async {
+    testWidgets('shows plain text reply when no crate block present', (
+      tester,
+    ) async {
       // Use a custom fake that returns plain text
       final repo = _FakeUserRepository();
       final plainFake = _PlainReplyFakeService();
@@ -314,8 +309,9 @@ void main() {
         ProviderScope(
           overrides: [
             aiCopilotServiceProvider.overrideWithValue(plainFake),
-            sessionRepositoryProvider
-                .overrideWithValue(_FakeSessionRepository()),
+            sessionRepositoryProvider.overrideWithValue(
+              _FakeSessionRepository(),
+            ),
             userRepositoryProvider.overrideWithValue(repo),
           ],
           child: const MaterialApp(home: Scaffold(body: AiTab())),

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-and-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Static analysis
+        # Keep --fatal-warnings OFF; project has pre-existing warnings that
+        # are being worked through. Instead we grep for errors and fail on
+        # those only.
+        run: |
+          set -o pipefail
+          flutter analyze 2>&1 | tee analyze.out
+          if grep -E "^\s*error •" analyze.out > /dev/null; then
+            echo "::error::flutter analyze reported errors"
+            exit 1
+          fi
+
+      - name: Run tests
+        run: flutter test --reporter expanded
+
+      - name: Dart format check (advisory)
+        continue-on-error: true
+        run: dart format --output=none --set-exit-if-changed lib test

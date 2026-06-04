@@ -36,7 +36,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final allTracks = widget.allTracks;
-    final userProfile = widget.userProfile;
     // Prefer the reactive local selection (works for guests too); fall back to
     // the signed-in profile's region when nothing has been picked this session.
     final region =
@@ -545,4 +544,3 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _uniqueArtists(List<Track> tracks) =>
       {for (final t in tracks) t.artist}.length;
 }
-

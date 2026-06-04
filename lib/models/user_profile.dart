@@ -63,11 +63,13 @@ class UserProfile {
       id: id,
       displayName: map['display_name'] as String? ?? fallbackName,
       preferredRegion:
-          (map['preferences'] as Map?)?['region'] as String? ?? 'US',
+          (map['preferences'] as Map<Object?, Object?>?)?['region']
+              as String? ??
+          'US',
       watchlist: Set<String>.from(map['watchlist'] as List? ?? const []),
       savedCrates: (map['saved_crates'] as List? ?? const [])
-          .whereType<Map>()
-          .map((item) => Crate.fromMap(Map<String, dynamic>.from(item.cast())))
+          .whereType<Map<Object?, Object?>>()
+          .map((item) => Crate.fromMap(Map<String, dynamic>.from(item)))
           .toList(),
       followedArtists: List<String>.from(
         map['followed_artists'] as List? ?? const [],

@@ -1,4 +1,6 @@
 // lib/ui/features/exports/dj_export_sheet.dart
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,7 +22,7 @@ Future<DjExportResult?> showDjExportSheet({
   Map<String, String> tidalIds = const {},
   String? parentCrateName,
 }) async {
-  ref.read(djExportProvider.notifier).detectRoots();
+  unawaited(ref.read(djExportProvider.notifier).detectRoots());
 
   final result = await showModalBottomSheet<DjExportResult>(
     context: context,
@@ -134,7 +136,8 @@ class _DjExportSheetState extends ConsumerState<_DjExportSheet> {
             const SizedBox(height: 12),
             Center(
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
                   color: cs.onSurface.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),
@@ -144,27 +147,29 @@ class _DjExportSheetState extends ConsumerState<_DjExportSheet> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(children: [
-                Icon(
-                  widget.target == DjTarget.virtualDj
-                      ? Icons.queue_music
-                      : Icons.album,
-                  color: cs.primary,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
+              child: Row(
+                children: [
+                  Icon(
                     widget.target == DjTarget.virtualDj
-                        ? 'Export to VirtualDJ'
-                        : 'Export to Serato',
-                    style: tt.titleLarge,
+                        ? Icons.queue_music
+                        : Icons.album,
+                    color: cs.primary,
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ]),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      widget.target == DjTarget.virtualDj
+                          ? 'Export to VirtualDJ'
+                          : 'Export to Serato',
+                      style: tt.titleLarge,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
             ),
             const Divider(height: 24),
             Expanded(
@@ -174,20 +179,23 @@ class _DjExportSheetState extends ConsumerState<_DjExportSheet> {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 220),
                   child: switch (_step) {
-                    0 => _SetupStep(key: const ValueKey('setup'), onNext: _advance),
+                    0 => _SetupStep(
+                      key: const ValueKey('setup'),
+                      onNext: _advance,
+                    ),
                     1 => _RootStep(
-                        key: const ValueKey('root'),
-                        target: widget.target,
-                        exportState: exportState,
-                        onPickFolder: _pickFolder,
-                        onExport: _startExport,
-                      ),
+                      key: const ValueKey('root'),
+                      target: widget.target,
+                      exportState: exportState,
+                      onPickFolder: _pickFolder,
+                      onExport: _startExport,
+                    ),
                     _ => _ResultStep(
-                        key: const ValueKey('result'),
-                        exportState: exportState,
-                        onDone: (r) => Navigator.of(context).pop(r),
-                        onRetry: () => setState(() => _step = 1),
-                      ),
+                      key: const ValueKey('result'),
+                      exportState: exportState,
+                      onDone: (r) => Navigator.of(context).pop(r),
+                      onRetry: () => setState(() => _step = 1),
+                    ),
                   },
                 ),
               ),
@@ -211,32 +219,38 @@ class _SetupStep extends ConsumerWidget {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Export options', style: tt.titleMedium),
-      const SizedBox(height: 8),
-      Text(
-        'VibeRadar will match each track to a local file. Tracks without a '
-        'local match will be skipped unless you enable TIDAL fallback.',
-        style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.7)),
-      ),
-      const SizedBox(height: 24),
-      Card(
-        margin: EdgeInsets.zero,
-        child: SwitchListTile(
-          title: const Text('Include TIDAL tracks'),
-          subtitle: const Text(
-              'Unmatched tracks appear as TIDAL streaming links in VirtualDJ.'),
-          value: useTidal,
-          onChanged: (v) =>
-              ref.read(djExportProvider.notifier).setUseTidal(value: v),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Export options', style: tt.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          'VibeRadar will match each track to a local file. Tracks without a '
+          'local match will be skipped unless you enable TIDAL fallback.',
+          style: tt.bodyMedium?.copyWith(
+            color: cs.onSurface.withValues(alpha: 0.7),
+          ),
         ),
-      ),
-      const SizedBox(height: 32),
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton(onPressed: onNext, child: const Text('Continue')),
-      ),
-    ]);
+        const SizedBox(height: 24),
+        Card(
+          margin: EdgeInsets.zero,
+          child: SwitchListTile(
+            title: const Text('Include TIDAL tracks'),
+            subtitle: const Text(
+              'Unmatched tracks appear as TIDAL streaming links in VirtualDJ.',
+            ),
+            value: useTidal,
+            onChanged: (v) =>
+                ref.read(djExportProvider.notifier).setUseTidal(value: v),
+          ),
+        ),
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(onPressed: onNext, child: const Text('Continue')),
+        ),
+      ],
+    );
   }
 }
 
@@ -256,8 +270,9 @@ class _RootStep extends StatelessWidget {
   final VoidCallback onPickFolder;
   final Future<void> Function() onExport;
 
-  String? get _root =>
-      target == DjTarget.virtualDj ? exportState.vdjRoot : exportState.seratoRoot;
+  String? get _root => target == DjTarget.virtualDj
+      ? exportState.vdjRoot
+      : exportState.seratoRoot;
 
   @override
   Widget build(BuildContext context) {
@@ -268,70 +283,92 @@ class _RootStep extends StatelessWidget {
         ? '~/Library/Application Support/VirtualDJ'
         : '~/Music/_Serato_';
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text('Library location', style: tt.titleMedium),
-      const SizedBox(height: 8),
-      if (exportState.status == DjExportStatus.detectingRoots)
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 12),
-          child: Row(children: [
-            SizedBox(width: 16, height: 16,
-                child: CircularProgressIndicator(strokeWidth: 2)),
-            SizedBox(width: 12),
-            Text('Detecting library folder…'),
-          ]),
-        )
-      else ...[
-        Text(
-          _root != null
-              ? 'Auto-detected library folder:'
-              : 'Could not auto-detect. Default: $defaultPath',
-          style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.7)),
-        ),
-        if (_root != null) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: cs.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Library location', style: tt.titleMedium),
+        const SizedBox(height: 8),
+        if (exportState.status == DjExportStatus.detectingRoots)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Detecting library folder…'),
+              ],
             ),
-            child: Row(children: [
-              Icon(Icons.folder, color: cs.primary, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(_root!,
-                    style: tt.bodySmall?.copyWith(fontFamily: 'monospace'),
-                    overflow: TextOverflow.ellipsis),
-              ),
-            ]),
+          )
+        else ...[
+          Text(
+            _root != null
+                ? 'Auto-detected library folder:'
+                : 'Could not auto-detect. Default: $defaultPath',
+            style: tt.bodyMedium?.copyWith(
+              color: cs.onSurface.withValues(alpha: 0.7),
+            ),
           ),
+          if (_root != null) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.folder, color: cs.primary, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _root!,
+                      style: tt.bodySmall?.copyWith(fontFamily: 'monospace'),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
-      ],
-      const SizedBox(height: 12),
-      OutlinedButton.icon(
-        icon: const Icon(Icons.folder_open, size: 18),
-        label: Text(_root != null ? 'Change folder' : 'Choose library folder'),
-        onPressed: isLoading ? null : onPickFolder,
-      ),
-      if (exportState.errorMessage != null &&
-          exportState.status != DjExportStatus.exporting) ...[
-        const SizedBox(height: 16),
-        _ErrorBanner(message: exportState.errorMessage!),
-      ],
-      const SizedBox(height: 32),
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton.icon(
-          icon: isLoading
-              ? const SizedBox(width: 18, height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.upload),
-          label: Text(isLoading ? 'Exporting…' : 'Export'),
-          onPressed: (_root == null || isLoading) ? null : onExport,
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.folder_open, size: 18),
+          label: Text(
+            _root != null ? 'Change folder' : 'Choose library folder',
+          ),
+          onPressed: isLoading ? null : onPickFolder,
         ),
-      ),
-    ]);
+        if (exportState.errorMessage != null &&
+            exportState.status != DjExportStatus.exporting) ...[
+          const SizedBox(height: 16),
+          _ErrorBanner(message: exportState.errorMessage!),
+        ],
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.upload),
+            label: Text(isLoading ? 'Exporting…' : 'Export'),
+            onPressed: (_root == null || isLoading) ? null : onExport,
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -355,73 +392,117 @@ class _ResultStep extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     if (exportState.status == DjExportStatus.error) {
-      return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.error_outline, color: cs.error, size: 48),
-        const SizedBox(height: 16),
-        Text('Export failed', style: tt.titleMedium),
-        const SizedBox(height: 8),
-        _ErrorBanner(message: exportState.errorMessage ?? 'Unknown error'),
-        const SizedBox(height: 24),
-        Row(children: [
-          OutlinedButton(onPressed: onRetry, child: const Text('Try again')),
-          const SizedBox(width: 12),
-          TextButton(onPressed: () => onDone(null), child: const Text('Cancel')),
-        ]),
-      ]);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, color: cs.error, size: 48),
+          const SizedBox(height: 16),
+          Text('Export failed', style: tt.titleMedium),
+          const SizedBox(height: 8),
+          _ErrorBanner(message: exportState.errorMessage ?? 'Unknown error'),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              OutlinedButton(
+                onPressed: onRetry,
+                child: const Text('Try again'),
+              ),
+              const SizedBox(width: 12),
+              TextButton(
+                onPressed: () => onDone(null),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ],
+      );
     }
 
     if (exportState.status == DjExportStatus.exporting ||
         exportState.result == null) {
       return const Center(
-          child: Padding(padding: EdgeInsets.all(32),
-              child: CircularProgressIndicator()));
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(),
+        ),
+      );
     }
 
     final r = exportState.result!;
     final targetName = r.target == DjTarget.virtualDj ? 'VirtualDJ' : 'Serato';
 
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Icon(Icons.check_circle, color: cs.primary, size: 40),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Exported to $targetName', style: tt.titleMedium),
-          Text(r.playlistName,
-              style: tt.bodyMedium?.copyWith(color: cs.onSurface.withValues(alpha: 0.7))),
-        ])),
-      ]),
-      const SizedBox(height: 24),
-      _StatGrid(result: r),
-      const SizedBox(height: 20),
-      Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.check_circle, color: cs.primary, size: 40),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Exported to $targetName', style: tt.titleMedium),
+                  Text(
+                    r.playlistName,
+                    style: tt.bodyMedium?.copyWith(
+                      color: cs.onSurface.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('Saved to', style: tt.labelSmall),
-          const SizedBox(height: 4),
-          Text(r.outputPath,
-              style: tt.bodySmall?.copyWith(fontFamily: 'monospace')),
-        ]),
-      ),
-      if (r.warning != null) ...[
-        const SizedBox(height: 12),
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.warning_amber, size: 18, color: cs.secondary),
-          const SizedBox(width: 8),
-          Expanded(child: Text(r.warning!,
-              style: tt.bodySmall?.copyWith(
-                  color: cs.onSurface.withValues(alpha: 0.7)))),
-        ]),
+        const SizedBox(height: 24),
+        _StatGrid(result: r),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cs.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Saved to', style: tt.labelSmall),
+              const SizedBox(height: 4),
+              Text(
+                r.outputPath,
+                style: tt.bodySmall?.copyWith(fontFamily: 'monospace'),
+              ),
+            ],
+          ),
+        ),
+        if (r.warning != null) ...[
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber, size: 18, color: cs.secondary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  r.warning!,
+                  style: tt.bodySmall?.copyWith(
+                    color: cs.onSurface.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: () => onDone(r),
+            child: const Text('Done'),
+          ),
+        ),
       ],
-      const SizedBox(height: 32),
-      SizedBox(
-        width: double.infinity,
-        child: FilledButton(onPressed: () => onDone(r), child: const Text('Done')),
-      ),
-    ]);
+    );
   }
 }
 
@@ -433,29 +514,50 @@ class _StatGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(children: [
-      _StatTile(label: 'Total', value: '${result.totalTracks}',
-          icon: Icons.library_music),
-      const SizedBox(width: 8),
-      _StatTile(label: 'Local', value: '${result.localMatchCount}',
-          icon: Icons.storage, color: Colors.green),
-      if (result.tidalCount > 0) ...[
+    return Row(
+      children: [
+        _StatTile(
+          label: 'Total',
+          value: '${result.totalTracks}',
+          icon: Icons.library_music,
+        ),
         const SizedBox(width: 8),
-        _StatTile(label: 'TIDAL', value: '${result.tidalCount}',
-            icon: Icons.cloud, color: Colors.blue),
+        _StatTile(
+          label: 'Local',
+          value: '${result.localMatchCount}',
+          icon: Icons.storage,
+          color: Colors.green,
+        ),
+        if (result.tidalCount > 0) ...[
+          const SizedBox(width: 8),
+          _StatTile(
+            label: 'TIDAL',
+            value: '${result.tidalCount}',
+            icon: Icons.cloud,
+            color: Colors.blue,
+          ),
+        ],
+        if (result.skippedCount > 0) ...[
+          const SizedBox(width: 8),
+          _StatTile(
+            label: 'Skipped',
+            value: '${result.skippedCount}',
+            icon: Icons.block,
+            color: Colors.orange,
+          ),
+        ],
       ],
-      if (result.skippedCount > 0) ...[
-        const SizedBox(width: 8),
-        _StatTile(label: 'Skipped', value: '${result.skippedCount}',
-            icon: Icons.block, color: Colors.orange),
-      ],
-    ]);
+    );
   }
 }
 
 class _StatTile extends StatelessWidget {
-  const _StatTile(
-      {required this.label, required this.value, required this.icon, this.color});
+  const _StatTile({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.color,
+  });
   final String label;
   final String value;
   final IconData icon;
@@ -473,16 +575,25 @@ class _StatTile extends StatelessWidget {
           color: c.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Column(children: [
-          Icon(icon, color: c, size: 20),
-          const SizedBox(height: 4),
-          Text(value,
-              style: tt.titleMedium
-                  ?.copyWith(color: c, fontWeight: FontWeight.bold)),
-          Text(label,
-              style: tt.labelSmall
-                  ?.copyWith(color: cs.onSurface.withValues(alpha: 0.6))),
-        ]),
+        child: Column(
+          children: [
+            Icon(icon, color: c, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: tt.titleMedium?.copyWith(
+                color: c,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              label,
+              style: tt.labelSmall?.copyWith(
+                color: cs.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -501,12 +612,16 @@ class _ErrorBanner extends StatelessWidget {
         color: cs.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
-        const SizedBox(width: 8),
-        Expanded(child: Text(message,
-            style: TextStyle(color: cs.onErrorContainer))),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.error_outline, color: cs.onErrorContainer, size: 18),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(message, style: TextStyle(color: cs.onErrorContainer)),
+          ),
+        ],
+      ),
     );
   }
 }

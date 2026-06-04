@@ -6,8 +6,7 @@ import '../../core/theme/app_theme.dart';
 
 /// Launch splash: the animated VibeRadar mark — a Veo 3.1 generated equalizer
 /// clip, exported as transparent PNG frames (alpha = luminance, so the black is
-/// fully transparent) and cycled over the brand gradient. The bars float on the
-/// gradient with no opaque box.
+/// fully transparent). The bars float without an opaque or gradient backdrop.
 ///
 /// PNG frames are used (rather than the source mp4 + a blend mode) because alpha
 /// PNGs composite reliably on every platform, whereas blending over a video
@@ -66,15 +65,11 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.ink,
+      backgroundColor: Colors.transparent,
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Brand gradient backdrop — matches the app icon.
-          const DecoratedBox(
-            decoration: BoxDecoration(gradient: AppTheme.brandGradient),
-          ),
-          // Animated equalizer bars (transparent PNG frames over the gradient).
+          // Animated equalizer bars (transparent PNG frames).
           Center(
             child: Image.asset(
               _framePath(_frame),

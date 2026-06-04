@@ -58,7 +58,8 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
       // Sort by popularity descending, keep at least 50
       catalogue.sort((a, b) => b.popularity.compareTo(a.popularity));
       setState(() {
-        _profiles[name] = results[0] as SpotifyArtistProfile? ??
+        _profiles[name] =
+            results[0] as SpotifyArtistProfile? ??
             SpotifyArtistProfile(id: artistId, name: name);
         _topTracks[name] = catalogue.take(50).toList();
         _latestRelease[name] = results[2] as SpotifyAlbumInfo?;
@@ -67,10 +68,15 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
       // Load recommendations once we have at least one artist
       if (!_loadedRecommended) {
         _loadedRecommended = true;
-        _loadRecommendations(artistId);
+        unawaited(_loadRecommendations(artistId));
       }
     } catch (e, st) {
-      developer.log('Failed to load artist data for $name', name: 'ForYou', error: e, stackTrace: st);
+      developer.log(
+        'Failed to load artist data for $name',
+        name: 'ForYou',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -82,35 +88,48 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
       final userProfile = ref.read(userProfileProvider).value;
       final followed =
           userProfile?.followedArtists.map((a) => a.toLowerCase()).toSet() ??
-              {};
+          {};
       final filtered = related
           .where((a) => !followed.contains(a.name.toLowerCase()))
           .take(12)
           .toList();
       setState(() => _recommended = filtered);
     } catch (e, st) {
-      developer.log('Failed to load artist recommendations', name: 'ForYou', error: e, stackTrace: st);
+      developer.log(
+        'Failed to load artist recommendations',
+        name: 'ForYou',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
   void _followArtist(UserProfile profile, String artistName) {
     final session = ref.read(sessionProvider).value;
     if (session == null) return;
-    ref.read(userRepositoryProvider).followArtist(
-          userId: session.userId,
-          fallbackName: session.displayName,
-          artistName: artistName,
-        );
+    unawaited(
+      ref
+          .read(userRepositoryProvider)
+          .followArtist(
+            userId: session.userId,
+            fallbackName: session.displayName,
+            artistName: artistName,
+          ),
+    );
   }
 
   void _unfollowArtist(UserProfile profile, String artistName) {
     final session = ref.read(sessionProvider).value;
     if (session == null) return;
-    ref.read(userRepositoryProvider).unfollowArtist(
-          userId: session.userId,
-          fallbackName: session.displayName,
-          artistName: artistName,
-        );
+    unawaited(
+      ref
+          .read(userRepositoryProvider)
+          .unfollowArtist(
+            userId: session.userId,
+            fallbackName: session.displayName,
+            artistName: artistName,
+          ),
+    );
   }
 
   @override
@@ -123,8 +142,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
     // Kick off loads for newly followed artists
     for (final name in followed) {
       if (!_profiles.containsKey(name)) {
-        WidgetsBinding.instance
-            .addPostFrameCallback((_) => _loadArtist(name));
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => unawaited(_loadArtist(name)),
+        );
       }
     }
 
@@ -163,7 +183,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                     Text(
                       '${followed.length} artists you follow',
                       style: const TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 12),
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
                     ),
                   ],
                 ),
@@ -176,7 +198,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                     backgroundColor: AppTheme.violet.withValues(alpha: 0.2),
                     foregroundColor: AppTheme.violet,
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 16, vertical: 10),
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
                   ),
                 ),
               ],
@@ -223,9 +247,10 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                   const Text(
                     'Recommended For You',
                     style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 16),
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
                   ),
                 ],
               ),
@@ -234,21 +259,19 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
           SliverPadding(
             padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
             sliver: SliverGrid(
-              delegate: SliverChildBuilderDelegate(
-                (context, i) {
-                  final artist = _recommended[i];
-                  final isFollowed = followed.any(
-                      (f) => f.toLowerCase() == artist.name.toLowerCase());
-                  return _RecommendedArtistCard(
-                    artist: artist,
-                    isFollowed: isFollowed,
-                    onFollow: () => userProfile != null
-                        ? _followArtist(userProfile, artist.name)
-                        : null,
-                  );
-                },
-                childCount: _recommended.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final artist = _recommended[i];
+                final isFollowed = followed.any(
+                  (f) => f.toLowerCase() == artist.name.toLowerCase(),
+                );
+                return _RecommendedArtistCard(
+                  artist: artist,
+                  isFollowed: isFollowed,
+                  onFollow: () => userProfile != null
+                      ? _followArtist(userProfile, artist.name)
+                      : null,
+                );
+              }, childCount: _recommended.length),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 180,
                 childAspectRatio: 0.75,
@@ -272,11 +295,15 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
         onSave: (selected) {
           final session = ref.read(sessionProvider).value;
           if (session == null || profile == null) return;
-          ref.read(userRepositoryProvider).setFollowedArtists(
-                userId: session.userId,
-                fallbackName: session.displayName,
-                artists: selected,
-              );
+          unawaited(
+            ref
+                .read(userRepositoryProvider)
+                .setFollowedArtists(
+                  userId: session.userId,
+                  fallbackName: session.displayName,
+                  artists: selected,
+                ),
+          );
         },
       ),
     );

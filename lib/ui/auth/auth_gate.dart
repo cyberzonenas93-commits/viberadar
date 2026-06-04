@@ -360,30 +360,33 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       ),
       const SizedBox(height: 12),
 
-      // Divider
-      Row(
-        children: [
-          const Expanded(child: Divider(color: AppTheme.edge)),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Text(
-              'or',
-              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+      // Guest / anonymous — desktop only. On phones, pairing + AI require a
+      // real account (claimPairing rejects anonymous users), so a guest could
+      // enter the app but couldn't actually use it. Hide the option on mobile.
+      if (!isMobileForm) ...[
+        // Divider
+        Row(
+          children: [
+            const Expanded(child: Divider(color: AppTheme.edge)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text(
+                'or',
+                style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+              ),
             ),
-          ),
-          const Expanded(child: Divider(color: AppTheme.edge)),
-        ],
-      ),
-      const SizedBox(height: 12),
-
-      // Guest / anonymous
-      TextButton(
-        onPressed: _isLoading ? null : _signInAnonymously,
-        child: Text(
-          'Continue as Guest',
-          style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w600),
+            const Expanded(child: Divider(color: AppTheme.edge)),
+          ],
         ),
-      ),
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: _isLoading ? null : _signInAnonymously,
+          child: Text(
+            'Continue as Guest',
+            style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w600),
+          ),
+        ),
+      ],
 
       if (_error != null) ...[const SizedBox(height: 16), _errorBanner(theme)],
 

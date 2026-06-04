@@ -111,7 +111,9 @@ class MockUserRepository implements UserRepository {
     required String artistName,
   }) async {
     final profile = _getOrCreate(userId, fallbackName);
-    final current = profile.followedArtists.where((a) => a != artistName).toList();
+    final current = profile.followedArtists
+        .where((a) => a != artistName)
+        .toList();
     _emit(profile.copyWith(followedArtists: current));
   }
 
@@ -130,6 +132,8 @@ class MockUserRepository implements UserRepository {
     required String userId,
     required String fallbackName,
   }) async* {
+    // Mock streams live for the app/demo container lifetime.
+    // ignore: close_sinks
     final controller = _controllers.putIfAbsent(
       userId,
       () => StreamController<UserProfile>.broadcast(),
@@ -240,10 +244,9 @@ class FirestoreUserRepository implements UserRepository {
     required String artistName,
   }) async {
     final docRef = _firestore.collection('users').doc(userId);
-    await docRef.set(
-      {'followed_artists': FieldValue.arrayUnion([artistName])},
-      SetOptions(merge: true),
-    );
+    await docRef.set({
+      'followed_artists': FieldValue.arrayUnion([artistName]),
+    }, SetOptions(merge: true));
   }
 
   @override
@@ -253,10 +256,9 @@ class FirestoreUserRepository implements UserRepository {
     required String artistName,
   }) async {
     final docRef = _firestore.collection('users').doc(userId);
-    await docRef.set(
-      {'followed_artists': FieldValue.arrayRemove([artistName])},
-      SetOptions(merge: true),
-    );
+    await docRef.set({
+      'followed_artists': FieldValue.arrayRemove([artistName]),
+    }, SetOptions(merge: true));
   }
 
   @override
@@ -266,10 +268,7 @@ class FirestoreUserRepository implements UserRepository {
     required List<String> artists,
   }) async {
     final docRef = _firestore.collection('users').doc(userId);
-    await docRef.set(
-      {'followed_artists': artists},
-      SetOptions(merge: true),
-    );
+    await docRef.set({'followed_artists': artists}, SetOptions(merge: true));
   }
 
   @override

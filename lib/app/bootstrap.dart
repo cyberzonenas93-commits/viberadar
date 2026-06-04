@@ -105,7 +105,7 @@ class AppBootstrapResult {
   }
 
   final String statusMessage;
-  final List providerOverrides;
+  final List<Object?> providerOverrides;
 
   /// True when Firebase init failed and the app fell back to demo/mock data,
   /// so the UI can clearly signal that the data on screen is not live.

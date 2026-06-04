@@ -110,9 +110,9 @@ class _TrendingRow extends ConsumerWidget {
             actions: actions,
             onDone: (name) {
               Navigator.of(sheetCtx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Added to $name')),
-              );
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text('Added to $name')));
             },
           ),
         );
@@ -187,7 +187,8 @@ class _AddToSetlistSheet extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(controller.text.trim()),
+            onPressed: () =>
+                Navigator.of(dialogCtx).pop(controller.text.trim()),
             child: const Text('Create'),
           ),
         ],
@@ -196,19 +197,7 @@ class _AddToSetlistSheet extends StatelessWidget {
 
     if (name == null || name.isEmpty) return;
 
-    await actions.create(name);
-    // Retrieve the just-created crate to add the track to it.
-    // We need to read the updated setlists. Since we're in a plain
-    // StatelessWidget here, we call create then use a fresh read via a
-    // callback approach: pass the name back and let the sheet handle it.
-    // But we don't have a ref here — instead we call addTrack on a
-    // constructed temporary crate using the provider. To keep it simple and
-    // avoid threading ref into this widget, we handle it inline by calling
-    // create (which persists) and then calling onDone — the snackbar message
-    // is sufficient UX feedback; the track will be added as the newly
-    // created crate is returned. We need ref to read the new crate id.
-    //
-    // The cleanest pattern: expose a callback that takes the track id and name.
+    await actions.createWithTrack(name, track.id);
     onDone(name);
   }
 }
@@ -271,9 +260,9 @@ class _BpmChip extends StatelessWidget {
       child: Text(
         '${formatBpm(bpm)} BPM',
         style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: Colors.white70,
-              fontWeight: FontWeight.w500,
-            ),
+          color: Colors.white70,
+          fontWeight: FontWeight.w500,
+        ),
       ),
     );
   }

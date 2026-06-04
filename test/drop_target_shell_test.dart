@@ -5,8 +5,6 @@ import 'package:viberadar/ui/widgets/drop_target_shell.dart';
 
 void main() {
   group('classifyDroppedPath — pure function', () {
-    FileSystemEntityType fakeExists(FileSystemEntityType t) => t;
-
     test('.mp3 classifies as audioFile', () {
       expect(
         classifyDroppedPath(

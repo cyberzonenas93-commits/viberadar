@@ -52,14 +52,12 @@ class _SetBuilderView extends ConsumerStatefulWidget {
 }
 
 class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
-  final _greatestOf = GreatestOfService();
   final _platformSearch = PlatformSearchService();
   final List<_SetSlot> _slots = [
     _SetSlot(genre: 'Afrobeats', mode: _SortMode.trending, count: 30),
     _SetSlot(genre: 'R&B', mode: _SortMode.hottest, count: 20),
     _SetSlot(genre: 'Hip-Hop', mode: _SortMode.trending, count: 20),
   ];
-  List<Track> _generated = const [];
   List<AiCrateTrack> _platformTracks = const [];
   bool _searchingPlatforms = false;
   String _crateName = 'My Set';
@@ -149,13 +147,6 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
                 const SizedBox(width: 8),
                 FilledButton.tonalIcon(
                   onPressed: () {
-                    // Build AI prompt from current slot config
-                    final slotDesc = _slots
-                        .map(
-                          (s) =>
-                              '${s.count} ${s.modeLabel} ${s.genre}${s.artist.isNotEmpty ? ' by ${s.artist}' : ''}',
-                        )
-                        .join(', ');
                     ref
                         .read(workspaceControllerProvider.notifier)
                         .setSection(AppSection.aiCopilot);
@@ -704,11 +695,10 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
   void _regenerate() {
     // Go straight to platforms — don't use Firestore
     setState(() {
-      _generated = [];
       _platformTracks = [];
       _searchingPlatforms = true;
     });
-    _buildFromPlatforms();
+    unawaited(_buildFromPlatforms());
   }
 
   Future<void> _buildFromPlatforms() async {
@@ -790,7 +780,12 @@ class _SetBuilderViewState extends ConsumerState<_SetBuilderView> {
           added++;
         }
       } catch (e, st) {
-        developer.log('Platform search slot failed', name: 'VibeShell', error: e, stackTrace: st);
+        developer.log(
+          'Platform search slot failed',
+          name: 'VibeShell',
+          error: e,
+          stackTrace: st,
+        );
       }
 
       // Update UI after each slot completes

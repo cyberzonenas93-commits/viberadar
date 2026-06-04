@@ -1,0 +1,108 @@
+# Release workflow — builds + signs + notarizes the macOS app, then uploads
+# the DMG as a workflow artifact and (when triggered by a v*.*.* tag) attaches
+# it to a GitHub Release.
+#
+# Required repository secrets (Settings → Secrets and variables → Actions):
+#   APPLE_CERTIFICATE_BASE64         — base64-encoded .p12 of Developer ID Application cert
+#   APPLE_CERTIFICATE_PASSWORD       — password for the .p12
+#   APPLE_DEVELOPER_IDENTITY         — e.g. "Developer ID Application: Jane Doe (TEAMID)"
+#   APPLE_ID                         — Apple Developer account email
+#   APPLE_TEAM_ID                    — 10-char Apple Team ID
+#   APPLE_APP_SPECIFIC_PASSWORD      — app-specific password for notarytool
+#   KEYCHAIN_PASSWORD                — any string; used only to open the temp keychain
+#
+# Manual run:    Actions → Release → Run workflow
+# Tag-triggered: git tag v1.2.3 && git push origin v1.2.3  (attaches DMG to the release)
+
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run tests (guard the release)
+        run: flutter test
+
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          CERT_PATH="$RUNNER_TEMP/cert.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain-db"
+
+          echo "$CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          security import "$CERT_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k "$KEYCHAIN_PATH"
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Put the temp keychain first in the search list so codesign sees it.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" \
+            $(security list-keychains -d user | sed -e 's/\"//g')
+
+          rm -f "$CERT_PATH"
+
+      - name: Build, sign, notarize
+        env:
+          APPLE_DEVELOPER_IDENTITY: ${{ secrets.APPLE_DEVELOPER_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          ARTIFACT_BASENAME: VibeRadar
+        run: bash scripts/release_macos.sh
+
+      - name: Upload DMG as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VibeRadar-macOS-DMG
+          path: build/macos/dist/VibeRadar.dmg
+          if-no-files-found: error
+
+      - name: Attach DMG to GitHub Release (tag only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/macos/dist/VibeRadar.dmg
+          draft: false
+          generate_release_notes: true
+
+      - name: Cleanup temp keychain
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" || true

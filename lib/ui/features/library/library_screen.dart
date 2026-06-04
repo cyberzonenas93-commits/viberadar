@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,21 +29,20 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
     final genres = <String>{'All', ...lib.tracks.map((t) => t.genre)}.toList();
     // Compute available years from library
-    final availableYears = lib.tracks
-        .map((t) => t.releaseYear)
-        .whereType<int>()
-        .toSet()
-        .toList()
-      ..sort();
+    final availableYears =
+        lib.tracks.map((t) => t.releaseYear).whereType<int>().toSet().toList()
+          ..sort();
 
     final displayTracks = lib.tracks.where((t) {
       final q = _searchQuery.toLowerCase();
-      final matchSearch = q.isEmpty ||
+      final matchSearch =
+          q.isEmpty ||
           t.title.toLowerCase().contains(q) ||
           t.artist.toLowerCase().contains(q);
       final matchGenre = _filterGenre == 'All' || t.genre == _filterGenre;
       final ry = t.releaseYear;
-      final matchYear = (_yearFrom == null || (ry != null && ry >= _yearFrom!)) &&
+      final matchYear =
+          (_yearFrom == null || (ry != null && ry >= _yearFrom!)) &&
           (_yearTo == null || (ry != null && ry <= _yearTo!));
       return matchSearch && matchGenre && matchYear;
     }).toList();
@@ -51,71 +52,100 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 28, 28, 0),
-          child: Row(children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('My Library',
-                      style: theme.textTheme.headlineMedium
-                          ?.copyWith(color: Colors.white)),
-                  const SizedBox(height: 4),
-                  Text(
-                    lib.hasLibrary
-                        ? '${lib.tracks.length} tracks  •  '
-                            '${lib.duplicateCount} duplicates found'
-                        : kIsWeb
-                            ? 'Import audio files from your browser to index tracks'
-                            : 'Scan your local music folder to index tracks',
-                    style:
-                        const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                  ),
-                ],
-              ),
-            ),
-            if (lib.isScanning)
-              _ScanProgressChip(
-                  scanned: lib.scanProgress, total: lib.scanTotal)
-            else
-              Row(mainAxisSize: MainAxisSize.min, children: [
-                if (lib.hasLibrary) ...[
-                  ElevatedButton.icon(
-                    onPressed: () => showCueCrateSheet(
-                      context: context,
-                      ref: ref,
-                      tracks: lib.tracks,
-                      crateName: 'My Library',
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'My Library',
+                      style: theme.textTheme.headlineMedium?.copyWith(
+                        color: Colors.white,
+                      ),
                     ),
-                    icon: const Icon(Icons.piano_rounded, size: 16),
-                    label: const Text('Auto Cue All'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.cyan.withValues(alpha: 0.18),
-                      foregroundColor: AppTheme.cyan,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8)),
+                    const SizedBox(height: 4),
+                    Text(
+                      lib.hasLibrary
+                          ? '${lib.tracks.length} tracks  •  '
+                                '${lib.duplicateCount} duplicates found'
+                          : kIsWeb
+                          ? 'Import audio files from your browser to index tracks'
+                          : 'Scan your local music folder to index tracks',
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 13,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-                ElevatedButton.icon(
-                  onPressed: _pickAndScan,
-                  icon: const Icon(Icons.folder_open_rounded, size: 16),
-                  label: Text(
-                    kIsWeb
-                        ? (lib.hasLibrary ? 'Import More Files' : 'Select Files')
-                        : (lib.hasLibrary ? 'Rescan Folder' : 'Select Folder'),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.violet,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
+                  ],
                 ),
-              ]),
-          ]),
+              ),
+              if (lib.isScanning)
+                _ScanProgressChip(
+                  scanned: lib.scanProgress,
+                  total: lib.scanTotal,
+                )
+              else
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (lib.hasLibrary) ...[
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          unawaited(
+                            showCueCrateSheet(
+                              context: context,
+                              ref: ref,
+                              tracks: lib.tracks,
+                              crateName: 'My Library',
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.piano_rounded, size: 16),
+                        label: const Text('Auto Cue All'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.cyan.withValues(
+                            alpha: 0.18,
+                          ),
+                          foregroundColor: AppTheme.cyan,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    ElevatedButton.icon(
+                      onPressed: _pickAndScan,
+                      icon: const Icon(Icons.folder_open_rounded, size: 16),
+                      label: Text(
+                        kIsWeb
+                            ? (lib.hasLibrary
+                                  ? 'Import More Files'
+                                  : 'Select Files')
+                            : (lib.hasLibrary
+                                  ? 'Rescan Folder'
+                                  : 'Select Folder'),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.violet,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ),
         // ── Error / empty states ───────────────────────────────────────────────
         if (lib.isLoading)
@@ -134,72 +164,86 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         else ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(28, 16, 28, 0),
-            child: Row(children: [
-              Expanded(
-                child: TextField(
-                  onChanged: (v) => setState(() => _searchQuery = v),
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                  decoration: InputDecoration(
-                    hintText: 'Search tracks, artists…',
-                    hintStyle: const TextStyle(color: AppTheme.textSecondary),
-                    prefixIcon: const Icon(Icons.search,
-                        color: AppTheme.textSecondary, size: 18),
-                    filled: true,
-                    fillColor: AppTheme.panel,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppTheme.edge),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: AppTheme.edge),
+                    decoration: InputDecoration(
+                      hintText: 'Search tracks, artists…',
+                      hintStyle: const TextStyle(color: AppTheme.textSecondary),
+                      prefixIcon: const Icon(
+                        Icons.search,
+                        color: AppTheme.textSecondary,
+                        size: 18,
+                      ),
+                      filled: true,
+                      fillColor: AppTheme.panel,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppTheme.edge),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: AppTheme.edge),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              DropdownButton<String>(
-                value: _filterGenre,
-                dropdownColor: AppTheme.panel,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
-                underline: const SizedBox(),
-                items: genres
-                    .map((g) =>
-                        DropdownMenuItem(value: g, child: Text(g)))
-                    .toList(),
-                onChanged: (v) =>
-                    setState(() => _filterGenre = v ?? 'All'),
-              ),
-              if (availableYears.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                _YearDropdown(
-                  label: 'From',
-                  value: _yearFrom,
-                  years: availableYears,
-                  onChanged: (y) => setState(() => _yearFrom = y),
+                const SizedBox(width: 12),
+                DropdownButton<String>(
+                  value: _filterGenre,
+                  dropdownColor: AppTheme.panel,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                  ),
+                  underline: const SizedBox(),
+                  items: genres
+                      .map((g) => DropdownMenuItem(value: g, child: Text(g)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _filterGenre = v ?? 'All'),
                 ),
-                const SizedBox(width: 6),
-                _YearDropdown(
-                  label: 'To',
-                  value: _yearTo,
-                  years: availableYears,
-                  onChanged: (y) => setState(() => _yearTo = y),
-                ),
-                if (_yearFrom != null || _yearTo != null) ...[
+                if (availableYears.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  _YearDropdown(
+                    label: 'From',
+                    value: _yearFrom,
+                    years: availableYears,
+                    onChanged: (y) => setState(() => _yearFrom = y),
+                  ),
                   const SizedBox(width: 6),
-                  GestureDetector(
-                    onTap: () => setState(() {
-                      _yearFrom = null;
-                      _yearTo = null;
-                    }),
-                    child: const Icon(Icons.close,
-                        color: AppTheme.textSecondary, size: 16),
+                  _YearDropdown(
+                    label: 'To',
+                    value: _yearTo,
+                    years: availableYears,
+                    onChanged: (y) => setState(() => _yearTo = y),
                   ),
+                  if (_yearFrom != null || _yearTo != null) ...[
+                    const SizedBox(width: 6),
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _yearFrom = null;
+                        _yearTo = null;
+                      }),
+                      child: const Icon(
+                        Icons.close,
+                        color: AppTheme.textSecondary,
+                        size: 16,
+                      ),
+                    ),
+                  ],
                 ],
               ],
-            ]),
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -208,8 +252,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const CircularProgressIndicator(
-                            color: AppTheme.cyan),
+                        const CircularProgressIndicator(color: AppTheme.cyan),
                         const SizedBox(height: 16),
                         Text(
                           'Scanning… ${lib.scanProgress} / ${lib.scanTotal}',
@@ -219,8 +262,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                     ),
                   )
                 : ListView.builder(
-                    padding:
-                        const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                    padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
                     itemCount: displayTracks.length,
                     itemBuilder: (ctx, i) => _TrackRow(
                       track: displayTracks[i],
@@ -249,7 +291,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
         withData: true,
       );
       if (result != null && mounted) {
-        await ref.read(libraryProvider.notifier).importPickedFiles(result.files);
+        await ref
+            .read(libraryProvider.notifier)
+            .importPickedFiles(result.files);
       }
       return;
     }
@@ -258,7 +302,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       dialogTitle: 'Select your music folder',
     );
     if (result != null && mounted) {
-      ref.read(libraryProvider.notifier).scanDirectory(result);
+      unawaited(ref.read(libraryProvider.notifier).scanDirectory(result));
     }
   }
 }
@@ -269,45 +313,59 @@ class _EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        Container(
-          width: 96,
-          height: 96,
-          decoration: BoxDecoration(
-            color: AppTheme.violet.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(24),
-            border:
-                Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            decoration: BoxDecoration(
+              color: AppTheme.violet.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
+            ),
+            child: const Icon(
+              Icons.folder_rounded,
+              size: 48,
+              color: AppTheme.violet,
+            ),
           ),
-          child: const Icon(Icons.folder_rounded,
-              size: 48, color: AppTheme.violet),
-        ),
-        const SizedBox(height: 24),
-        const Text('No library scanned yet',
+          const SizedBox(height: 24),
+          const Text(
+            'No library scanned yet',
             style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 18)),
-        const SizedBox(height: 8),
-        Text(
-          kIsWeb
-              ? 'Pick audio files from your browser to start.'
-              : 'Pick a folder with your music files to start.',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-        ),
-        const SizedBox(height: 20),
-        const Wrap(spacing: 16, children: [
-          _InfoChip(
-              icon: Icons.audio_file_rounded,
-              label: 'MP3, FLAC, WAV, AAC, M4A'),
-          _InfoChip(
-              icon: Icons.fingerprint_rounded,
-              label: 'BPM, Key, Duration'),
-          _InfoChip(
-              icon: Icons.content_copy_rounded,
-              label: 'Auto duplicate detection'),
-        ]),
-      ]),
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w600,
+              fontSize: 18,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            kIsWeb
+                ? 'Pick audio files from your browser to start.'
+                : 'Pick a folder with your music files to start.',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          const Wrap(
+            spacing: 16,
+            children: [
+              _InfoChip(
+                icon: Icons.audio_file_rounded,
+                label: 'MP3, FLAC, WAV, AAC, M4A',
+              ),
+              _InfoChip(
+                icon: Icons.fingerprint_rounded,
+                label: 'BPM, Key, Duration',
+              ),
+              _InfoChip(
+                icon: Icons.content_copy_rounded,
+                label: 'Auto duplicate detection',
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }
@@ -327,13 +385,17 @@ class _InfoChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.edge),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(icon, color: AppTheme.cyan, size: 14),
-        const SizedBox(width: 8),
-        Text(label,
-            style:
-                const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppTheme.cyan, size: 14),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -341,33 +403,34 @@ class _InfoChip extends StatelessWidget {
 class _ScanProgressChip extends StatelessWidget {
   final int scanned;
   final int total;
-  const _ScanProgressChip(
-      {required this.scanned, required this.total});
+  const _ScanProgressChip({required this.scanned, required this.total});
 
   @override
   Widget build(BuildContext context) {
     final pct = total > 0 ? scanned / total : 0.0;
-    return Row(children: [
-      SizedBox(
-        width: 120,
-        child: LinearProgressIndicator(
-          value: pct,
-          backgroundColor: AppTheme.edge,
-          valueColor:
-              const AlwaysStoppedAnimation<Color>(AppTheme.cyan),
+    return Row(
+      children: [
+        SizedBox(
+          width: 120,
+          child: LinearProgressIndicator(
+            value: pct,
+            backgroundColor: AppTheme.edge,
+            valueColor: const AlwaysStoppedAnimation<Color>(AppTheme.cyan),
+          ),
         ),
-      ),
-      const SizedBox(width: 10),
-      Text('$scanned / $total',
-          style: const TextStyle(
-              color: AppTheme.textSecondary, fontSize: 12)),
-    ]);
+        const SizedBox(width: 10),
+        Text(
+          '$scanned / $total',
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+        ),
+      ],
+    );
   }
 }
 
 class _TrackRow extends StatelessWidget {
-  final LibraryTrack  track;
-  final VoidCallback  onDelete;
+  final LibraryTrack track;
+  final VoidCallback onDelete;
   final VoidCallback? onGenerateCues;
   const _TrackRow({
     required this.track,
@@ -379,77 +442,89 @@ class _TrackRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
-      padding:
-          const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.panel,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.edge),
       ),
-      child: Row(children: [
-        Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: AppTheme.violet.withValues(alpha: 0.2),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Text(
-            track.fileExtension.replaceFirst('.', '').toUpperCase(),
-            style: const TextStyle(
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.violet.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              track.fileExtension.replaceFirst('.', '').toUpperCase(),
+              style: const TextStyle(
                 color: AppTheme.violet,
                 fontSize: 10,
-                fontWeight: FontWeight.w700),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          flex: 3,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(track.title,
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  track.title,
                   style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500),
-                  overflow: TextOverflow.ellipsis),
-              Text(track.artist,
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  track.artist,
                   style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 11),
-                  overflow: TextOverflow.ellipsis),
-            ],
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
-        ),
-        _MetaChip(label: '${formatBpm(track.bpm)} BPM'),
-        const SizedBox(width: 8),
-        _MetaChip(label: track.key, color: AppTheme.cyan),
-        const SizedBox(width: 8),
-        _MetaChip(label: track.genre),
-        const SizedBox(width: 8),
-        Text(track.durationFormatted,
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 11)),
-        const SizedBox(width: 8),
-        Text(track.fileSizeFormatted,
-            style: const TextStyle(
-                color: AppTheme.textSecondary, fontSize: 11)),
-        const SizedBox(width: 8),
-        InkWell(
-          onTap: onGenerateCues,
-          child: const Tooltip(
-            message: 'Generate Cue Points',
-            child: Icon(Icons.piano_rounded,
-                color: AppTheme.cyan, size: 16),
+          _MetaChip(label: '${formatBpm(track.bpm)} BPM'),
+          const SizedBox(width: 8),
+          _MetaChip(label: track.key, color: AppTheme.cyan),
+          const SizedBox(width: 8),
+          _MetaChip(label: track.genre),
+          const SizedBox(width: 8),
+          Text(
+            track.durationFormatted,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
           ),
-        ),
-        const SizedBox(width: 8),
-        InkWell(
-          onTap: onDelete,
-          child: const Icon(Icons.delete_outline_rounded,
-              color: AppTheme.textSecondary, size: 16),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Text(
+            track.fileSizeFormatted,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: onGenerateCues,
+            child: const Tooltip(
+              message: 'Generate Cue Points',
+              child: Icon(Icons.piano_rounded, color: AppTheme.cyan, size: 16),
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            onTap: onDelete,
+            child: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppTheme.textSecondary,
+              size: 16,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -470,39 +545,48 @@ class _ErrorState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              color: AppTheme.pink.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppTheme.pink.withValues(alpha: 0.3)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppTheme.pink.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.pink.withValues(alpha: 0.3)),
+              ),
+              child: Icon(
+                _isPermission
+                    ? Icons.lock_outline_rounded
+                    : Icons.error_outline_rounded,
+                size: 48,
+                color: AppTheme.pink,
+              ),
             ),
-            child: Icon(
+            const SizedBox(height: 24),
+            Text(
+              _isPermission ? 'Permission denied' : 'Scan failed',
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
               _isPermission
-                  ? Icons.lock_outline_rounded
-                  : Icons.error_outline_rounded,
-              size: 48,
-              color: AppTheme.pink,
+                  ? 'VibeRadar doesn\'t have access to that folder.\n'
+                        'Grant Full Disk Access in System Settings → Privacy & Security.'
+                  : message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            _isPermission ? 'Permission denied' : 'Scan failed',
-            style: const TextStyle(
-                color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 18),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _isPermission
-                ? 'VibeRadar doesn\'t have access to that folder.\n'
-                    'Grant Full Disk Access in System Settings → Privacy & Security.'
-                : message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-        ]),
+          ],
+        ),
       ),
     );
   }
@@ -519,31 +603,45 @@ class _ZeroFilesState extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(
-            width: 96,
-            height: 96,
-            decoration: BoxDecoration(
-              color: AppTheme.violet.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 96,
+              height: 96,
+              decoration: BoxDecoration(
+                color: AppTheme.violet.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppTheme.violet.withValues(alpha: 0.3),
+                ),
+              ),
+              child: const Icon(
+                Icons.search_off_rounded,
+                size: 48,
+                color: AppTheme.violet,
+              ),
             ),
-            child: const Icon(Icons.search_off_rounded,
-                size: 48, color: AppTheme.violet),
-          ),
-          const SizedBox(height: 24),
-          const Text('No audio files found',
+            const SizedBox(height: 24),
+            const Text(
+              'No audio files found',
               style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 18)),
-          const SizedBox(height: 8),
-          Text(
-            'Scanned: $path\n\nNo MP3, FLAC, WAV, AAC, M4A, OGG or AIFF files found.\nTry selecting a different folder.',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-          ),
-        ]),
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 18,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Scanned: $path\n\nNo MP3, FLAC, WAV, AAC, M4A, OGG or AIFF files found.\nTry selecting a different folder.',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -573,30 +671,34 @@ class _YearDropdown extends StatelessWidget {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppTheme.edge),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text('$label: ',
-            style: const TextStyle(
-                color: AppTheme.textTertiary, fontSize: 11)),
-        DropdownButtonHideUnderline(
-          child: DropdownButton<int?>(
-            value: value,
-            isDense: true,
-            dropdownColor: AppTheme.panel,
-            style: const TextStyle(
-                color: AppTheme.textPrimary, fontSize: 12),
-            hint: const Text('Any',
-                style: TextStyle(
-                    color: AppTheme.textTertiary, fontSize: 11)),
-            items: [
-              const DropdownMenuItem<int?>(
-                  value: null, child: Text('Any')),
-              ...years.map((y) =>
-                  DropdownMenuItem<int?>(value: y, child: Text('$y'))),
-            ],
-            onChanged: onChanged,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
           ),
-        ),
-      ]),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<int?>(
+              value: value,
+              isDense: true,
+              dropdownColor: AppTheme.panel,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+              hint: const Text(
+                'Any',
+                style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+              ),
+              items: [
+                const DropdownMenuItem<int?>(value: null, child: Text('Any')),
+                ...years.map(
+                  (y) => DropdownMenuItem<int?>(value: y, child: Text('$y')),
+                ),
+              ],
+              onChanged: onChanged,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -604,25 +706,25 @@ class _YearDropdown extends StatelessWidget {
 class _MetaChip extends StatelessWidget {
   final String label;
   final Color color;
-  const _MetaChip(
-      {required this.label,
-      this.color = AppTheme.textSecondary});
+  const _MetaChip({required this.label, this.color = AppTheme.textSecondary});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(4),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Text(label,
-          style: TextStyle(
-              color: color,
-              fontSize: 10,
-              fontWeight: FontWeight.w600)),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 }

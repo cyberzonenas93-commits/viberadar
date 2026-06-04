@@ -31,46 +31,6 @@ import 'package:viberadar/services/apple_music_artist_service.dart';
 import 'package:viberadar/services/youtube_search_service.dart';
 
 // ---------------------------------------------------------------------------
-// Spotify track parsing helpers
-//
-// We expose the parse logic as testable static helpers by calling internal
-// methods through a thin shim that uses the DI constructor.
-// ---------------------------------------------------------------------------
-
-/// Creates a minimal Spotify track JSON item matching the shape returned by
-/// the Spotify API (and therefore by the spotifyProxy Cloud Function).
-Map<String, dynamic> _spotifyTrackJson({
-  String id = 'track1',
-  String name = 'Test Track',
-  String artist = 'Test Artist',
-  int durationMs = 180000,
-  int popularity = 80,
-  int trackNumber = 1,
-  String albumName = 'Test Album',
-  String releaseDate = '2024-01-01',
-  String artUrl = 'https://example.com/art.jpg',
-  String spotifyUrl = 'https://open.spotify.com/track/track1',
-}) =>
-    {
-      'id': id,
-      'name': name,
-      'artists': [
-        {'name': artist}
-      ],
-      'duration_ms': durationMs,
-      'external_urls': {'spotify': spotifyUrl},
-      'album': {
-        'name': albumName,
-        'images': [
-          {'url': artUrl}
-        ],
-        'release_date': releaseDate,
-      },
-      'popularity': popularity,
-      'track_number': trackNumber,
-    };
-
-// ---------------------------------------------------------------------------
 // SpotifyArtistService — response parsing
 // ---------------------------------------------------------------------------
 
@@ -163,12 +123,12 @@ void main() {
           'artistName': 'SZA',
           'artwork': {'url': 'https://example.com/{w}x{h}.jpg'},
           'previews': [
-            {'url': 'https://example.com/preview.m4a'}
+            {'url': 'https://example.com/preview.m4a'},
           ],
           'url': 'https://music.apple.com/us/album/1',
           'durationInMillis': 243000,
           'releaseDate': '2020-12-01',
-        }
+        },
       };
 
       final track = AppleMusicTrack.fromJson(json);
@@ -184,24 +144,26 @@ void main() {
       expect(track.releaseDate, equals('2020-12-01'));
     });
 
-    test('AppleMusicTrack.fromJson handles missing optional fields gracefully',
-        () {
-      final json = <String, dynamic>{
-        'id': 'am2',
-        'attributes': {
-          'name': 'Minimal Track',
-          'albumName': '',
-          'artistName': '',
-        }
-      };
+    test(
+      'AppleMusicTrack.fromJson handles missing optional fields gracefully',
+      () {
+        final json = <String, dynamic>{
+          'id': 'am2',
+          'attributes': {
+            'name': 'Minimal Track',
+            'albumName': '',
+            'artistName': '',
+          },
+        };
 
-      final track = AppleMusicTrack.fromJson(json);
+        final track = AppleMusicTrack.fromJson(json);
 
-      expect(track.id, equals('am2'));
-      expect(track.artworkUrl, isNull);
-      expect(track.previewUrl, isNull);
-      expect(track.durationMs, equals(0));
-    });
+        expect(track.id, equals('am2'));
+        expect(track.artworkUrl, isNull);
+        expect(track.previewUrl, isNull);
+        expect(track.durationMs, equals(0));
+      },
+    );
 
     test('AppleMusicAlbum.fromJson parses artwork url template', () {
       final json = {
@@ -211,7 +173,7 @@ void main() {
           'artwork': {'url': 'https://example.com/{w}x{h}bb.jpg'},
           'releaseDate': '2022-05-10',
           'trackCount': 12,
-        }
+        },
       };
 
       final album = AppleMusicAlbum.fromJson(json);
@@ -248,8 +210,7 @@ void main() {
       );
 
       expect(result.videoId, equals('abc'));
-      expect(result.youtubeUrl,
-          equals('https://www.youtube.com/watch?v=abc'));
+      expect(result.youtubeUrl, equals('https://www.youtube.com/watch?v=abc'));
     });
   });
 
@@ -331,8 +292,11 @@ void main() {
         final allowed = allowedPrefixes.any(
           (prefix) => path == prefix || path.startsWith('$prefix/'),
         );
-        expect(allowed, isTrue,
-            reason: 'Path "$path" must be allowed by spotifyProxy');
+        expect(
+          allowed,
+          isTrue,
+          reason: 'Path "$path" must be allowed by spotifyProxy',
+        );
       }
     });
 
@@ -350,8 +314,11 @@ void main() {
         final allowed = allowedPrefixes.any(
           (prefix) => path == prefix || path.startsWith('$prefix/'),
         );
-        expect(allowed, isTrue,
-            reason: 'Apple path "$path" must start with "catalog"');
+        expect(
+          allowed,
+          isTrue,
+          reason: 'Apple path "$path" must start with "catalog"',
+        );
       }
     });
 

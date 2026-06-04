@@ -5,13 +5,11 @@ class _ShellTrackCard extends StatefulWidget {
   final Track track;
   final int rank;
   final int score;
-  final VoidCallback? onTap;
   final WidgetRef? ref;
   const _ShellTrackCard({
     required this.track,
     required this.rank,
     required this.score,
-    this.onTap,
     this.ref,
   });
 
@@ -40,17 +38,13 @@ class _ShellTrackCardState extends State<_ShellTrackCard> {
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
         onTapDown: (details) {
-          if (widget.onTap != null) {
-            widget.onTap!();
-          } else {
-            // Direct play — open the best platform URL
-            _openShellTrack(t);
-            // Also activate in detail panel if ref available
-            if (widget.ref != null) {
-              widget.ref!
-                  .read(workspaceControllerProvider.notifier)
-                  .activateTrack(t.id);
-            }
+          // Direct play — open the best platform URL
+          unawaited(_openShellTrack(t));
+          // Also activate in detail panel if ref available
+          if (widget.ref != null) {
+            widget.ref!
+                .read(workspaceControllerProvider.notifier)
+                .activateTrack(t.id);
           }
         },
         onSecondaryTapDown: (details) {

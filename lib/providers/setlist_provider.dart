@@ -10,8 +10,9 @@ final setlistsProvider = Provider<List<Crate>>((ref) {
   return [...crates]..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 });
 
-final setlistActionsProvider =
-    Provider<SetlistActions>((ref) => SetlistActions(ref));
+final setlistActionsProvider = Provider<SetlistActions>(
+  (ref) => SetlistActions(ref),
+);
 
 class SetlistActions {
   SetlistActions(this._ref);
@@ -20,7 +21,9 @@ class SetlistActions {
   Future<void> save(Crate crate) async {
     final session = _ref.read(sessionProvider).value;
     if (session == null || !session.isAuthenticated) return;
-    await _ref.read(userRepositoryProvider).saveCrate(
+    await _ref
+        .read(userRepositoryProvider)
+        .saveCrate(
           userId: session.userId,
           fallbackName: session.displayName,
           crate: crate.copyWith(updatedAt: DateTime.now()),
@@ -29,14 +32,30 @@ class SetlistActions {
 
   Future<void> create(String name) {
     final now = DateTime.now();
-    return save(Crate(
-      id: const Uuid().v4(),
-      name: name,
-      context: 'Open format',
-      trackIds: const [],
-      createdAt: now,
-      updatedAt: now,
-    ));
+    return save(
+      Crate(
+        id: const Uuid().v4(),
+        name: name,
+        context: 'Open format',
+        trackIds: const [],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
+  }
+
+  Future<void> createWithTrack(String name, String trackId) {
+    final now = DateTime.now();
+    return save(
+      Crate(
+        id: const Uuid().v4(),
+        name: name,
+        context: 'Open format',
+        trackIds: [trackId],
+        createdAt: now,
+        updatedAt: now,
+      ),
+    );
   }
 
   /// Appends [trackId] to [setlist] (no duplicates) and persists.

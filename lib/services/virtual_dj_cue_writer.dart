@@ -13,9 +13,9 @@ class VdjCueWriteResult {
     this.errorMessage,
   });
 
-  final bool   success;
+  final bool success;
   final String trackPath;
-  final int    cuesWritten;
+  final int cuesWritten;
   final String? backupPath;
   final String? errorMessage;
 }
@@ -25,7 +25,7 @@ class VdjCueWriteResult {
 /// SAFETY GUARANTEES:
 ///   1. Always backs up database.xml before any modification.
 ///   2. Parses existing XML preserving all unrelated entries.
-///   3. Only adds/updates <Poi> elements; never removes existing cues.
+///   3. Only adds/updates Poi elements; never removes existing cues.
 ///   4. Writes atomically (temp file → rename).
 ///   5. Validates vdjRoot before any I/O.
 ///   6. Never modifies the original audio files.
@@ -34,11 +34,11 @@ class VdjCueWriteResult {
 /// requires fixture-validated binary format analysis.
 class VirtualDjCueWriter {
   VirtualDjCueWriter({DjRootDetectionService? detection})
-      : _detection = detection ?? DjRootDetectionService();
+    : _detection = detection ?? DjRootDetectionService();
 
   final DjRootDetectionService _detection;
 
-  static const _dbFilename  = 'database.xml';
+  static const _dbFilename = 'database.xml';
   static const _backupSuffix = '.viberadar-backup';
 
   // ── Public API ─────────────────────────────────────────────────────────────
@@ -57,20 +57,26 @@ class VirtualDjCueWriter {
   }) async {
     if (!_detection.validateVirtualDjRoot(vdjRoot)) {
       return VdjCueWriteResult(
-        success: false, trackPath: localFilePath, cuesWritten: 0,
+        success: false,
+        trackPath: localFilePath,
+        cuesWritten: 0,
         errorMessage: 'Invalid VirtualDJ root: $vdjRoot',
       );
     }
     final pathError = _validateTrackPath(localFilePath);
     if (pathError != null) {
       return VdjCueWriteResult(
-        success: false, trackPath: localFilePath, cuesWritten: 0,
+        success: false,
+        trackPath: localFilePath,
+        cuesWritten: 0,
         errorMessage: pathError,
       );
     }
     if (cues.isEmpty) {
       return VdjCueWriteResult(
-        success: true, trackPath: localFilePath, cuesWritten: 0,
+        success: true,
+        trackPath: localFilePath,
+        cuesWritten: 0,
       );
     }
 
@@ -87,7 +93,9 @@ class VirtualDjCueWriter {
 
     if (dryRun) {
       return VdjCueWriteResult(
-        success: true, trackPath: localFilePath, cuesWritten: cues.length,
+        success: true,
+        trackPath: localFilePath,
+        cuesWritten: cues.length,
       );
     }
 
@@ -110,21 +118,24 @@ class VirtualDjCueWriter {
       }
       await tmpFile.delete().catchError((_) => File(''));
       return VdjCueWriteResult(
-        success: false, trackPath: localFilePath, cuesWritten: 0,
+        success: false,
+        trackPath: localFilePath,
+        cuesWritten: 0,
         errorMessage: 'Write failed: $e',
       );
     }
 
     return VdjCueWriteResult(
-      success: true, trackPath: localFilePath,
-      cuesWritten: cues.length, backupPath: backupPath,
+      success: true,
+      trackPath: localFilePath,
+      cuesWritten: cues.length,
+      backupPath: backupPath,
     );
   }
 
   // ── XML manipulation ───────────────────────────────────────────────────────
 
-  String _mergeCuesIntoXml(
-      String xml, String filePath, List<HotCue> cues) {
+  String _mergeCuesIntoXml(String xml, String filePath, List<HotCue> cues) {
     final escaped = _escAttr(filePath);
     // Pattern to find our Song entry (filepath match)
     final songPattern = RegExp(
@@ -145,12 +156,15 @@ class VirtualDjCueWriter {
 
       // Remove any existing Poi entries for our cue slots, then append
       final songBlock = xml.substring(startIdx, closeIdx);
-      final cleanBlock = _removeOurPoiSlots(songBlock, cues.map((c) => c.cueIndex).toSet());
+      final cleanBlock = _removeOurPoiSlots(
+        songBlock,
+        cues.map((c) => c.cueIndex).toSet(),
+      );
       return xml.substring(0, startIdx) +
-             cleanBlock +
-             poisXml +
-             closeTag +
-             xml.substring(closeIdx + closeTag.length);
+          cleanBlock +
+          poisXml +
+          closeTag +
+          xml.substring(closeIdx + closeTag.length);
     } else {
       // Song entry not found — inject a new one before </VirtualDJ_Database>
       final closeDb = '</VirtualDJ_Database>';
@@ -184,7 +198,7 @@ class VirtualDjCueWriter {
     return buf.toString();
   }
 
-  /// Remove only the <Poi> elements for cue slot numbers we are about to write.
+  /// Remove only the Poi elements for cue slot numbers we are about to write.
   String _removeOurPoiSlots(String songBlock, Set<int> slots) {
     var result = songBlock;
     for (final slot in slots) {
@@ -202,11 +216,11 @@ class VirtualDjCueWriter {
       '</VirtualDJ_Database>\n';
 
   String _escAttr(String v) => v
-      .replaceAll('&',  '&amp;')
-      .replaceAll('"',  '&quot;')
-      .replaceAll("'",  '&apos;')
-      .replaceAll('<',  '&lt;')
-      .replaceAll('>',  '&gt;');
+      .replaceAll('&', '&amp;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&apos;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;');
 
   // ── Batch write ────────────────────────────────────────────────────────────
 
@@ -218,10 +232,16 @@ class VirtualDjCueWriter {
     bool dryRun = false,
   }) async {
     if (!_detection.validateVirtualDjRoot(vdjRoot)) {
-      return cuesByFilePath.keys.map((p) => VdjCueWriteResult(
-        success: false, trackPath: p, cuesWritten: 0,
-        errorMessage: 'Invalid VirtualDJ root',
-      )).toList();
+      return cuesByFilePath.keys
+          .map(
+            (p) => VdjCueWriteResult(
+              success: false,
+              trackPath: p,
+              cuesWritten: 0,
+              errorMessage: 'Invalid VirtualDJ root',
+            ),
+          )
+          .toList();
     }
 
     // Pre-validate all track paths so we never write a partial batch with
@@ -244,7 +264,9 @@ class VirtualDjCueWriter {
     }
 
     final dbFile = File(p.join(vdjRoot, _dbFilename));
-    String xml = await dbFile.exists() ? await dbFile.readAsString() : _emptyDatabase();
+    String xml = await dbFile.exists()
+        ? await dbFile.readAsString()
+        : _emptyDatabase();
 
     String? backupPath;
     if (!dryRun && await dbFile.exists()) {
@@ -255,14 +277,24 @@ class VirtualDjCueWriter {
     final results = <VdjCueWriteResult>[];
     for (final entry in cuesByFilePath.entries) {
       if (entry.value.isEmpty) {
-        results.add(VdjCueWriteResult(
-          success: true, trackPath: entry.key, cuesWritten: 0));
+        results.add(
+          VdjCueWriteResult(
+            success: true,
+            trackPath: entry.key,
+            cuesWritten: 0,
+          ),
+        );
         continue;
       }
       xml = _mergeCuesIntoXml(xml, entry.key, entry.value);
-      results.add(VdjCueWriteResult(
-        success: true, trackPath: entry.key,
-        cuesWritten: entry.value.length, backupPath: backupPath));
+      results.add(
+        VdjCueWriteResult(
+          success: true,
+          trackPath: entry.key,
+          cuesWritten: entry.value.length,
+          backupPath: backupPath,
+        ),
+      );
     }
 
     if (!dryRun) {
@@ -273,9 +305,16 @@ class VirtualDjCueWriter {
       } catch (e) {
         if (backupPath != null) await File(backupPath).copy(dbFile.path);
         await tmp.delete().catchError((_) => File(''));
-        return cuesByFilePath.keys.map((fp) => VdjCueWriteResult(
-          success: false, trackPath: fp, cuesWritten: 0,
-          errorMessage: 'Batch write failed: $e')).toList();
+        return cuesByFilePath.keys
+            .map(
+              (fp) => VdjCueWriteResult(
+                success: false,
+                trackPath: fp,
+                cuesWritten: 0,
+                errorMessage: 'Batch write failed: $e',
+              ),
+            )
+            .toList();
       }
     }
     return results;
