@@ -177,6 +177,7 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                       style: theme.textTheme.headlineSmall?.copyWith(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -248,8 +249,9 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                     'Recommended For You',
                     style: TextStyle(
                       color: AppTheme.textPrimary,
-                      fontWeight: FontWeight.w700,
+                      fontWeight: FontWeight.w800,
                       fontSize: 16,
+                      letterSpacing: -0.3,
                     ),
                   ),
                 ],

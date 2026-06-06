@@ -28,10 +28,14 @@ class _ArtistCardState extends State<_ArtistCard> {
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          decoration: AppTheme.glass(
+            radius: 14,
+            border: _hovered
+                ? AppTheme.cyan.withValues(alpha: 0.32)
+                : AppTheme.hairline,
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+                : null,
           ),
           child: Column(
             children: [
@@ -40,29 +44,40 @@ class _ArtistCardState extends State<_ArtistCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: a.artworkUrl != null
                             ? CachedNetworkImage(
                                 imageUrl: a.artworkUrl!,
                                 fit: BoxFit.cover,
-                                errorWidget: (_, e, s) => _AvatarFallback(name: a.name, large: true),
+                                errorWidget: (_, e, s) =>
+                                    _AvatarFallback(name: a.name, large: true),
                               )
                             : _AvatarFallback(name: a.name, large: true),
                       ),
                     ),
                     // Track count badge
                     Positioned(
-                      top: 8, right: 8,
+                      top: 8,
+                      right: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '${a.trackCount} track${a.trackCount > 1 ? 's' : ''}',
-                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),
@@ -72,10 +87,16 @@ class _ArtistCardState extends State<_ArtistCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: const Center(
-                            child: Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 28),
+                            child: Icon(
+                              Icons.arrow_forward_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
                           ),
                         ),
                       ),
@@ -88,13 +109,39 @@ class _ArtistCardState extends State<_ArtistCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(a.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      a.name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 3),
                     Row(
                       children: [
-                        Flexible(child: Text(a.topGenre, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), overflow: TextOverflow.ellipsis, maxLines: 1)),
+                        Flexible(
+                          child: Text(
+                            a.topGenre,
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 10,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
                         const Spacer(),
-                        Text('${(a.avgTrendScore * 100).toInt()}', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 12)),
+                        Text(
+                          '${(a.avgTrendScore * 100).toInt()}',
+                          style: const TextStyle(
+                            color: AppTheme.cyan,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -122,20 +169,29 @@ class _SpotifyArtistCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.panel,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.edge),
-        ),
+        decoration: AppTheme.glass(radius: AppTheme.rLg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(16),
+                ),
                 child: result.imageUrl != null
-                    ? CachedNetworkImage(imageUrl: result.imageUrl!, fit: BoxFit.cover, width: double.infinity)
-                    : Container(color: AppTheme.panelRaised, child: const Icon(Icons.person_rounded, color: AppTheme.textTertiary, size: 48)),
+                    ? CachedNetworkImage(
+                        imageUrl: result.imageUrl!,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                      )
+                    : Container(
+                        color: AppTheme.panelRaised,
+                        child: const Icon(
+                          Icons.person_rounded,
+                          color: AppTheme.textTertiary,
+                          size: 48,
+                        ),
+                      ),
               ),
             ),
             Padding(
@@ -143,14 +199,44 @@ class _SpotifyArtistCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(result.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    result.name,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   if (result.genres.isNotEmpty)
-                    Text(result.genres.first, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      result.genres.first,
+                      style: const TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: const Color(0xFF1DB954).withValues(alpha: 0.15), borderRadius: BorderRadius.circular(4)),
-                    child: const Text('Spotify', style: TextStyle(color: Color(0xFF1DB954), fontSize: 9, fontWeight: FontWeight.w600)),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1DB954).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Spotify',
+                      style: TextStyle(
+                        color: Color(0xFF1DB954),
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -189,19 +275,27 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
         onTap: () async {
           if (t.spotifyUrl.isNotEmpty) {
             final uri = Uri.tryParse(t.spotifyUrl);
-            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           }
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: t.isTopTrack
-                  ? AppTheme.amber.withValues(alpha: _hovered ? 0.5 : 0.3)
-                  : AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
-            ),
+          decoration: AppTheme.glass(
+            radius: 14,
+            border: t.isTopTrack
+                ? AppTheme.amber.withValues(alpha: _hovered ? 0.5 : 0.32)
+                : (_hovered
+                      ? AppTheme.cyan.withValues(alpha: 0.32)
+                      : AppTheme.hairline),
+            glowShadow: _hovered
+                ? AppTheme.glow(
+                    t.isTopTrack ? AppTheme.amber : AppTheme.cyan,
+                    blur: 20,
+                    opacity: 0.10,
+                  )
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -210,23 +304,45 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: t.albumArt != null
-                            ? CachedNetworkImage(imageUrl: t.albumArt!, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                            ? CachedNetworkImage(
+                                imageUrl: t.albumArt!,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, e, s) =>
+                                    _SmallArtPlaceholder(),
+                              )
                             : Container(
                                 decoration: const BoxDecoration(
-                                  gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised]),
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.edge,
+                                      AppTheme.panelRaised,
+                                    ],
+                                  ),
                                 ),
-                                child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.music_note_rounded,
+                                    color: AppTheme.textTertiary,
+                                    size: 32,
+                                  ),
+                                ),
                               ),
                       ),
                     ),
                     if (t.isTopTrack)
                       Positioned(
-                        top: 8, left: 8,
+                        top: 8,
+                        left: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.amber.withValues(alpha: 0.9),
                             borderRadius: BorderRadius.circular(5),
@@ -234,23 +350,45 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.star_rounded, color: Colors.white, size: 10),
+                              Icon(
+                                Icons.star_rounded,
+                                color: Colors.white,
+                                size: 10,
+                              ),
                               SizedBox(width: 3),
-                              Text('TOP', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                              Text(
+                                'TOP',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
                     if (t.popularity > 0)
                       Positioned(
-                        top: 8, right: 8,
+                        top: 8,
+                        right: 8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.cyan.withValues(alpha: 0.9),
                             borderRadius: BorderRadius.circular(5),
                           ),
-                          child: Text('${t.popularity}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                          child: Text(
+                            '${t.popularity}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ),
                     if (_hovered)
@@ -258,16 +396,31 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: Center(
                             child: Container(
-                              width: 44, height: 44,
+                              width: 44,
+                              height: 44,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1DB954), shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: const Color(0xFF1DB954).withValues(alpha: 0.5), blurRadius: 16)],
+                                color: const Color(0xFF1DB954),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF1DB954,
+                                    ).withValues(alpha: 0.5),
+                                    blurRadius: 16,
+                                  ),
+                                ],
                               ),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -280,16 +433,45 @@ class _SpotifyTrackCardState extends State<_SpotifyTrackCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
-                    Text(t.albumName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.albumName,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 5),
                     Row(
                       children: [
-                        Text(t.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text(
+                          t.durationFormatted,
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 10,
+                          ),
+                        ),
                         const Spacer(),
                         if (t.releaseDate != null && t.releaseDate!.length >= 4)
-                          Text(t.releaseDate!.substring(0, 4), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                          Text(
+                            t.releaseDate!.substring(0, 4),
+                            style: const TextStyle(
+                              color: AppTheme.textTertiary,
+                              fontSize: 10,
+                            ),
+                          ),
                       ],
                     ),
                   ],
@@ -329,15 +511,21 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
           final url = _bestUrl(t);
           if (url != null) {
             final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           }
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          decoration: AppTheme.glass(
+            radius: 14,
+            border: _hovered
+                ? AppTheme.cyan.withValues(alpha: 0.32)
+                : AppTheme.hairline,
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,22 +534,56 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: t.artworkUrl.isNotEmpty
-                            ? CachedNetworkImage(imageUrl: t.artworkUrl, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                            ? CachedNetworkImage(
+                                imageUrl: t.artworkUrl,
+                                fit: BoxFit.cover,
+                                errorWidget: (_, e, s) =>
+                                    _SmallArtPlaceholder(),
+                              )
                             : Container(
-                                decoration: const BoxDecoration(gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised])),
-                                child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
+                                decoration: const BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.edge,
+                                      AppTheme.panelRaised,
+                                    ],
+                                  ),
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.music_note_rounded,
+                                    color: AppTheme.textTertiary,
+                                    size: 32,
+                                  ),
+                                ),
                               ),
                       ),
                     ),
                     Positioned(
-                      top: 8, right: 8,
+                      top: 8,
+                      right: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.9), borderRadius: BorderRadius.circular(5)),
-                        child: Text('$score', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.cyan.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                        child: Text(
+                          '$score',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                     if (_hovered)
@@ -369,16 +591,29 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: Center(
                             child: Container(
-                              width: 44, height: 44,
+                              width: 44,
+                              height: 44,
                               decoration: BoxDecoration(
-                                color: AppTheme.cyan, shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16)],
+                                color: AppTheme.cyan,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppTheme.cyan.withValues(alpha: 0.5),
+                                    blurRadius: 16,
+                                  ),
+                                ],
                               ),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -391,21 +626,60 @@ class _RadarTrackCardState extends State<_RadarTrackCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.title,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
-                    Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.artist,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 5),
                     Row(
                       children: [
-                        Text(formatBpm(t.bpm), style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text(
+                          formatBpm(t.bpm),
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 10,
+                          ),
+                        ),
                         const SizedBox(width: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                          decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(3)),
-                          child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.edge.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            t.keySignature,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                         const Spacer(),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        SourceBadges(
+                          sources: t.effectiveSources,
+                          compact: true,
+                        ),
                       ],
                     ),
                   ],
@@ -452,9 +726,13 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
         decoration: BoxDecoration(
           color: widget.isSelected
               ? AppTheme.violet.withValues(alpha: 0.08)
-              : _hovered ? AppTheme.panelRaised : Colors.transparent,
+              : _hovered
+              ? AppTheme.panelRaised
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
-          border: widget.isSelected ? Border.all(color: AppTheme.violet.withValues(alpha: 0.3)) : null,
+          border: widget.isSelected
+              ? Border.all(color: AppTheme.violet.withValues(alpha: 0.3))
+              : null,
         ),
         child: Row(
           children: [
@@ -462,26 +740,51 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
             GestureDetector(
               onTap: widget.onToggleSelect,
               child: Container(
-                width: 22, height: 22,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: widget.isSelected ? AppTheme.violet : Colors.transparent,
+                  color: widget.isSelected
+                      ? AppTheme.violet
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: widget.isSelected ? AppTheme.violet : AppTheme.edge, width: 1.5),
+                  border: Border.all(
+                    color: widget.isSelected ? AppTheme.violet : AppTheme.edge,
+                    width: 1.5,
+                  ),
                 ),
-                child: widget.isSelected ? const Icon(Icons.check_rounded, color: Colors.white, size: 14) : null,
+                child: widget.isSelected
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      )
+                    : null,
               ),
             ),
             const SizedBox(width: 12),
             // Rank
             SizedBox(
               width: 28,
-              child: Text('${widget.rank}', style: TextStyle(color: t.isTopTrack ? AppTheme.amber : AppTheme.textTertiary, fontWeight: t.isTopTrack ? FontWeight.w700 : FontWeight.w500, fontSize: 12)),
+              child: Text(
+                '${widget.rank}',
+                style: TextStyle(
+                  color: t.isTopTrack ? AppTheme.amber : AppTheme.textTertiary,
+                  fontWeight: t.isTopTrack ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
             ),
             // Artwork
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: t.albumArt != null
-                  ? CachedNetworkImage(imageUrl: t.albumArt!, width: 44, height: 44, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                  ? CachedNetworkImage(
+                      imageUrl: t.albumArt!,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, e, s) => _SmallArtPlaceholder(),
+                    )
                   : _SmallArtPlaceholder(),
             ),
             const SizedBox(width: 14),
@@ -495,29 +798,66 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
                       if (t.isTopTrack)
                         Padding(
                           padding: const EdgeInsets.only(right: 6),
-                          child: Icon(Icons.star_rounded, color: AppTheme.amber, size: 14),
+                          child: Icon(
+                            Icons.star_rounded,
+                            color: AppTheme.amber,
+                            size: 14,
+                          ),
                         ),
                       Expanded(
-                        child: Text(t.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          t.name,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 2),
-                  Text(t.albumName, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    t.albumName,
+                    style: const TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
             // Duration
             SizedBox(
               width: 45,
-              child: Text(t.durationFormatted, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right),
+              child: Text(
+                t.durationFormatted,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.right,
+              ),
             ),
             const SizedBox(width: 12),
             // Release date
             if (t.releaseDate != null)
               SizedBox(
                 width: 55,
-                child: Text(t.releaseDate!.length >= 4 ? t.releaseDate!.substring(0, 4) : '', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), textAlign: TextAlign.right),
+                child: Text(
+                  t.releaseDate!.length >= 4
+                      ? t.releaseDate!.substring(0, 4)
+                      : '',
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 11,
+                  ),
+                  textAlign: TextAlign.right,
+                ),
               ),
             const SizedBox(width: 12),
             // Popularity bar
@@ -532,13 +872,21 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
                         child: LinearProgressIndicator(
                           value: t.popularity / 100,
                           backgroundColor: AppTheme.edge.withValues(alpha: 0.4),
-                          valueColor: AlwaysStoppedAnimation(AppTheme.cyan.withValues(alpha: 0.7)),
+                          valueColor: AlwaysStoppedAnimation(
+                            AppTheme.cyan.withValues(alpha: 0.7),
+                          ),
                           minHeight: 4,
                         ),
                       ),
                     ),
                     const SizedBox(width: 4),
-                    Text('${t.popularity}', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
+                    Text(
+                      '${t.popularity}',
+                      style: const TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 9,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -546,10 +894,16 @@ class _SpotifyTrackRowState extends State<_SpotifyTrackRow> {
             // Play
             if (t.spotifyUrl.isNotEmpty)
               IconButton(
-                icon: const Icon(Icons.play_circle_filled_rounded, color: Color(0xFF1DB954), size: 22),
+                icon: const Icon(
+                  Icons.play_circle_filled_rounded,
+                  color: Color(0xFF1DB954),
+                  size: 22,
+                ),
                 onPressed: () async {
                   final uri = Uri.tryParse(t.spotifyUrl);
-                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  if (uri != null) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
                 },
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
@@ -587,15 +941,21 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
         onTap: () async {
           if (t.appleUrl != null) {
             final uri = Uri.tryParse(t.appleUrl!);
-            if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           }
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          decoration: AppTheme.glass(
+            radius: 14,
+            border: _hovered
+                ? AppTheme.cyan.withValues(alpha: 0.32)
+                : AppTheme.hairline,
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,28 +964,56 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: t.artworkUrl != null
-                            ? Image.network(t.artworkUrl!, fit: BoxFit.cover,
-                                errorBuilder: (_, e, s) => _ArtworkPlaceholder())
+                            ? Image.network(
+                                t.artworkUrl!,
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, e, s) =>
+                                    _ArtworkPlaceholder(),
+                              )
                             : _ArtworkPlaceholder(),
                       ),
                     ),
                     Positioned(
-                      top: 8, left: 8,
+                      top: 8,
+                      left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(6)),
-                        child: Text('#${widget.rank}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 10)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.6),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '#${widget.rank}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
+                        ),
                       ),
                     ),
                     Positioned(
-                      top: 8, right: 8,
+                      top: 8,
+                      right: 8,
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: appleRed.withValues(alpha: 0.9), shape: BoxShape.circle),
-                        child: const Icon(Icons.apple_rounded, color: Colors.white, size: 12),
+                        decoration: BoxDecoration(
+                          color: appleRed.withValues(alpha: 0.9),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.apple_rounded,
+                          color: Colors.white,
+                          size: 12,
+                        ),
                       ),
                     ),
                     if (_hovered)
@@ -633,16 +1021,29 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: Center(
                             child: Container(
-                              width: 44, height: 44,
+                              width: 44,
+                              height: 44,
                               decoration: BoxDecoration(
-                                color: appleRed, shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: appleRed.withValues(alpha: 0.5), blurRadius: 16)],
+                                color: appleRed,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: appleRed.withValues(alpha: 0.5),
+                                    blurRadius: 16,
+                                  ),
+                                ],
                               ),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -655,11 +1056,34 @@ class _AppleMusicTrackCardState extends State<_AppleMusicTrackCard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(t.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.name,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 2),
-                    Text(t.albumName, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      t.albumName,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
-                    Text(t.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                    Text(
+                      t.durationFormatted,
+                      style: const TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 10,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -684,15 +1108,13 @@ class _UnifiedTrackCard extends StatelessWidget {
         final url = track.appleUrl ?? track.spotifyUrl;
         if (url != null) {
           final uri = Uri.tryParse(url);
-          if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+          if (uri != null) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
         }
       },
       child: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.panel,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppTheme.edge.withValues(alpha: 0.6)),
-        ),
+        decoration: AppTheme.glass(radius: 14, border: AppTheme.hairlineStrong),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -701,13 +1123,16 @@ class _UnifiedTrackCard extends StatelessWidget {
               child: Stack(
                 children: [
                   ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(14),
+                    ),
                     child: track.artworkUrl != null
                         ? CachedNetworkImage(
                             imageUrl: track.artworkUrl!,
                             width: double.infinity,
                             fit: BoxFit.cover,
-                            errorWidget: (context, error, stack) => _ArtworkPlaceholder(),
+                            errorWidget: (context, error, stack) =>
+                                _ArtworkPlaceholder(),
                           )
                         : _ArtworkPlaceholder(),
                   ),
@@ -716,12 +1141,22 @@ class _UnifiedTrackCard extends StatelessWidget {
                     top: 6,
                     left: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black54,
                         borderRadius: BorderRadius.circular(4),
                       ),
-                      child: Text('#$rank', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                      child: Text(
+                        '#$rank',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
                   // Platform badges
@@ -733,22 +1168,43 @@ class _UnifiedTrackCard extends StatelessWidget {
                       children: [
                         if (track.onSpotify)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFF1DB954),
                               borderRadius: BorderRadius.circular(3),
                             ),
-                            child: const Text('S', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                            child: const Text(
+                              'S',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
-                        if (track.onSpotify && track.onApple) const SizedBox(width: 3),
+                        if (track.onSpotify && track.onApple)
+                          const SizedBox(width: 3),
                         if (track.onApple)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: const Color(0xFFFC3C44),
                               borderRadius: BorderRadius.circular(3),
                             ),
-                            child: const Text('A', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800)),
+                            child: const Text(
+                              'A',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -758,12 +1214,22 @@ class _UnifiedTrackCard extends StatelessWidget {
                       bottom: 6,
                       left: 6,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.amber.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: const Text('TOP', style: TextStyle(color: Colors.black, fontSize: 8, fontWeight: FontWeight.w800)),
+                        child: const Text(
+                          'TOP',
+                          style: TextStyle(
+                            color: Colors.black,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -777,14 +1243,21 @@ class _UnifiedTrackCard extends StatelessWidget {
                 children: [
                   Text(
                     track.name,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     track.albumName,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 10,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),

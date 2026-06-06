@@ -9,6 +9,7 @@ import '../../../models/social_profile.dart';
 import '../../../models/uploaded_track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/community_providers.dart';
+import '../../widgets/ui_kit.dart';
 import 'moderation_actions.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -62,20 +63,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         // Profile header
         SliverToBoxAdapter(
           child: Container(
-            margin: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.violet.withValues(alpha: 0.12),
-                  AppTheme.pink.withValues(alpha: 0.06),
-                  AppTheme.panel,
-                ],
+            margin: const EdgeInsets.fromLTRB(
+              AppTheme.r2xl,
+              AppTheme.s6,
+              AppTheme.r2xl,
+              0,
+            ),
+            padding: const EdgeInsets.all(AppTheme.s6),
+            decoration: AppTheme.glass(
+              radius: AppTheme.rXl,
+              tint: AppTheme.violet,
+              border: AppTheme.violet.withValues(alpha: 0.2),
+              glowShadow: AppTheme.glow(
+                AppTheme.violet,
+                blur: 24,
+                opacity: 0.10,
               ),
-              border: Border.all(color: AppTheme.violet.withValues(alpha: 0.2)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -111,8 +114,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               profile.displayName,
                               style: const TextStyle(
                                 color: AppTheme.textPrimary,
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.w800,
                                 fontSize: 22,
+                                letterSpacing: -0.5,
                               ),
                             ),
                           ),
@@ -234,7 +238,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          FilledButton.icon(
+                          GradientButton(
+                            label: isFollowing ? 'Following' : 'Follow',
+                            icon: isFollowing
+                                ? Icons.check_rounded
+                                : Icons.person_add_rounded,
+                            height: 40,
+                            glow: !isFollowing,
+                            gradient: isFollowing
+                                ? const LinearGradient(
+                                    colors: [AppTheme.edge, AppTheme.edge],
+                                  )
+                                : const LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [AppTheme.pink, AppTheme.violet],
+                                  ),
                             onPressed: () {
                               if (isFollowing) {
                                 unfollowUser(myUserId, profile.userId);
@@ -242,22 +261,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 followUser(myUserId, profile.userId);
                               }
                             },
-                            icon: Icon(
-                              isFollowing
-                                  ? Icons.check_rounded
-                                  : Icons.person_add_rounded,
-                              size: 14,
-                            ),
-                            label: Text(isFollowing ? 'Following' : 'Follow'),
-                            style: FilledButton.styleFrom(
-                              backgroundColor: isFollowing
-                                  ? AppTheme.edge
-                                  : AppTheme.pink,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
-                              ),
-                            ),
                           ),
                           const SizedBox(width: 6),
                           PopupMenuButton<String>(
@@ -290,13 +293,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 value: 'report',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.flag_outlined,
-                                        size: 16, color: AppTheme.textSecondary),
+                                    Icon(
+                                      Icons.flag_outlined,
+                                      size: 16,
+                                      color: AppTheme.textSecondary,
+                                    ),
                                     SizedBox(width: 10),
-                                    Text('Report',
-                                        style: TextStyle(
-                                            color: AppTheme.textPrimary,
-                                            fontSize: 13)),
+                                    Text(
+                                      'Report',
+                                      style: TextStyle(
+                                        color: AppTheme.textPrimary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -304,13 +313,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 value: 'block',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.block_rounded,
-                                        size: 16, color: AppTheme.pink),
+                                    Icon(
+                                      Icons.block_rounded,
+                                      size: 16,
+                                      color: AppTheme.pink,
+                                    ),
                                     SizedBox(width: 10),
-                                    Text('Block user',
-                                        style: TextStyle(
-                                            color: AppTheme.textPrimary,
-                                            fontSize: 13)),
+                                    Text(
+                                      'Block user',
+                                      style: TextStyle(
+                                        color: AppTheme.textPrimary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -327,13 +342,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         // Uploads grid
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(28, 20, 28, 8),
+            padding: const EdgeInsets.fromLTRB(
+              AppTheme.r2xl,
+              AppTheme.s5,
+              AppTheme.r2xl,
+              AppTheme.s2,
+            ),
             child: Text(
               'Uploads',
               style: TextStyle(
                 color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w800,
                 fontSize: 15,
+                letterSpacing: -0.3,
               ),
             ),
           ),
@@ -348,27 +369,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               SliverFillRemaining(child: Center(child: Text('$e'))),
           data: (uploads) => uploads.isEmpty
               ? SliverFillRemaining(
-                  child: Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.cloud_upload_rounded,
-                          size: 48,
-                          color: AppTheme.textTertiary,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          isOwn
-                              ? 'You haven\'t uploaded any tracks yet'
-                              : 'No uploads yet',
-                          style: const TextStyle(
-                            color: AppTheme.textTertiary,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
+                  hasScrollBody: false,
+                  child: VibeEmptyState(
+                    icon: Icons.cloud_upload_rounded,
+                    title: isOwn
+                        ? 'You haven\'t uploaded any tracks yet'
+                        : 'No uploads yet',
                   ),
                 )
               : SliverPadding(
@@ -428,7 +434,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: AppTheme.panel,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppTheme.rLg),
           ),
           title: const Text(
             'Edit Profile',
@@ -578,8 +584,9 @@ class _Stat extends StatelessWidget {
         value,
         style: const TextStyle(
           color: AppTheme.textPrimary,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
           fontSize: 16,
+          letterSpacing: -0.5,
         ),
       ),
       Text(
@@ -596,10 +603,9 @@ class _UploadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
-        color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.35)),
+      decoration: AppTheme.glass(
+        radius: AppTheme.rMd,
+        border: AppTheme.hairline,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

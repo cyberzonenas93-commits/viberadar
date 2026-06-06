@@ -12,6 +12,7 @@ import '../../../providers/library_provider.dart';
 import '../../../services/apple_music_artist_service.dart';
 import '../../../services/spotify_artist_service.dart';
 import '../../../services/youtube_search_service.dart';
+import '../../widgets/ui_kit.dart';
 
 part 'search_screen_results.dart';
 part 'search_screen_widgets.dart';
@@ -159,10 +160,17 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     _debounce?.cancel();
     setState(() => _query = value);
     if (value.trim().isEmpty) {
-      setState(() { _results = []; _youtubeResults = []; _searching = false; });
+      setState(() {
+        _results = [];
+        _youtubeResults = [];
+        _searching = false;
+      });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 400), () => _search(value.trim()));
+    _debounce = Timer(
+      const Duration(milliseconds: 400),
+      () => _search(value.trim()),
+    );
   }
 
   Future<void> _search(String q) async {
@@ -170,9 +178,13 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     setState(() => _searching = true);
     try {
       final results = await Future.wait([
-        _spotify.searchTracks(q, limit: 20).catchError((_) => <SpotifyTrackInfo>[]),
+        _spotify
+            .searchTracks(q, limit: 20)
+            .catchError((_) => <SpotifyTrackInfo>[]),
         _apple.searchSongs(q, limit: 20).catchError((_) => <AppleMusicTrack>[]),
-        _youtube.searchMusic(q, limit: 12).catchError((_) => <YoutubeVideoResult>[]),
+        _youtube
+            .searchMusic(q, limit: 12)
+            .catchError((_) => <YoutubeVideoResult>[]),
       ]);
       if (!mounted) return;
       setState(() {
@@ -207,32 +219,55 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
             children: [
               Row(
                 children: [
-                  const Icon(Icons.search_rounded, color: AppTheme.cyan, size: 24),
+                  const Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.cyan,
+                    size: 24,
+                  ),
                   const SizedBox(width: 10),
                   Text(
                     'Search',
-                    style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      color: AppTheme.textPrimary,
+                    ),
                   ),
                 ],
               ),
               const SizedBox(height: 4),
               Text(
                 'Search across Spotify, Apple Music and more',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _controller,
                 focusNode: _focus,
                 onChanged: _onQueryChanged,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 14,
+                ),
                 decoration: InputDecoration(
                   hintText: 'Song title, artist, album...',
-                  hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 14),
-                  prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textTertiary, size: 20),
+                  hintStyle: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 14,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search_rounded,
+                    color: AppTheme.textTertiary,
+                    size: 20,
+                  ),
                   suffixIcon: _query.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.close_rounded, color: AppTheme.textTertiary, size: 18),
+                          icon: const Icon(
+                            Icons.close_rounded,
+                            color: AppTheme.textTertiary,
+                            size: 18,
+                          ),
                           onPressed: () {
                             _controller.clear();
                             _onQueryChanged('');
@@ -243,17 +278,23 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   fillColor: AppTheme.panelRaised,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                    borderSide: const BorderSide(color: AppTheme.hairline),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                    borderSide: const BorderSide(color: AppTheme.hairline),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: AppTheme.cyan, width: 1.5),
+                    borderSide: const BorderSide(
+                      color: AppTheme.cyan,
+                      width: 1.5,
+                    ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 16,
+                  ),
                 ),
               ),
             ],
@@ -268,42 +309,29 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   topTracks: topTracks.take(40).toList(),
                   onGenreSearch: (g) {
                     _controller.text = g;
-                    _controller.selection =
-                        TextSelection.collapsed(offset: g.length);
+                    _controller.selection = TextSelection.collapsed(
+                      offset: g.length,
+                    );
                     setState(() => _query = g);
                     _search(g);
                   },
                 )
               : _searching && _results.isEmpty && _youtubeResults.isEmpty
-                  ? const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(color: AppTheme.cyan, strokeWidth: 2),
-                          SizedBox(height: 16),
-                          Text('Searching Spotify, Apple Music, YouTube...', style: TextStyle(color: AppTheme.textSecondary)),
-                        ],
-                      ),
-                    )
-                  : _results.isEmpty && _youtubeResults.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.music_off_rounded, color: AppTheme.textTertiary, size: 48),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No results for "$_query"',
-                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-                              ),
-                            ],
-                          ),
-                        )
-                      : _ResultsList(
-                          results: _results,
-                          youtubeResults: _youtubeResults,
-                          query: _query,
-                        ),
+              ? const Center(
+                  child: RadarLoader(
+                    message: 'Searching Spotify, Apple Music, YouTube...',
+                  ),
+                )
+              : _results.isEmpty && _youtubeResults.isEmpty
+              ? VibeEmptyState(
+                  icon: Icons.music_off_rounded,
+                  title: 'No results for "$_query"',
+                )
+              : _ResultsList(
+                  results: _results,
+                  youtubeResults: _youtubeResults,
+                  query: _query,
+                ),
         ),
       ],
     );

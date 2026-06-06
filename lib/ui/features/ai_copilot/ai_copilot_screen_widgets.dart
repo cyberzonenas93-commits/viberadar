@@ -25,27 +25,39 @@ class _ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final display = _displayText;
+    final borderRadius = BorderRadius.circular(AppTheme.rLg).copyWith(
+      bottomRight: isUser ? const Radius.circular(4) : null,
+      bottomLeft: !isUser ? const Radius.circular(4) : null,
+    );
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width * 0.7),
+          maxWidth: MediaQuery.of(context).size.width * 0.7,
+        ),
         margin: const EdgeInsets.only(bottom: 12),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: isUser
-              ? AppTheme.violet.withValues(alpha: 0.15)
-              : AppTheme.panelRaised,
-          borderRadius: BorderRadius.circular(16).copyWith(
-            bottomRight: isUser ? const Radius.circular(4) : null,
-            bottomLeft: !isUser ? const Radius.circular(4) : null,
-          ),
-          border: Border.all(
-            color: isUser
-                ? AppTheme.violet.withValues(alpha: 0.3)
-                : AppTheme.edge.withValues(alpha: 0.4),
-          ),
-        ),
+        decoration: isUser
+            ? BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    AppTheme.violet.withValues(alpha: 0.22),
+                    AppTheme.violet.withValues(alpha: 0.12),
+                  ],
+                ),
+                borderRadius: borderRadius,
+                border: Border.all(
+                  color: AppTheme.violet.withValues(alpha: 0.35),
+                ),
+              )
+            : BoxDecoration(
+                gradient: AppTheme.surfaceGradient,
+                borderRadius: borderRadius,
+                border: Border.all(color: AppTheme.hairline),
+                boxShadow: AppTheme.ambientShadow,
+              ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -62,11 +74,14 @@ class _ChatBubble extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text('Building your set…',
-                      style: TextStyle(
-                          color: AppTheme.violet.withValues(alpha: 0.6),
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic)),
+                  Text(
+                    'Building your set…',
+                    style: TextStyle(
+                      color: AppTheme.violet.withValues(alpha: 0.6),
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                 ],
               )
             else
@@ -93,11 +108,14 @@ class _ChatBubble extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    Text('Generating…',
-                        style: TextStyle(
-                            color: AppTheme.textTertiary,
-                            fontSize: 10,
-                            fontStyle: FontStyle.italic)),
+                    Text(
+                      'Generating…',
+                      style: TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 10,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
                   ],
                 ),
               ),

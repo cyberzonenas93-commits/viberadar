@@ -8,6 +8,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/library_track.dart';
 import '../../../providers/library_provider.dart';
+import '../../widgets/ui_kit.dart';
 import '../cues/cue_preview_sheet.dart';
 
 class LibraryScreen extends ConsumerStatefulWidget {
@@ -58,6 +59,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           'My Library',
           style: theme.textTheme.headlineMedium?.copyWith(
             color: Colors.white,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -0.5,
           ),
         ),
         const SizedBox(height: 4),
@@ -68,19 +71,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               : kIsWeb
               ? 'Import audio files from your browser to index tracks'
               : 'Scan your local music folder to index tracks',
-          style: const TextStyle(
-            color: AppTheme.textSecondary,
-            fontSize: 13,
-          ),
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
         ),
       ],
     );
 
     final Widget headerActions = lib.isScanning
-        ? _ScanProgressChip(
-            scanned: lib.scanProgress,
-            total: lib.scanTotal,
-          )
+        ? _ScanProgressChip(scanned: lib.scanProgress, total: lib.scanTotal)
         : Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -100,41 +97,24 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   icon: const Icon(Icons.piano_rounded, size: 16),
                   label: const Text('Auto Cue All'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.cyan.withValues(
-                      alpha: 0.18,
-                    ),
+                    backgroundColor: AppTheme.cyan.withValues(alpha: 0.18),
                     foregroundColor: AppTheme.cyan,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 12,
                     ),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: BorderRadius.circular(AppTheme.rSm),
                     ),
                   ),
                 ),
-              ElevatedButton.icon(
+              GradientButton(
                 onPressed: _pickAndScan,
-                icon: const Icon(Icons.folder_open_rounded, size: 16),
-                label: Text(
-                  kIsWeb
-                      ? (lib.hasLibrary
-                            ? 'Import More Files'
-                            : 'Select Files')
-                      : (lib.hasLibrary
-                            ? 'Rescan Folder'
-                            : 'Select Folder'),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.violet,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
+                icon: Icons.folder_open_rounded,
+                height: 44,
+                label: kIsWeb
+                    ? (lib.hasLibrary ? 'Import More Files' : 'Select Files')
+                    : (lib.hasLibrary ? 'Rescan Folder' : 'Select Folder'),
               ),
             ],
           );
@@ -197,12 +177,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                       filled: true,
                       fillColor: AppTheme.panel,
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.edge),
+                        borderRadius: BorderRadius.circular(AppTheme.rSm),
+                        borderSide: const BorderSide(color: AppTheme.hairline),
                       ),
                       enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.edge),
+                        borderRadius: BorderRadius.circular(AppTheme.rSm),
+                        borderSide: const BorderSide(color: AppTheme.hairline),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -262,16 +242,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           Expanded(
             child: lib.isScanning
                 ? Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const CircularProgressIndicator(color: AppTheme.cyan),
-                        const SizedBox(height: 16),
-                        Text(
+                    child: RadarLoader(
+                      message:
                           'Scanning… ${lib.scanProgress} / ${lib.scanTotal}',
-                          style: const TextStyle(color: AppTheme.textSecondary),
-                        ),
-                      ],
                     ),
                   )
                 : ListView.builder(
@@ -334,8 +307,13 @@ class _EmptyState extends StatelessWidget {
             height: 96,
             decoration: BoxDecoration(
               color: AppTheme.violet.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: BorderRadius.circular(AppTheme.r2xl),
               border: Border.all(color: AppTheme.violet.withValues(alpha: 0.3)),
+              boxShadow: AppTheme.glow(
+                AppTheme.violet,
+                blur: 28,
+                opacity: 0.18,
+              ),
             ),
             child: const Icon(
               Icons.folder_rounded,
@@ -348,7 +326,8 @@ class _EmptyState extends StatelessWidget {
             'No library scanned yet',
             style: TextStyle(
               color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
               fontSize: 18,
             ),
           ),
@@ -393,10 +372,9 @@ class _InfoChip extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.edge),
+      decoration: AppTheme.glass(
+        radius: AppTheme.rSm,
+        border: AppTheme.hairline,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -454,12 +432,11 @@ class _TrackRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 2),
+      margin: const EdgeInsets.only(bottom: 6),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.panel,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.edge),
+      decoration: AppTheme.glass(
+        radius: AppTheme.rSm,
+        border: AppTheme.hairline,
       ),
       child: Row(
         children: [
@@ -566,8 +543,13 @@ class _ErrorState extends StatelessWidget {
               height: 96,
               decoration: BoxDecoration(
                 color: AppTheme.pink.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(AppTheme.r2xl),
                 border: Border.all(color: AppTheme.pink.withValues(alpha: 0.3)),
+                boxShadow: AppTheme.glow(
+                  AppTheme.pink,
+                  blur: 28,
+                  opacity: 0.18,
+                ),
               ),
               child: Icon(
                 _isPermission
@@ -582,7 +564,8 @@ class _ErrorState extends StatelessWidget {
               _isPermission ? 'Permission denied' : 'Scan failed',
               style: const TextStyle(
                 color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
                 fontSize: 18,
               ),
             ),
@@ -624,9 +607,14 @@ class _ZeroFilesState extends StatelessWidget {
               height: 96,
               decoration: BoxDecoration(
                 color: AppTheme.violet.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(AppTheme.r2xl),
                 border: Border.all(
                   color: AppTheme.violet.withValues(alpha: 0.3),
+                ),
+                boxShadow: AppTheme.glow(
+                  AppTheme.violet,
+                  blur: 28,
+                  opacity: 0.18,
                 ),
               ),
               child: const Icon(
@@ -640,7 +628,8 @@ class _ZeroFilesState extends StatelessWidget {
               'No audio files found',
               style: TextStyle(
                 color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w600,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
                 fontSize: 18,
               ),
             ),
@@ -682,7 +671,7 @@ class _YearDropdown extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.panel,
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppTheme.edge),
+        border: Border.all(color: AppTheme.hairline),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

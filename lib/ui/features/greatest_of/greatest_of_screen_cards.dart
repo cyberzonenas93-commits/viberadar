@@ -5,7 +5,12 @@ class _HeroCard extends StatefulWidget {
   final int rank;
   final double greatestScore;
   final WidgetRef ref;
-  const _HeroCard({required this.track, required this.rank, required this.greatestScore, required this.ref});
+  const _HeroCard({
+    required this.track,
+    required this.rank,
+    required this.greatestScore,
+    required this.ref,
+  });
 
   @override
   State<_HeroCard> createState() => _HeroCardState();
@@ -24,22 +29,22 @@ class _HeroCardState extends State<_HeroCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
+        onTapDown: (details) => showTrackActionMenu(
+          context,
+          widget.ref,
+          t,
+          position: details.globalPosition,
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: 260,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3)),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppTheme.amber.withValues(alpha: _hovered ? 0.18 : 0.12),
-                AppTheme.panel,
-                AppTheme.panel,
-              ],
-            ),
+          decoration: AppTheme.glass(
+            radius: AppTheme.rXl,
+            tint: AppTheme.amber,
+            border: AppTheme.amber.withValues(alpha: _hovered ? 0.45 : 0.30),
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.amber, blur: 30, opacity: 0.16)
+                : null,
           ),
           child: Stack(
             children: [
@@ -82,7 +87,8 @@ class _HeroCardState extends State<_HeroCard> {
                               width: 180,
                               height: 180,
                               fit: BoxFit.cover,
-                              errorWidget: (_, e, s) => _ArtPlaceholder(size: 180),
+                              errorWidget: (_, e, s) =>
+                                  _ArtPlaceholder(size: 180),
                             )
                           : _ArtPlaceholder(size: 180),
                     ),
@@ -96,7 +102,10 @@ class _HeroCardState extends State<_HeroCard> {
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
                                   gradient: const LinearGradient(
                                     colors: [AppTheme.amber, Color(0xFFFF8C00)],
@@ -106,23 +115,49 @@ class _HeroCardState extends State<_HeroCard> {
                                 child: const Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(Icons.emoji_events_rounded, color: Colors.white, size: 14),
+                                    Icon(
+                                      Icons.emoji_events_rounded,
+                                      color: Colors.white,
+                                      size: 14,
+                                    ),
                                     SizedBox(width: 4),
-                                    Text('#1', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 12)),
+                                    Text(
+                                      '#1',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
                               Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.violet.withValues(alpha: 0.15),
+                                  color: AppTheme.violet.withValues(
+                                    alpha: 0.15,
+                                  ),
                                   borderRadius: BorderRadius.circular(6),
                                 ),
-                                child: Text(t.genre, style: const TextStyle(color: AppTheme.violet, fontSize: 10, fontWeight: FontWeight.w600)),
+                                child: Text(
+                                  t.genre,
+                                  style: const TextStyle(
+                                    color: AppTheme.violet,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
                               ),
                               const SizedBox(width: 8),
-                              SourceBadges(sources: t.effectiveSources, compact: true),
+                              SourceBadges(
+                                sources: t.effectiveSources,
+                                compact: true,
+                              ),
                             ],
                           ),
                           const SizedBox(height: 14),
@@ -140,7 +175,10 @@ class _HeroCardState extends State<_HeroCard> {
                           const SizedBox(height: 6),
                           Text(
                             t.artist,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 14),
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 14,
+                            ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -148,22 +186,44 @@ class _HeroCardState extends State<_HeroCard> {
                           // Meta row
                           Row(
                             children: [
-                              _MetaPill(icon: Icons.speed_rounded, text: formatBpm(t.bpm)),
+                              _MetaPill(
+                                icon: Icons.speed_rounded,
+                                text: formatBpm(t.bpm),
+                              ),
                               const SizedBox(width: 6),
-                              _MetaPill(icon: Icons.music_note_rounded, text: t.keySignature),
+                              _MetaPill(
+                                icon: Icons.music_note_rounded,
+                                text: t.keySignature,
+                              ),
                               const SizedBox(width: 6),
-                              _MetaPill(icon: Icons.public_rounded, text: t.leadRegion),
+                              _MetaPill(
+                                icon: Icons.public_rounded,
+                                text: t.leadRegion,
+                              ),
                               const Spacer(),
                               // Score pair
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
-                                  _ScoreBar(label: 'G', value: widget.greatestScore, color: AppTheme.amber),
+                                  _ScoreBar(
+                                    label: 'G',
+                                    value: widget.greatestScore,
+                                    color: AppTheme.amber,
+                                  ),
                                   const SizedBox(height: 4),
-                                  _ScoreBar(label: 'T', value: t.trendScore, color: AppTheme.cyan),
+                                  _ScoreBar(
+                                    label: 'T',
+                                    value: t.trendScore,
+                                    color: AppTheme.cyan,
+                                  ),
                                   const SizedBox(height: 4),
-                                  Text('$greatestPct / $trendPct',
-                                      style: const TextStyle(color: AppTheme.textTertiary, fontSize: 9)),
+                                  Text(
+                                    '$greatestPct / $trendPct',
+                                    style: const TextStyle(
+                                      color: AppTheme.textTertiary,
+                                      fontSize: 9,
+                                    ),
+                                  ),
                                 ],
                               ),
                             ],
@@ -180,7 +240,12 @@ class _HeroCardState extends State<_HeroCard> {
                   left: 24 + 180 - 20,
                   bottom: 24,
                   child: GestureDetector(
-                    onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
+                    onTapDown: (details) => showTrackActionMenu(
+                      context,
+                      widget.ref,
+                      t,
+                      position: details.globalPosition,
+                    ),
                     child: Container(
                       width: 40,
                       height: 40,
@@ -194,7 +259,11 @@ class _HeroCardState extends State<_HeroCard> {
                           ),
                         ],
                       ),
-                      child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 22),
+                      child: const Icon(
+                        Icons.play_arrow_rounded,
+                        color: Colors.white,
+                        size: 22,
+                      ),
                     ),
                   ),
                 ),
@@ -211,7 +280,12 @@ class _RunnerUpCard extends StatefulWidget {
   final int rank;
   final double greatestScore;
   final WidgetRef ref;
-  const _RunnerUpCard({required this.track, required this.rank, required this.greatestScore, required this.ref});
+  const _RunnerUpCard({
+    required this.track,
+    required this.rank,
+    required this.greatestScore,
+    required this.ref,
+  });
 
   @override
   State<_RunnerUpCard> createState() => _RunnerUpCardState();
@@ -224,30 +298,32 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
   Widget build(BuildContext context) {
     final t = widget.track;
     final rank = widget.rank;
-    final accent = rank == 2 ? const Color(0xFFC0C0C0) : const Color(0xFFCD7F32);
+    final accent = rank == 2
+        ? const Color(0xFFC0C0C0)
+        : const Color(0xFFCD7F32);
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
+        onTapDown: (details) => showTrackActionMenu(
+          context,
+          widget.ref,
+          t,
+          position: details.globalPosition,
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: 124,
           padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            border: Border.all(color: accent.withValues(alpha: 0.25)),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                accent.withValues(alpha: _hovered ? 0.1 : 0.06),
-                AppTheme.panel,
-              ],
-            ),
+          decoration: AppTheme.glass(
+            radius: AppTheme.rLg,
+            tint: accent,
+            border: accent.withValues(alpha: _hovered ? 0.45 : 0.28),
+            glowShadow: _hovered
+                ? AppTheme.glow(accent, blur: 22, opacity: 0.12)
+                : null,
           ),
           child: Row(
             children: [
@@ -273,20 +349,38 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: accent.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(5),
                           ),
-                          child: Text('#$rank', style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 10)),
+                          child: Text(
+                            '#$rank',
+                            style: TextStyle(
+                              color: accent,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10,
+                            ),
+                          ),
                         ),
                         const Spacer(),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            _ScoreBar(label: 'G', value: widget.greatestScore, color: AppTheme.amber),
+                            _ScoreBar(
+                              label: 'G',
+                              value: widget.greatestScore,
+                              color: AppTheme.amber,
+                            ),
                             const SizedBox(height: 3),
-                            _ScoreBar(label: 'T', value: t.trendScore, color: AppTheme.cyan),
+                            _ScoreBar(
+                              label: 'T',
+                              value: t.trendScore,
+                              color: AppTheme.cyan,
+                            ),
                           ],
                         ),
                       ],
@@ -294,27 +388,55 @@ class _RunnerUpCardState extends State<_RunnerUpCard> {
                     const SizedBox(height: 8),
                     Text(
                       t.title,
-                      style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       t.artist,
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
                     Row(
                       children: [
-                        Text('${formatBpm(t.bpm)} BPM', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text(
+                          '${formatBpm(t.bpm)} BPM',
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 10,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        Text(t.keySignature, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10)),
+                        Text(
+                          t.keySignature,
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 10,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 10)),
+                        Text(
+                          t.genre,
+                          style: TextStyle(
+                            color: AppTheme.violet.withValues(alpha: 0.7),
+                            fontSize: 10,
+                          ),
+                        ),
                         const SizedBox(width: 8),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        SourceBadges(
+                          sources: t.effectiveSources,
+                          compact: true,
+                        ),
                       ],
                     ),
                   ],
@@ -337,7 +459,12 @@ class _TrackCard extends StatefulWidget {
   final int rank;
   final double greatestScore;
   final WidgetRef ref;
-  const _TrackCard({required this.track, required this.rank, required this.greatestScore, required this.ref});
+  const _TrackCard({
+    required this.track,
+    required this.rank,
+    required this.greatestScore,
+    required this.ref,
+  });
 
   @override
   State<_TrackCard> createState() => _TrackCardState();
@@ -355,13 +482,22 @@ class _TrackCardState extends State<_TrackCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTapDown: (details) => showTrackActionMenu(context, widget.ref, t, position: details.globalPosition),
+        onTapDown: (details) => showTrackActionMenu(
+          context,
+          widget.ref,
+          t,
+          position: details.globalPosition,
+        ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35)),
+          decoration: AppTheme.glass(
+            radius: 14,
+            border: _hovered
+                ? AppTheme.cyan.withValues(alpha: 0.32)
+                : AppTheme.hairline,
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -371,13 +507,16 @@ class _TrackCardState extends State<_TrackCard> {
                 child: Stack(
                   children: [
                     ClipRRect(
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(13),
+                      ),
                       child: SizedBox.expand(
                         child: t.artworkUrl.isNotEmpty
                             ? CachedNetworkImage(
                                 imageUrl: t.artworkUrl,
                                 fit: BoxFit.cover,
-                                errorWidget: (_, e, s) => _ArtPlaceholder(size: 120, rounded: false),
+                                errorWidget: (_, e, s) =>
+                                    _ArtPlaceholder(size: 120, rounded: false),
                               )
                             : _ArtPlaceholder(size: 120, rounded: false),
                       ),
@@ -387,14 +526,21 @@ class _TrackCardState extends State<_TrackCard> {
                       top: 8,
                       left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.black.withValues(alpha: 0.6),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '#${widget.rank}',
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 10),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 10,
+                          ),
                         ),
                       ),
                     ),
@@ -405,9 +551,17 @@ class _TrackCardState extends State<_TrackCard> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          _ScoreBadge(value: widget.greatestScore, color: AppTheme.amber, prefix: 'G'),
+                          _ScoreBadge(
+                            value: widget.greatestScore,
+                            color: AppTheme.amber,
+                            prefix: 'G',
+                          ),
                           const SizedBox(height: 3),
-                          _ScoreBadge(value: t.trendScore, color: AppTheme.cyan, prefix: 'T'),
+                          _ScoreBadge(
+                            value: t.trendScore,
+                            color: AppTheme.cyan,
+                            prefix: 'T',
+                          ),
                         ],
                       ),
                     ),
@@ -417,7 +571,9 @@ class _TrackCardState extends State<_TrackCard> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.3),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(13),
+                            ),
                           ),
                           child: Center(
                             child: Container(
@@ -427,10 +583,17 @@ class _TrackCardState extends State<_TrackCard> {
                                 color: AppTheme.cyan,
                                 shape: BoxShape.circle,
                                 boxShadow: [
-                                  BoxShadow(color: AppTheme.cyan.withValues(alpha: 0.5), blurRadius: 16),
+                                  BoxShadow(
+                                    color: AppTheme.cyan.withValues(alpha: 0.5),
+                                    blurRadius: 16,
+                                  ),
                                 ],
                               ),
-                              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 24,
+                              ),
                             ),
                           ),
                         ),
@@ -457,7 +620,10 @@ class _TrackCardState extends State<_TrackCard> {
                     const SizedBox(height: 2),
                     Text(
                       t.artist,
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 11,
+                      ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -466,25 +632,50 @@ class _TrackCardState extends State<_TrackCard> {
                       children: [
                         Text(
                           formatBpm(t.bpm),
-                          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 10, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                         const SizedBox(width: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.edge.withValues(alpha: 0.5),
                             borderRadius: BorderRadius.circular(3),
                           ),
-                          child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 9, fontWeight: FontWeight.w600)),
+                          child: Text(
+                            t.keySignature,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ),
                         const Spacer(),
-                        SourceBadges(sources: t.effectiveSources, compact: true),
+                        SourceBadges(
+                          sources: t.effectiveSources,
+                          compact: true,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    _ScoreBar(label: 'G', value: widget.greatestScore, color: AppTheme.amber),
+                    _ScoreBar(
+                      label: 'G',
+                      value: widget.greatestScore,
+                      color: AppTheme.amber,
+                    ),
                     const SizedBox(height: 3),
-                    _ScoreBar(label: 'T', value: t.trendScore, color: AppTheme.cyan),
+                    _ScoreBar(
+                      label: 'T',
+                      value: t.trendScore,
+                      color: AppTheme.cyan,
+                    ),
                   ],
                 ),
               ),
@@ -529,39 +720,88 @@ class _PlatformTrackRowState extends State<_PlatformTrackRow> {
           children: [
             SizedBox(
               width: 24,
-              child: Text('${widget.index + 1}', textAlign: TextAlign.right,
-                  style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+              child: Text(
+                '${widget.index + 1}',
+                textAlign: TextAlign.right,
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 11,
+                ),
+              ),
             ),
             const SizedBox(width: 10),
             ClipRRect(
               borderRadius: BorderRadius.circular(6),
               child: t.artworkUrl != null
-                  ? CachedNetworkImage(imageUrl: t.artworkUrl!, width: 36, height: 36, fit: BoxFit.cover)
-                  : Container(width: 36, height: 36, color: AppTheme.panelRaised,
-                      child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 16)),
+                  ? CachedNetworkImage(
+                      imageUrl: t.artworkUrl!,
+                      width: 36,
+                      height: 36,
+                      fit: BoxFit.cover,
+                    )
+                  : Container(
+                      width: 36,
+                      height: 36,
+                      color: AppTheme.panelRaised,
+                      child: const Icon(
+                        Icons.music_note_rounded,
+                        color: AppTheme.textTertiary,
+                        size: 16,
+                      ),
+                    ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w600),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(t.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    t.title,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    t.artist,
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 11,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ],
               ),
             ),
             if (t.durationMs > 0)
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Text('${t.durationMs ~/ 60000}:${((t.durationMs % 60000) ~/ 1000).toString().padLeft(2, '0')}',
-                    style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                child: Text(
+                  '${t.durationMs ~/ 60000}:${((t.durationMs % 60000) ~/ 1000).toString().padLeft(2, '0')}',
+                  style: const TextStyle(
+                    color: AppTheme.textTertiary,
+                    fontSize: 11,
+                  ),
+                ),
               ),
             if (t.spotifyUrl != null)
-              _PlayBtn(icon: Icons.graphic_eq_rounded, color: const Color(0xFF1ED760), url: t.spotifyUrl!, tip: 'Spotify'),
+              _PlayBtn(
+                icon: Icons.graphic_eq_rounded,
+                color: const Color(0xFF1ED760),
+                url: t.spotifyUrl!,
+                tip: 'Spotify',
+              ),
             if (t.appleUrl != null)
-              _PlayBtn(icon: Icons.music_note_rounded, color: const Color(0xFFFF7AB5), url: t.appleUrl!, tip: 'Apple Music'),
+              _PlayBtn(
+                icon: Icons.music_note_rounded,
+                color: const Color(0xFFFF7AB5),
+                url: t.appleUrl!,
+                tip: 'Apple Music',
+              ),
           ],
         ),
       ),
@@ -570,7 +810,12 @@ class _PlatformTrackRowState extends State<_PlatformTrackRow> {
 }
 
 class _PlayBtn extends StatelessWidget {
-  const _PlayBtn({required this.icon, required this.color, required this.url, required this.tip});
+  const _PlayBtn({
+    required this.icon,
+    required this.color,
+    required this.url,
+    required this.tip,
+  });
   final IconData icon;
   final Color color;
   final String url;
@@ -586,7 +831,9 @@ class _PlayBtn extends StatelessWidget {
           borderRadius: BorderRadius.circular(6),
           onTap: () {
             final uri = Uri.tryParse(url);
-            if (uri != null) launchUrl(uri, mode: LaunchMode.externalApplication);
+            if (uri != null) {
+              launchUrl(uri, mode: LaunchMode.externalApplication);
+            }
           },
           child: Padding(
             padding: const EdgeInsets.all(4),

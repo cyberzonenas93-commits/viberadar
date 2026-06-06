@@ -31,7 +31,10 @@ class _ResultsList extends ConsumerWidget {
             children: [
               // Spotify + Apple Music results
               if (results.isNotEmpty) ...[
-                _ResultSectionLabel(label: 'Spotify & Apple Music', count: results.length),
+                _ResultSectionLabel(
+                  label: 'Spotify & Apple Music',
+                  count: results.length,
+                ),
                 ...results.asMap().entries.map(
                   (e) => _ResultRow(result: e.value, index: e.key),
                 ),
@@ -39,7 +42,10 @@ class _ResultsList extends ConsumerWidget {
               // YouTube results
               if (youtubeResults.isNotEmpty) ...[
                 if (results.isNotEmpty) const SizedBox(height: 12),
-                _ResultSectionLabel(label: 'YouTube', count: youtubeResults.length),
+                _ResultSectionLabel(
+                  label: 'YouTube',
+                  count: youtubeResults.length,
+                ),
                 ...youtubeResults.map((v) => _YoutubeVideoCard(video: v)),
               ],
             ],
@@ -79,7 +85,10 @@ class _ResultSectionLabel extends StatelessWidget {
             ),
             child: Text(
               '$count',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 10,
+              ),
             ),
           ),
         ],
@@ -108,10 +117,14 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.5 : 0.3)),
+        decoration: AppTheme.glass(
+          radius: AppTheme.rMd,
+          border: _hovered
+              ? AppTheme.cyan.withValues(alpha: 0.32)
+              : AppTheme.hairline,
+          glowShadow: _hovered
+              ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+              : null,
         ),
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -139,14 +152,21 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
                 children: [
                   Text(
                     v.title,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13),
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 2),
                   Text(
                     v.channelName,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -155,7 +175,11 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
             ),
             const SizedBox(width: 12),
             // YouTube badge
-            _SourceBadge(label: 'Y', color: const Color(0xFFFF0000), tooltip: 'YouTube'),
+            _SourceBadge(
+              label: 'Y',
+              color: const Color(0xFFFF0000),
+              tooltip: 'YouTube',
+            ),
             const SizedBox(width: 12),
             // Play button
             if (_hovered)
@@ -165,7 +189,9 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
                 tooltip: 'Open on YouTube',
                 onTap: () async {
                   final uri = Uri.tryParse(v.youtubeUrl);
-                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  if (uri != null) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
                 },
               )
             else
@@ -178,7 +204,11 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
 
   Widget _thumbPlaceholder() => Container(
     color: AppTheme.panelRaised,
-    child: const Icon(Icons.play_circle_outline_rounded, color: AppTheme.textTertiary, size: 24),
+    child: const Icon(
+      Icons.play_circle_outline_rounded,
+      color: AppTheme.textTertiary,
+      size: 24,
+    ),
   );
 }
 
@@ -204,10 +234,14 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 120),
         margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(
-          color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.edge.withValues(alpha: _hovered ? 0.5 : 0.3)),
+        decoration: AppTheme.glass(
+          radius: AppTheme.rMd,
+          border: _hovered
+              ? AppTheme.cyan.withValues(alpha: 0.32)
+              : AppTheme.hairline,
+          glowShadow: _hovered
+              ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+              : null,
         ),
         padding: const EdgeInsets.all(12),
         child: Row(
@@ -218,7 +252,10 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
               child: Text(
                 '${widget.index + 1}',
                 textAlign: TextAlign.right,
-                style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 12,
+                ),
               ),
             ),
             const SizedBox(width: 12),
@@ -229,8 +266,11 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
                 width: 48,
                 height: 48,
                 child: r.artworkUrl != null
-                    ? CachedNetworkImage(imageUrl: r.artworkUrl!, fit: BoxFit.cover,
-                        errorWidget: (_, _, _) => _artPlaceholder())
+                    ? CachedNetworkImage(
+                        imageUrl: r.artworkUrl!,
+                        fit: BoxFit.cover,
+                        errorWidget: (_, _, _) => _artPlaceholder(),
+                      )
                     : _artPlaceholder(),
               ),
             ),
@@ -240,28 +280,75 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(r.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    r.title,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 2),
-                  Text(r.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    r.artist,
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   if (r.albumName.isNotEmpty)
-                    Text(r.albumName, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      r.albumName,
+                      style: const TextStyle(
+                        color: AppTheme.textTertiary,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                 ],
               ),
             ),
             const SizedBox(width: 12),
             // Duration
             if (r.durationFormatted.isNotEmpty)
-              Text(r.durationFormatted, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+              Text(
+                r.durationFormatted,
+                style: const TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 12,
+                ),
+              ),
             const SizedBox(width: 12),
             // Source badges
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (r.hasSpotify) _SourceBadge(label: 'S', color: const Color(0xFF1ED760), tooltip: 'Spotify'),
-                if (r.hasSpotify && (r.hasApple || r.hasYoutube)) const SizedBox(width: 4),
-                if (r.hasApple) _SourceBadge(label: 'A', color: const Color(0xFFFF7AB5), tooltip: 'Apple Music'),
+                if (r.hasSpotify)
+                  _SourceBadge(
+                    label: 'S',
+                    color: const Color(0xFF1ED760),
+                    tooltip: 'Spotify',
+                  ),
+                if (r.hasSpotify && (r.hasApple || r.hasYoutube))
+                  const SizedBox(width: 4),
+                if (r.hasApple)
+                  _SourceBadge(
+                    label: 'A',
+                    color: const Color(0xFFFF7AB5),
+                    tooltip: 'Apple Music',
+                  ),
                 if (r.hasApple && r.hasYoutube) const SizedBox(width: 4),
-                if (r.hasYoutube) _SourceBadge(label: 'Y', color: const Color(0xFFFF0000), tooltip: 'YouTube'),
+                if (r.hasYoutube)
+                  _SourceBadge(
+                    label: 'Y',
+                    color: const Color(0xFFFF0000),
+                    tooltip: 'YouTube',
+                  ),
               ],
             ),
             const SizedBox(width: 12),
@@ -271,7 +358,9 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
               _ActionButton(
                 icon: Icons.play_circle_rounded,
                 color: AppTheme.cyan,
-                tooltip: r.hasSpotify ? 'Open in Spotify' : 'Open in Apple Music',
+                tooltip: r.hasSpotify
+                    ? 'Open in Spotify'
+                    : 'Open in Apple Music',
                 onTap: () => _play(r),
               ),
               const SizedBox(width: 6),
@@ -292,11 +381,13 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
 
   Widget _artPlaceholder() => Container(
     decoration: const BoxDecoration(
-      gradient: LinearGradient(
-        colors: [AppTheme.edge, AppTheme.panelRaised],
-      ),
+      gradient: LinearGradient(colors: [AppTheme.edge, AppTheme.panelRaised]),
     ),
-    child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 20),
+    child: const Icon(
+      Icons.music_note_rounded,
+      color: AppTheme.textTertiary,
+      size: 20,
+    ),
   );
 
   void _play(_SearchResult r) async {
@@ -309,7 +400,9 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
   void _showAddToCrate(_SearchResult r) {
     final crateState = ref.read(crateProvider);
     final crates = crateState.crates.keys.toList();
-    final trackId = r.hasSpotify ? 'spotify:${r.title}:${r.artist}' : 'apple:${r.title}:${r.artist}';
+    final trackId = r.hasSpotify
+        ? 'spotify:${r.title}:${r.artist}'
+        : 'apple:${r.title}:${r.artist}';
 
     showDialog(
       context: context,
