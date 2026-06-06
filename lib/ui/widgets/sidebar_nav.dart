@@ -262,23 +262,25 @@ class _BrandHeader extends StatelessWidget {
           child: Row(
             children: [
               Container(
-                width: 34,
-                height: 34,
+                width: 36,
+                height: 36,
                 decoration: BoxDecoration(
-                  gradient: AppTheme.brandGradient,
-                  borderRadius: BorderRadius.circular(9),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.cyan.withValues(alpha: 0.22),
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: AppTheme.glow(
+                    AppTheme.cyan,
+                    blur: 16,
+                    opacity: 0.28,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.radar_rounded,
-                  color: Colors.white,
-                  size: 18,
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset(
+                    'assets/icon/app_icon.png',
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
+                    filterQuality: FilterQuality.high,
+                  ),
                 ),
               ),
               const SizedBox(width: 11),
@@ -286,13 +288,18 @@ class _BrandHeader extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'VIBERADAR',
-                      style: GoogleFonts.inter(
-                        color: AppTheme.textPrimary,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0,
-                        fontSize: 15,
+                    ShaderMask(
+                      shaderCallback: (bounds) => const LinearGradient(
+                        colors: [AppTheme.textPrimary, AppTheme.cyan],
+                      ).createShader(bounds),
+                      child: Text(
+                        'VIBERADAR',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                          fontSize: 15,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 2),

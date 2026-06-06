@@ -14,6 +14,7 @@ import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
 import '../mobile/mobile_shell.dart';
 import '../shell/vibe_shell.dart';
+import '../widgets/ui_kit.dart';
 import 'onboarding_screen.dart';
 import 'splash_screen.dart';
 
@@ -83,7 +84,12 @@ class _AuthGateState extends ConsumerState<AuthGate> {
             );
       }
     } catch (e, st) {
-      developer.log('Failed to sync pending followed artists', name: 'AuthGate', error: e, stackTrace: st);
+      developer.log(
+        'Failed to sync pending followed artists',
+        name: 'AuthGate',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -178,28 +184,38 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     final theme = Theme.of(context);
     return Scaffold(
       backgroundColor: AppTheme.ink,
-      body: Center(
-        child: SingleChildScrollView(
-          child: Container(
-            width: 420,
-            padding: const EdgeInsets.all(40),
-            decoration: BoxDecoration(
-              color: AppTheme.panel,
-              borderRadius: BorderRadius.circular(28),
-              border: Border.all(color: AppTheme.edge),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.violet.withValues(alpha: 0.08),
-                  blurRadius: 60,
-                  spreadRadius: 10,
-                ),
-              ],
+      body: DecoratedBox(
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment(0, -0.42),
+            radius: 1.1,
+            colors: [Color(0xFF121E31), AppTheme.ink],
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(
+              vertical: AppTheme.s10,
+              horizontal: AppTheme.s5,
             ),
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 220),
-              child: _mode == _LoginMode.main
-                  ? _mainView(theme: theme)
-                  : _emailView(theme: theme),
+            child: Container(
+              width: 420,
+              padding: const EdgeInsets.all(36),
+              decoration: AppTheme.glass(
+                radius: AppTheme.r2xl,
+                glowShadow: AppTheme.glow(
+                  AppTheme.violet,
+                  blur: 64,
+                  spread: 4,
+                  opacity: 0.12,
+                ),
+              ),
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: _mode == _LoginMode.main
+                    ? _mainView(theme: theme)
+                    : _emailView(theme: theme),
+              ),
             ),
           ),
         ),
@@ -210,39 +226,44 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   // ── Logo + brand ──────────────────────────────────────────────────────────
 
   Widget _logo() => Container(
-    width: 72,
-    height: 72,
-    clipBehavior: Clip.antiAlias,
+    width: 78,
+    height: 78,
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(20),
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [AppTheme.violet, AppTheme.pink, AppTheme.cyan],
+      borderRadius: BorderRadius.circular(AppTheme.rXl),
+      boxShadow: AppTheme.glow(
+        AppTheme.cyan,
+        blur: 30,
+        spread: 1,
+        opacity: 0.34,
       ),
-      boxShadow: [
-        BoxShadow(
-          color: AppTheme.violet.withValues(alpha: 0.3),
-          blurRadius: 24,
-          spreadRadius: 2,
-        ),
-      ],
     ),
-    child: const Padding(
-      padding: EdgeInsets.all(10),
-      child: CustomPaint(painter: _AuthLogoPainter(), child: SizedBox.expand()),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(AppTheme.rXl),
+      child: Image.asset(
+        'assets/icon/app_icon.png',
+        width: 78,
+        height: 78,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+      ),
     ),
   );
 
   Widget _brand(ThemeData theme) => Column(
     children: [
       _logo(),
-      const SizedBox(height: 24),
-      Text(
-        'VibeRadar',
-        style: theme.textTheme.headlineMedium?.copyWith(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
+      const SizedBox(height: 22),
+      ShaderMask(
+        shaderCallback: (bounds) => const LinearGradient(
+          colors: [AppTheme.textPrimary, AppTheme.cyan, AppTheme.violet],
+        ).createShader(bounds),
+        child: Text(
+          'VibeRadar',
+          style: theme.textTheme.headlineMedium?.copyWith(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            letterSpacing: -0.5,
+          ),
         ),
       ),
       const SizedBox(height: 6),
@@ -368,7 +389,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
         // Divider
         Row(
           children: [
-            const Expanded(child: Divider(color: AppTheme.edge)),
+            const Expanded(child: Divider(color: AppTheme.hairlineStrong)),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
@@ -376,7 +397,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
                 style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
               ),
             ),
-            const Expanded(child: Divider(color: AppTheme.edge)),
+            const Expanded(child: Divider(color: AppTheme.hairlineStrong)),
           ],
         ),
         const SizedBox(height: 12),
@@ -555,11 +576,11 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppTheme.edge),
+        borderSide: const BorderSide(color: AppTheme.hairlineStrong),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: BorderSide(color: AppTheme.edge),
+        borderSide: const BorderSide(color: AppTheme.hairlineStrong),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -721,31 +742,49 @@ class _PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: onPressed,
-        icon: isLoading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : (icon ?? const SizedBox.shrink()),
-        label: Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-        ),
-        style: FilledButton.styleFrom(
-          backgroundColor: AppTheme.violet,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+    final enabled = onPressed != null && !isLoading;
+    return PressableScale(
+      onTap: enabled ? onPressed : null,
+      child: Opacity(
+        opacity: onPressed == null ? 0.5 : 1,
+        child: Container(
+          width: double.infinity,
+          height: 54,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: AppTheme.ctaGradient,
+            borderRadius: BorderRadius.circular(AppTheme.rMd),
+            boxShadow: enabled
+                ? AppTheme.glow(AppTheme.violet, blur: 22, opacity: 0.42)
+                : null,
           ),
+          child: isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (icon != null) ...[
+                      icon!,
+                      const SizedBox(width: AppTheme.s2 + 2),
+                    ],
+                    Text(
+                      label,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -776,56 +815,12 @@ class _OutlineButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
           foregroundColor: Colors.white,
-          side: BorderSide(color: AppTheme.edge),
+          side: const BorderSide(color: AppTheme.hairlineStrong),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(AppTheme.rMd),
           ),
         ),
       ),
     );
   }
-}
-
-// ---------------------------------------------------------------------------
-// Logo painter
-// ---------------------------------------------------------------------------
-
-class _AuthLogoPainter extends CustomPainter {
-  const _AuthLogoPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.96)
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = size.width * 0.1;
-
-    final xPositions = [
-      size.width * 0.14,
-      size.width * 0.34,
-      size.width * 0.5,
-      size.width * 0.66,
-      size.width * 0.86,
-    ];
-    final heights = [
-      size.height * 0.38,
-      size.height * 0.72,
-      size.height * 0.96,
-      size.height * 0.68,
-      size.height * 0.44,
-    ];
-    final centerY = size.height / 2;
-
-    for (var i = 0; i < xPositions.length; i++) {
-      final halfH = heights[i] / 2;
-      canvas.drawLine(
-        Offset(xPositions[i], centerY - halfH),
-        Offset(xPositions[i], centerY + halfH),
-        paint,
-      );
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

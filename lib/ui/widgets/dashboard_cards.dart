@@ -19,14 +19,17 @@ class DashboardCards extends StatelessWidget {
     final theme = Theme.of(context);
     final regional = [...tracks]
       ..sort(
-        (a, b) => regionScoreForTrack(b, preferredRegion)
-            .compareTo(regionScoreForTrack(a, preferredRegion)),
+        (a, b) => regionScoreForTrack(
+          b,
+          preferredRegion,
+        ).compareTo(regionScoreForTrack(a, preferredRegion)),
       );
     final global = [...tracks]
       ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
     final rising = tracks.where((track) => track.isRisingFast).toList()
       ..sort(
-        (a, b) => b.trendHistory.last.score.compareTo(a.trendHistory.last.score),
+        (a, b) =>
+            b.trendHistory.last.score.compareTo(a.trendHistory.last.score),
       );
 
     final cards = [
@@ -81,21 +84,11 @@ class DashboardCards extends StatelessWidget {
               left: i == 0 ? 0 : 8,
               right: i == cards.length - 1 ? 0 : 8,
             ),
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(16),
-              color: AppTheme.panel,
-              border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  card.accent.withValues(alpha: 0.12),
-                  AppTheme.panel.withValues(alpha: 0.95),
-                  AppTheme.panel,
-                ],
-                stops: const [0.0, 0.5, 1.0],
-              ),
+            padding: const EdgeInsets.all(AppTheme.s5),
+            decoration: AppTheme.glass(
+              radius: AppTheme.rLg,
+              tint: card.accent,
+              glowShadow: AppTheme.glow(card.accent, blur: 24, opacity: 0.10),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,13 +96,21 @@ class DashboardCards extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      width: 32,
-                      height: 32,
+                      width: 34,
+                      height: 34,
                       decoration: BoxDecoration(
-                        color: card.accent.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
+                        gradient: LinearGradient(
+                          colors: [
+                            card.accent.withValues(alpha: 0.30),
+                            card.accent.withValues(alpha: 0.12),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(AppTheme.rMd),
+                        border: Border.all(
+                          color: card.accent.withValues(alpha: 0.32),
+                        ),
                       ),
-                      child: Icon(card.icon, color: card.accent, size: 16),
+                      child: Icon(card.icon, color: card.accent, size: 17),
                     ),
                     const SizedBox(width: 10),
                     Column(
@@ -141,8 +142,10 @@ class DashboardCards extends StatelessWidget {
                   card.metric,
                   style: theme.textTheme.displaySmall?.copyWith(
                     color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 36,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 38,
+                    letterSpacing: -1.5,
+                    height: 1.0,
                   ),
                 ),
                 const SizedBox(height: 6),
@@ -157,7 +160,10 @@ class DashboardCards extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(6),
                     color: card.accent.withValues(alpha: 0.08),

@@ -39,18 +39,13 @@ class _HeroCardState extends State<_HeroCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: cardHeight,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3)),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                AppTheme.amber.withValues(alpha: _hovered ? 0.15 : 0.08),
-                AppTheme.panel,
-                AppTheme.panel,
-              ],
-            ),
+          decoration: AppTheme.glass(
+            radius: AppTheme.rXl,
+            tint: AppTheme.amber,
+            border: AppTheme.amber.withValues(alpha: _hovered ? 0.45 : 0.28),
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.amber, blur: 30, opacity: 0.16)
+                : null,
           ),
           child: Stack(
             children: [
@@ -271,18 +266,13 @@ class _RunnerCardState extends State<_RunnerCard> {
           duration: const Duration(milliseconds: 150),
           height: 114,
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            border: Border.all(color: widget.accent.withValues(alpha: 0.25)),
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                widget.accent.withValues(alpha: _hovered ? 0.1 : 0.05),
-                AppTheme.panel,
-              ],
-            ),
+          decoration: AppTheme.glass(
+            radius: AppTheme.rLg,
+            tint: widget.accent,
+            border: widget.accent.withValues(alpha: _hovered ? 0.4 : 0.22),
+            glowShadow: _hovered
+                ? AppTheme.glow(widget.accent, blur: 22, opacity: 0.12)
+                : null,
           ),
           child: Row(
             children: [
@@ -412,12 +402,14 @@ class _TrackCardState extends State<_TrackCard> {
         ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppTheme.edge.withValues(alpha: _hovered ? 0.6 : 0.35),
-            ),
+          decoration: AppTheme.glass(
+            radius: 14,
+            border: _hovered
+                ? AppTheme.cyan.withValues(alpha: 0.32)
+                : AppTheme.hairline,
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.cyan, blur: 20, opacity: 0.10)
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -595,12 +587,13 @@ class _RisingCardState extends State<_RisingCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           width: 170,
-          decoration: BoxDecoration(
-            color: _hovered ? AppTheme.panelRaised : AppTheme.panel,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: AppTheme.pink.withValues(alpha: _hovered ? 0.4 : 0.2),
-            ),
+          decoration: AppTheme.glass(
+            radius: 14,
+            tint: AppTheme.pink,
+            border: AppTheme.pink.withValues(alpha: _hovered ? 0.45 : 0.22),
+            glowShadow: _hovered
+                ? AppTheme.glow(AppTheme.pink, blur: 20, opacity: 0.12)
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

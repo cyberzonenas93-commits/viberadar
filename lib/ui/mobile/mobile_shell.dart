@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -66,32 +68,46 @@ class _MobileShellState extends ConsumerState<MobileShell> {
           ),
         ),
       ),
-      bottomNavigationBar: NavigationBar(
-        height: 68,
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() {
-          _index = i;
-          _visited.add(i);
-        }),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Home'),
-          NavigationDestination(
-            icon: Icon(Icons.local_fire_department_rounded),
-            label: 'Trending',
+      bottomNavigationBar: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: DecoratedBox(
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppTheme.hairline)),
+            ),
+            child: NavigationBar(
+              height: 68,
+              backgroundColor: AppTheme.panel.withValues(alpha: 0.55),
+              selectedIndex: _index,
+              onDestinationSelected: (i) => setState(() {
+                _index = i;
+                _visited.add(i);
+              }),
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_rounded),
+                  label: 'Home',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.local_fire_department_rounded),
+                  label: 'Trending',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.auto_awesome_rounded),
+                  label: 'AI',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.folder_rounded),
+                  label: 'Library',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.grid_view_rounded),
+                  label: 'More',
+                ),
+              ],
+            ),
           ),
-          NavigationDestination(
-            icon: Icon(Icons.auto_awesome_rounded),
-            label: 'AI',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_rounded),
-            label: 'Library',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.grid_view_rounded),
-            label: 'More',
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -110,7 +126,7 @@ PreferredSizeWidget _mobileAppBar(String title, [List<Widget>? actions]) {
         fontSize: 20,
       ),
     ),
-    backgroundColor: AppTheme.panel,
+    backgroundColor: Colors.transparent,
     elevation: 0,
     surfaceTintColor: Colors.transparent,
     actions: actions,
@@ -167,7 +183,8 @@ class _HomeTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session =
         ref.watch(sessionProvider).value ?? const SessionState.demo();
-    final userProfile = ref.watch(userProfileProvider).value ??
+    final userProfile =
+        ref.watch(userProfileProvider).value ??
         UserProfile.empty(
           id: session.userId,
           displayName: session.displayName,
@@ -209,25 +226,21 @@ class _MoreTab extends StatelessWidget {
         Icons.favorite_rounded,
         'For You',
         (ctx) => _MobilePage(
-              title: 'For You',
-              child: ForYouScreen(
-                onOpenArtist: (_) => _push(
-                  ctx,
-                  const _MobilePage(title: 'Artists', child: ArtistsScreen()),
-                ),
-              ),
+          title: 'For You',
+          child: ForYouScreen(
+            onOpenArtist: (_) => _push(
+              ctx,
+              const _MobilePage(title: 'Artists', child: ArtistsScreen()),
             ),
+          ),
+        ),
       ),
       (
         Icons.mic_external_on_rounded,
         'Artists',
         (_) => const _MobilePage(title: 'Artists', child: ArtistsScreen()),
       ),
-      (
-        Icons.queue_music_rounded,
-        'Setlists',
-        (_) => const SetlistsTab(),
-      ),
+      (Icons.queue_music_rounded, 'Setlists', (_) => const SetlistsTab()),
       (
         Icons.star_rounded,
         'Greatest Of',
@@ -247,8 +260,10 @@ class _MoreTab extends StatelessWidget {
       (
         Icons.explore_rounded,
         'Discover DJs',
-        (_) =>
-            const _MobilePage(title: 'Discover DJs', child: DiscoverDJsScreen()),
+        (_) => const _MobilePage(
+          title: 'Discover DJs',
+          child: DiscoverDJsScreen(),
+        ),
       ),
       (
         Icons.cloud_upload_rounded,
@@ -258,7 +273,8 @@ class _MoreTab extends StatelessWidget {
       (
         Icons.content_copy_rounded,
         'Duplicates',
-        (_) => const _MobilePage(title: 'Duplicates', child: DuplicatesScreen()),
+        (_) =>
+            const _MobilePage(title: 'Duplicates', child: DuplicatesScreen()),
       ),
       (
         Icons.ios_share_rounded,
