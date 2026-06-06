@@ -123,19 +123,19 @@ class _AuthGateState extends ConsumerState<AuthGate> {
       if (session?.isAuthenticated == true) {
         _syncPendingArtists(session!);
       }
-      // On phones the user must be signed in (no guest); desktop keeps its
-      // existing behavior of admitting any resolved session.
-      // Phones get the mobile-native shell (bottom-nav, touch-first) that
-      // mirrors the macOS feature set; desktop keeps the full sidebar shell.
-      if (isMobileForm) {
-        return session?.isAuthenticated == true
-            ? const MobileShell()
-            : _LoginScreen(statusMessage: widget.statusMessage);
+      // Require a signed-in session (real account or explicit guest) before the
+      // app on every platform — this surfaces onboarding + sign-in / account
+      // creation instead of silently admitting an anonymous session. Demo mode
+      // (Firebase unavailable) bypasses the gate so the app still works offline.
+      if (!widget.isDemoMode && session?.isAuthenticated != true) {
+        return _LoginScreen(statusMessage: widget.statusMessage);
       }
-      return VibeShell(
-        statusMessage: widget.statusMessage,
-        isDemoMode: widget.isDemoMode,
-      );
+      return isMobileForm
+          ? const MobileShell()
+          : VibeShell(
+              statusMessage: widget.statusMessage,
+              isDemoMode: widget.isDemoMode,
+            );
     }
 
     return _LoginScreen(statusMessage: widget.statusMessage);
