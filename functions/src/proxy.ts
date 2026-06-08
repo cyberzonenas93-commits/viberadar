@@ -18,6 +18,8 @@ import {
   APPLE_MUSIC_DEVELOPER_TOKEN,
   normalizeSecretValue,
 } from "./lib/config";
+import { getUsageLimitsForUser } from "./lib/entitlements";
+import { enforceUsageLimit } from "./lib/usage";
 
 // ---------------------------------------------------------------------------
 // Path allowlists — prevent open-relay abuse
@@ -130,6 +132,16 @@ interface ProxyRequest {
   query?: Record<string, string | number | boolean>;
 }
 
+async function enforcePlatformProxyLimit(uid: string): Promise<void> {
+  const { limits } = await getUsageLimitsForUser(uid);
+  await enforceUsageLimit({
+    uid,
+    key: "platform_proxy_calls",
+    limit: limits.platformProxyMonthlyLimit,
+    window: "monthly",
+  });
+}
+
 // ---------------------------------------------------------------------------
 // spotifyProxy
 // ---------------------------------------------------------------------------
@@ -148,6 +160,8 @@ export const spotifyProxy = onCall(
     if (!path || typeof path !== "string") {
       throw new HttpsError("invalid-argument", "path is required");
     }
+
+    await enforcePlatformProxyLimit(request.auth.uid);
 
     const clientId = normalizeSecretValue(SPOTIFY_CLIENT_ID.value());
     const clientSecret = normalizeSecretValue(SPOTIFY_CLIENT_SECRET.value());
@@ -199,6 +213,8 @@ export const appleProxy = onCall(
       throw new HttpsError("invalid-argument", "path is required");
     }
 
+    await enforcePlatformProxyLimit(request.auth.uid);
+
     const developerToken = normalizeSecretValue(
       APPLE_MUSIC_DEVELOPER_TOKEN.value(),
     );
@@ -249,6 +265,8 @@ export const youtubeProxy = onCall(
     if (!path || typeof path !== "string") {
       throw new HttpsError("invalid-argument", "path is required");
     }
+
+    await enforcePlatformProxyLimit(request.auth.uid);
 
     const apiKey = normalizeSecretValue(YOUTUBE_API_KEY.value());
     if (!apiKey) {

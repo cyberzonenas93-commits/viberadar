@@ -8,7 +8,10 @@ export interface SourceTrackSignal {
     | "audius"
     | "audiomack"
     | "deezer"
-    | "billboard";
+    | "billboard"
+    | "shazam"
+    | "tiktok"
+    | "boomplay";
   sourceId: string;
   title: string;
   artist: string;
@@ -35,6 +38,9 @@ export interface UnifiedTrackRecord {
   genre: string;
   vibe: string;
   trend_score: number;
+  /** Pre-decay signal strength from the last batch this track appeared in.
+   *  `trend_score` is this value decayed by recency (see lib/recency.ts). */
+  base_score: number;
   region_scores: Record<string, number>;
   platform_links: Record<string, string>;
   created_at: string;

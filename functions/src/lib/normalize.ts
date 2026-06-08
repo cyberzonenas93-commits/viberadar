@@ -173,6 +173,10 @@ export function mergeSignalsIntoTracks(
         keywords: entry.keywords,
       }),
       trend_score: trendScore,
+      // Fresh write: the displayed score equals the base; the scheduled
+      // decayTrendingScores sweep decays trend_score as the track ages and
+      // retires it once it falls off the charts. (see lib/recency.ts)
+      base_score: trendScore,
       region_scores: Object.fromEntries(
         Object.entries(entry.regionScores).map(([region, value]) => [
           region,

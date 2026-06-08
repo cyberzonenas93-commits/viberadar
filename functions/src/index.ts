@@ -6,16 +6,23 @@ import * as admin from "firebase-admin";
 export { createPairing, claimPairing } from "./pairing";
 export { spotifyProxy, appleProxy, youtubeProxy } from "./proxy";
 export { openaiProxy } from "./openai";
-export { onUserDeleted } from "./accountCleanup";
+export { deleteMyAccount, onUserDeleted } from "./accountCleanup";
+export { decayTrendingScores } from "./decayTrending";
+export {
+  onUploadCreated,
+  onUploadDeleted,
+  onFollowCreated,
+  onFollowDeleted,
+  onUserLikesWritten,
+} from "./socialCounters";
 
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
 import { fetchBillboardSignals } from "./clients/billboard";
 import { fetchAudiomackSignals } from "./clients/audiomack";
 import { fetchAudiusSignals } from "./clients/audius";
 import { fetchDeezerSignals } from "./clients/deezer";
-import { fetchBeatportSignals } from "./clients/beatport";
 import { enrichTracksWithMusicBrainz } from "./clients/musicbrainz";
-import { fetchSoundCloudSignals } from "./clients/soundcloud";
+import { fetchSoundchartsSignals } from "./clients/soundcharts";
 import { fetchSpotifySignals } from "./clients/spotify";
 import { fetchYouTubeSignals } from "./clients/youtube";
 import {
@@ -23,16 +30,21 @@ import {
   AUDIOMACK_CONSUMER_KEY,
   AUDIOMACK_CONSUMER_SECRET,
   BEATPORT_API_TOKEN,
-  getBeatportApiBaseUrl,
   getConfiguredRegions,
+  getSoundchartsCreds,
+  getSoundchartsPlatforms,
   normalizeSecretValue,
+  SOUNDCHARTS_API_KEY,
+  SOUNDCHARTS_APP_ID,
   SOUNDCLOUD_CLIENT_ID,
   SOUNDCLOUD_OAUTH_TOKEN,
   SPOTIFY_CLIENT_ID,
   SPOTIFY_CLIENT_SECRET,
   YOUTUBE_API_KEY,
 } from "./lib/config";
+import { getUsageLimitsForUser } from "./lib/entitlements";
 import { mergeSignalsIntoTracks } from "./lib/normalize";
+import { enforceUsageLimit } from "./lib/usage";
 import type {
   IngestionSummary,
   SourceTrackSignal,
@@ -52,6 +64,8 @@ const functionSecrets = [
   BEATPORT_API_TOKEN,
   AUDIOMACK_CONSUMER_KEY,
   AUDIOMACK_CONSUMER_SECRET,
+  SOUNDCHARTS_APP_ID,
+  SOUNDCHARTS_API_KEY,
 ];
 
 export const ingestTrackSignals = onSchedule(
@@ -93,11 +107,31 @@ export const manualIngestTrackSignals = onRequest(
     }
 
     const idToken = authHeader.slice(7);
+    let uid: string;
     try {
-      await admin.auth().verifyIdToken(idToken);
+      const decoded = await admin.auth().verifyIdToken(idToken);
+      uid = decoded.uid;
     } catch {
       response.status(403).json({ error: "Invalid or expired token" });
       return;
+    }
+
+    try {
+      const { limits } = await getUsageLimitsForUser(uid);
+      await enforceUsageLimit({
+        uid,
+        key: "manual_ingest",
+        limit: limits.manualIngestDailyLimit,
+        window: "daily",
+      });
+    } catch (error) {
+      if ((error as { code?: unknown }).code === "resource-exhausted") {
+        response.status(429).json({
+          error: "Manual refresh limit reached. Try again after the daily reset.",
+        });
+        return;
+      }
+      throw error;
     }
 
     const summary = await runIngestion();
@@ -148,7 +182,8 @@ async function runIngestion(): Promise<IngestionSummary> {
     if (ri > 0) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    const sourceNames = ["spotify", "youtube", "apple", "soundcloud", "beatport", "deezer"];
+    const scCreds = getSoundchartsCreds();
+    const sourceNames = ["spotify", "youtube", "apple", "deezer", "soundcharts"];
     const settled = await Promise.allSettled([
       withRetry(() =>
         fetchSpotifySignals({
@@ -172,21 +207,17 @@ async function runIngestion(): Promise<IngestionSummary> {
         }),
       ),
       withRetry(() =>
-        fetchSoundCloudSignals({
-          clientId: normalizeSecretValue(SOUNDCLOUD_CLIENT_ID.value()),
-          oauthToken: normalizeSecretValue(SOUNDCLOUD_OAUTH_TOKEN.value()),
-          region,
-        }),
-      ),
-      withRetry(() =>
-        fetchBeatportSignals({
-          apiToken: normalizeSecretValue(BEATPORT_API_TOKEN.value()),
-          apiBaseUrl: getBeatportApiBaseUrl(),
-          region,
-        }),
-      ),
-      withRetry(() =>
         fetchDeezerSignals({ region }),
+      ),
+      // Soundcharts: shazam/tiktok/boomplay + soundcloud/beatport (one client).
+      // No-op until SOUNDCHARTS_APP_ID/API_KEY secrets are set (no rebuild later).
+      withRetry(() =>
+        fetchSoundchartsSignals({
+          region,
+          platforms: getSoundchartsPlatforms(),
+          appId: scCreds?.appId,
+          apiKey: scCreds?.apiKey,
+        }),
       ),
     ]);
 
@@ -237,9 +268,12 @@ async function runIngestion(): Promise<IngestionSummary> {
       "apple",
       "audius",
       "audiomack",
+      "deezer",
+      "shazam",
+      "tiktok",
+      "boomplay",
       "soundcloud",
       "beatport",
-      "deezer",
     ],
   };
 }

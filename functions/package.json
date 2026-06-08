@@ -2,23 +2,24 @@
   "name": "viberadar-functions",
   "private": true,
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "lib/index.js",
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf lib",
     "lint": "tsc --noEmit",
+    "test": "ts-node --project tsconfig.json test/proxy.test.ts && ts-node --project tsconfig.json test/pairing.test.ts && ts-node --project tsconfig.json test/socialCounters.test.ts && ts-node --project tsconfig.json test/recency.test.ts && ts-node --project tsconfig.json test/usage.test.ts && ts-node --project tsconfig.json test/entitlements.test.ts && ts-node --project tsconfig.json test/soundcharts.test.ts",
     "serve": "npm run build && firebase emulators:start --only functions,firestore",
     "deploy": "firebase deploy --only functions"
   },
   "dependencies": {
-    "billboard-top-100": "^2.6.5",
-    "firebase-admin": "^13.6.0",
-    "firebase-functions": "^6.6.0"
+    "firebase-admin": "^13.10.0",
+    "firebase-functions": "^7.2.5"
   },
   "devDependencies": {
-    "@types/node": "^24.7.2",
+    "@types/node": "^22.19.20",
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
 }

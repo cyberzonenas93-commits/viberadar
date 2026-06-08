@@ -6,7 +6,12 @@
 
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
-import { OPENAI_API_KEY, normalizeSecretValue } from "./lib/config";
+import {
+  OPENAI_API_KEY,
+  normalizeSecretValue,
+} from "./lib/config";
+import { getUsageLimitsForUser } from "./lib/entitlements";
+import { enforceUsageLimit } from "./lib/usage";
 
 interface ChatMessage {
   role: string;
@@ -53,6 +58,14 @@ export const openaiProxy = onCall(
     if (!Array.isArray(messages) || messages.length === 0) {
       throw new HttpsError("invalid-argument", "messages is required");
     }
+
+    const { limits } = await getUsageLimitsForUser(request.auth.uid);
+    await enforceUsageLimit({
+      uid: request.auth.uid,
+      key: "ai_requests",
+      limit: limits.aiMonthlyLimit,
+      window: "monthly",
+    });
 
     const body: Record<string, unknown> = {
       model,
