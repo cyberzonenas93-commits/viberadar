@@ -17,17 +17,16 @@ Future<List<R>> runLimited<R>(
   required int maxConcurrent,
 }) async {
   if (maxConcurrent < 1) {
-    throw ArgumentError.value(
-        maxConcurrent, 'maxConcurrent', 'must be >= 1');
+    throw ArgumentError.value(maxConcurrent, 'maxConcurrent', 'must be >= 1');
   }
 
-  final list    = tasks.toList(growable: false);
-  final total   = list.length;
+  final list = tasks.toList(growable: false);
+  final total = list.length;
   if (total == 0) return <R>[];
 
   final results = List<R?>.filled(total, null);
-  var   next    = 0;
-  Object?   firstError;
+  var next = 0;
+  Object? firstError;
   StackTrace? firstStack;
 
   // Worker pool: each worker pulls the next index until exhausted or until
@@ -67,10 +66,9 @@ Future<List<R>> runLimited<R>(
 /// and start as soon as a slot frees up.
 class ConcurrencyLimiter {
   ConcurrencyLimiter({required int maxConcurrent})
-      : _maxConcurrent = maxConcurrent {
+    : _maxConcurrent = maxConcurrent {
     if (maxConcurrent < 1) {
-      throw ArgumentError.value(
-          maxConcurrent, 'maxConcurrent', 'must be >= 1');
+      throw ArgumentError.value(maxConcurrent, 'maxConcurrent', 'must be >= 1');
     }
   }
 

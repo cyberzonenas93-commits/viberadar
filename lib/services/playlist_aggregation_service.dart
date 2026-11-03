@@ -33,9 +33,9 @@ class AggregatedPlaylist {
 /// Deezer uses its public unauthenticated API (no key required).
 class PlaylistAggregationService {
   PlaylistAggregationService({FirebaseFunctions? functions})
-      : _injectedFunctions = functions,
-        _apple = AppleMusicArtistService(functions: functions),
-        _youtube = YoutubeSearchService(functions: functions);
+    : _injectedFunctions = functions,
+      _apple = AppleMusicArtistService(functions: functions),
+      _youtube = YoutubeSearchService(functions: functions);
 
   final FirebaseFunctions? _injectedFunctions;
   final AppleMusicArtistService _apple;
@@ -96,12 +96,14 @@ class PlaylistAggregationService {
 
     try {
       // 1. Featured playlists
-      dev.log('Fetching Spotify featured playlists via proxy',
-          name: 'PlaylistAggregation');
-      final featuredData = await _spotifyGet(
-        'browse/featured-playlists',
-        {'limit': '10', 'country': 'US'},
+      dev.log(
+        'Fetching Spotify featured playlists via proxy',
+        name: 'PlaylistAggregation',
       );
+      final featuredData = await _spotifyGet('browse/featured-playlists', {
+        'limit': '10',
+        'country': 'US',
+      });
 
       final featItems = featuredData['playlists']?['items'] as List? ?? [];
       for (final item in featItems.take(5)) {
@@ -109,20 +111,25 @@ class PlaylistAggregationService {
         final name = item['name'] as String? ?? 'Playlist';
         final desc = item['description'] as String? ?? '';
         final images = item['images'] as List? ?? [];
-        final artwork =
-            images.isNotEmpty ? images.first['url'] as String? : null;
+        final artwork = images.isNotEmpty
+            ? images.first['url'] as String?
+            : null;
 
         if (playlistId != null) {
-          final tracks =
-              await _fetchSpotifyPlaylistTracks(playlistId, limit: limit);
+          final tracks = await _fetchSpotifyPlaylistTracks(
+            playlistId,
+            limit: limit,
+          );
           if (tracks.isNotEmpty) {
-            playlists.add(AggregatedPlaylist(
-              name: name,
-              sources: const ['spotify'],
-              artworkUrl: artwork,
-              description: desc,
-              tracks: tracks,
-            ));
+            playlists.add(
+              AggregatedPlaylist(
+                name: name,
+                sources: const ['spotify'],
+                artworkUrl: artwork,
+                description: desc,
+                tracks: tracks,
+              ),
+            );
           }
         }
       }
@@ -141,20 +148,25 @@ class PlaylistAggregationService {
           final name = item['name'] as String? ?? 'Playlist';
           final desc = item['description'] as String? ?? '';
           final images = item['images'] as List? ?? [];
-          final artwork =
-              images.isNotEmpty ? images.first['url'] as String? : null;
+          final artwork = images.isNotEmpty
+              ? images.first['url'] as String?
+              : null;
 
           if (playlistId != null) {
-            final tracks =
-                await _fetchSpotifyPlaylistTracks(playlistId, limit: limit);
+            final tracks = await _fetchSpotifyPlaylistTracks(
+              playlistId,
+              limit: limit,
+            );
             if (tracks.isNotEmpty) {
-              playlists.add(AggregatedPlaylist(
-                name: name,
-                sources: const ['spotify'],
-                artworkUrl: artwork,
-                description: desc,
-                tracks: tracks,
-              ));
+              playlists.add(
+                AggregatedPlaylist(
+                  name: name,
+                  sources: const ['spotify'],
+                  artworkUrl: artwork,
+                  description: desc,
+                  tracks: tracks,
+                ),
+              );
             }
           }
         }
@@ -162,10 +174,13 @@ class PlaylistAggregationService {
 
       // 3. Fallback: if no playlists found yet, search for popular tracks directly
       if (playlists.isEmpty) {
-        dev.log('No Spotify playlists found, falling back to track search',
-            name: 'PlaylistAggregation');
-        final searchQuery =
-            genre == 'All' ? 'top hits 2026' : '$genre top hits';
+        dev.log(
+          'No Spotify playlists found, falling back to track search',
+          name: 'PlaylistAggregation',
+        );
+        final searchQuery = genre == 'All'
+            ? 'top hits 2026'
+            : '$genre top hits';
         final searchData = await _spotifyGet('search', {
           'q': searchQuery,
           'type': 'track',
@@ -177,40 +192,46 @@ class PlaylistAggregationService {
 
         for (final item in searchItems) {
           final name = item['name'] as String? ?? '';
-          final artists = (item['artists'] as List?)
+          final artists =
+              (item['artists'] as List?)
                   ?.map((a) => a['name'] as String)
                   .join(', ') ??
               '';
           final album = item['album'] as Map<String, dynamic>?;
           final images = album?['images'] as List? ?? [];
-          final artwork =
-              images.isNotEmpty ? images.first['url'] as String? : null;
+          final artwork = images.isNotEmpty
+              ? images.first['url'] as String?
+              : null;
           final url = item['external_urls']?['spotify'] as String?;
           final duration = item['duration_ms'] as int? ?? 0;
           final popularity = item['popularity'] as int? ?? 0;
 
           if (name.isNotEmpty) {
-            searchTracks.add(PlatformTrackResult(
-              title: name,
-              artist: artists,
-              artworkUrl: artwork,
-              spotifyUrl: url,
-              durationMs: duration,
-              popularity: popularity,
-            ));
+            searchTracks.add(
+              PlatformTrackResult(
+                title: name,
+                artist: artists,
+                artworkUrl: artwork,
+                spotifyUrl: url,
+                durationMs: duration,
+                popularity: popularity,
+              ),
+            );
           }
         }
 
         if (searchTracks.isNotEmpty) {
-          playlists.add(AggregatedPlaylist(
-            name: genre == 'All'
-                ? 'Top Hits (Spotify)'
-                : '$genre Hits (Spotify)',
-            sources: const ['spotify'],
-            artworkUrl: searchTracks.first.artworkUrl,
-            description: 'Popular tracks from Spotify',
-            tracks: searchTracks,
-          ));
+          playlists.add(
+            AggregatedPlaylist(
+              name: genre == 'All'
+                  ? 'Top Hits (Spotify)'
+                  : '$genre Hits (Spotify)',
+              sources: const ['spotify'],
+              artworkUrl: searchTracks.first.artworkUrl,
+              description: 'Popular tracks from Spotify',
+              tracks: searchTracks,
+            ),
+          );
         }
       }
     } catch (e) {
@@ -226,10 +247,10 @@ class PlaylistAggregationService {
     int limit = 100,
   }) async {
     try {
-      final data = await _spotifyGet(
-        'playlists/$playlistId/tracks',
-        {'limit': '$limit', 'market': 'US'},
-      );
+      final data = await _spotifyGet('playlists/$playlistId/tracks', {
+        'limit': '$limit',
+        'market': 'US',
+      });
 
       final items = data['items'] as List? ?? [];
       final tracks = <PlatformTrackResult>[];
@@ -239,27 +260,31 @@ class PlaylistAggregationService {
         if (track == null) continue;
 
         final name = track['name'] as String? ?? '';
-        final artists = (track['artists'] as List?)
+        final artists =
+            (track['artists'] as List?)
                 ?.map((a) => a['name'] as String)
                 .join(', ') ??
             '';
         final album = track['album'] as Map<String, dynamic>?;
         final images = album?['images'] as List? ?? [];
-        final artwork =
-            images.isNotEmpty ? images.first['url'] as String? : null;
+        final artwork = images.isNotEmpty
+            ? images.first['url'] as String?
+            : null;
         final url = track['external_urls']?['spotify'] as String?;
         final duration = track['duration_ms'] as int? ?? 0;
         final popularity = track['popularity'] as int? ?? 0;
 
         if (name.isNotEmpty) {
-          tracks.add(PlatformTrackResult(
-            title: name,
-            artist: artists,
-            artworkUrl: artwork,
-            spotifyUrl: url,
-            durationMs: duration,
-            popularity: popularity,
-          ));
+          tracks.add(
+            PlatformTrackResult(
+              title: name,
+              artist: artists,
+              artworkUrl: artwork,
+              spotifyUrl: url,
+              durationMs: duration,
+              popularity: popularity,
+            ),
+          );
         }
       }
 
@@ -300,23 +325,27 @@ class PlaylistAggregationService {
           final duration = attrs['durationInMillis'] as int? ?? 0;
 
           if (name.isNotEmpty) {
-            tracks.add(PlatformTrackResult(
-              title: name,
-              artist: artist,
-              artworkUrl: artwork.isNotEmpty ? artwork : null,
-              appleUrl: url,
-              durationMs: duration,
-            ));
+            tracks.add(
+              PlatformTrackResult(
+                title: name,
+                artist: artist,
+                artworkUrl: artwork.isNotEmpty ? artwork : null,
+                appleUrl: url,
+                durationMs: duration,
+              ),
+            );
           }
         }
 
         if (tracks.isNotEmpty) {
-          playlists.add(AggregatedPlaylist(
-            name: '$chartName (Apple Music)',
-            sources: const ['apple'],
-            artworkUrl: tracks.first.artworkUrl,
-            tracks: tracks,
-          ));
+          playlists.add(
+            AggregatedPlaylist(
+              name: '$chartName (Apple Music)',
+              sources: const ['apple'],
+              artworkUrl: tracks.first.artworkUrl,
+              tracks: tracks,
+            ),
+          );
         }
       }
 
@@ -324,25 +353,31 @@ class PlaylistAggregationService {
       if (genre != 'All') {
         final results = await _apple.searchSongs(genre, limit: limit);
         if (results.isNotEmpty) {
-          playlists.add(AggregatedPlaylist(
-            name: '$genre on Apple Music',
-            sources: const ['apple'],
-            artworkUrl: results.first.artworkUrl,
-            tracks: results
-                .map((t) => PlatformTrackResult(
+          playlists.add(
+            AggregatedPlaylist(
+              name: '$genre on Apple Music',
+              sources: const ['apple'],
+              artworkUrl: results.first.artworkUrl,
+              tracks: results
+                  .map(
+                    (t) => PlatformTrackResult(
                       title: t.name,
                       artist: t.artistName,
                       artworkUrl: t.artworkUrl,
                       appleUrl: t.appleUrl,
                       durationMs: t.durationMs,
-                    ))
-                .toList(),
-          ));
+                    ),
+                  )
+                  .toList(),
+            ),
+          );
         }
       }
     } catch (e) {
-      dev.log('Apple Music playlist fetch error: $e',
-          name: 'PlaylistAggregation');
+      dev.log(
+        'Apple Music playlist fetch error: $e',
+        name: 'PlaylistAggregation',
+      );
     }
 
     return playlists;
@@ -359,10 +394,13 @@ class PlaylistAggregationService {
   }) async {
     try {
       // Try YouTube Data API first (via proxy)
-      final query =
-          genre == 'All' ? 'trending music 2026' : '$genre music trending';
-      final videos =
-          await _youtube.searchMusic(query, limit: limit.clamp(1, 50));
+      final query = genre == 'All'
+          ? 'trending music 2026'
+          : '$genre music trending';
+      final videos = await _youtube.searchMusic(
+        query,
+        limit: limit.clamp(1, 50),
+      );
       if (videos.isNotEmpty) {
         return [
           AggregatedPlaylist(
@@ -371,12 +409,14 @@ class PlaylistAggregationService {
             artworkUrl: videos.first.thumbnailUrl,
             description: 'Top trending music videos from YouTube',
             tracks: videos
-                .map((v) => PlatformTrackResult(
-                      title: v.title,
-                      artist: v.channelName,
-                      artworkUrl: v.thumbnailUrl,
-                      youtubeUrl: v.youtubeUrl,
-                    ))
+                .map(
+                  (v) => PlatformTrackResult(
+                    title: v.title,
+                    artist: v.channelName,
+                    artworkUrl: v.thumbnailUrl,
+                    youtubeUrl: v.youtubeUrl,
+                  ),
+                )
                 .toList(),
           ),
         ];
@@ -402,7 +442,8 @@ class PlaylistAggregationService {
 
           for (final item in items) {
             final name = item['name'] as String? ?? '';
-            final artists = (item['artists'] as List?)
+            final artists =
+                (item['artists'] as List?)
                     ?.map((a) => a['name'] as String)
                     .join(', ') ??
                 '';
@@ -412,26 +453,34 @@ class PlaylistAggregationService {
 
             final album = item['album'] as Map<String, dynamic>?;
             final images = album?['images'] as List? ?? [];
-            final artwork =
-                images.isNotEmpty ? images.first['url'] as String? : null;
+            final artwork = images.isNotEmpty
+                ? images.first['url'] as String?
+                : null;
             final spotUrl = item['external_urls']?['spotify'] as String?;
             final ytSearch =
                 'https://www.youtube.com/results?search_query=${Uri.encodeComponent('$artists $name official')}';
 
             if (name.isNotEmpty) {
-              allTracks.add(PlatformTrackResult(
-                title: name,
-                artist: artists,
-                artworkUrl: artwork,
-                spotifyUrl: spotUrl,
-                youtubeUrl: ytSearch,
-              ));
+              allTracks.add(
+                PlatformTrackResult(
+                  title: name,
+                  artist: artists,
+                  artworkUrl: artwork,
+                  spotifyUrl: spotUrl,
+                  youtubeUrl: ytSearch,
+                ),
+              );
             }
 
             if (allTracks.length >= limit) break;
           }
         } catch (e, st) {
-          dev.log('Spotify search/parse failed for query "$searchQuery"', name: 'PlaylistAggregation', error: e, stackTrace: st);
+          dev.log(
+            'Spotify search/parse failed for query "$searchQuery"',
+            name: 'PlaylistAggregation',
+            error: e,
+            stackTrace: st,
+          );
         }
         if (allTracks.length >= limit) break;
       }
@@ -475,20 +524,23 @@ class PlaylistAggregationService {
           (data['data'] as List?) ?? (data['tracks']?['data'] as List?) ?? [];
       if (items.isEmpty) return [];
 
-      final tracks = items.map<PlatformTrackResult>((item) {
-        final title = item['title'] as String? ?? '';
-        final artist = item['artist']?['name'] as String? ?? '';
-        final artwork = item['album']?['cover_medium'] as String? ?? '';
-        final link = item['link'] as String?;
-        return PlatformTrackResult(
-          title: title,
-          artist: artist,
-          artworkUrl: artwork.isNotEmpty ? artwork : null,
-          deezerUrl: link,
-          durationMs: ((item['duration'] as int?) ?? 0) * 1000,
-          popularity: item['rank'] as int? ?? 0,
-        );
-      }).where((t) => t.title.isNotEmpty).toList();
+      final tracks = items
+          .map<PlatformTrackResult>((item) {
+            final title = item['title'] as String? ?? '';
+            final artist = item['artist']?['name'] as String? ?? '';
+            final artwork = item['album']?['cover_medium'] as String? ?? '';
+            final link = item['link'] as String?;
+            return PlatformTrackResult(
+              title: title,
+              artist: artist,
+              artworkUrl: artwork.isNotEmpty ? artwork : null,
+              deezerUrl: link,
+              durationMs: ((item['duration'] as int?) ?? 0) * 1000,
+              popularity: item['rank'] as int? ?? 0,
+            );
+          })
+          .where((t) => t.title.isNotEmpty)
+          .toList();
 
       if (tracks.isEmpty) return [];
 
@@ -531,20 +583,25 @@ class PlaylistAggregationService {
         final playlistId = item['id'] as String?;
         final name = item['name'] as String? ?? 'Billboard Chart';
         final images = item['images'] as List? ?? [];
-        final artwork =
-            images.isNotEmpty ? images.first['url'] as String? : null;
+        final artwork = images.isNotEmpty
+            ? images.first['url'] as String?
+            : null;
 
         if (playlistId != null) {
-          final tracks =
-              await _fetchSpotifyPlaylistTracks(playlistId, limit: limit);
+          final tracks = await _fetchSpotifyPlaylistTracks(
+            playlistId,
+            limit: limit,
+          );
           if (tracks.isNotEmpty) {
-            playlists.add(AggregatedPlaylist(
-              name: '$name (Billboard)',
-              sources: const ['billboard'],
-              artworkUrl: artwork,
-              description: 'Billboard chart tracks',
-              tracks: tracks,
-            ));
+            playlists.add(
+              AggregatedPlaylist(
+                name: '$name (Billboard)',
+                sources: const ['billboard'],
+                artworkUrl: artwork,
+                description: 'Billboard chart tracks',
+                tracks: tracks,
+              ),
+            );
           }
         }
       }

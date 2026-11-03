@@ -76,10 +76,7 @@ void main() {
       await service.deleteSecret(kOpenAiApiKey);
 
       expect(await service.readSecret(kOpenAiApiKey), isNull);
-      expect(
-        await service.readSecret(kSpotifyClientSecret),
-        equals("spotify"),
-      );
+      expect(await service.readSecret(kSpotifyClientSecret), equals("spotify"));
     });
   });
 

@@ -1,12 +1,18 @@
 import 'package:collection/collection.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/config/music_genres.dart';
 import '../data/repositories/session_repository.dart';
+import '../data/repositories/track_repository.dart';
 import '../models/app_section.dart';
+import '../models/entitlement.dart';
 import '../models/session_state.dart';
 import '../models/track.dart';
 import '../models/track_filters.dart';
 import '../models/user_profile.dart';
+import '../services/live_track_catalog_service.dart';
 import 'repositories.dart';
 
 enum TrackSortColumn {
@@ -136,18 +142,99 @@ final sessionProvider = StreamProvider<SessionState>((ref) {
   return ref.watch(sessionRepositoryProvider).sessionChanges();
 });
 
-final trackStreamProvider = StreamProvider<List<Track>>((ref) {
-  return ref.watch(trackRepositoryProvider).watchTracks();
+final appEntitlementProvider = StreamProvider<AppEntitlement>((ref) {
+  final session = ref.watch(sessionProvider).value;
+  if (session?.isAuthenticated != true || session!.userId.isEmpty) {
+    return Stream<AppEntitlement>.value(const AppEntitlement());
+  }
+  if (Firebase.apps.isEmpty) {
+    return Stream<AppEntitlement>.value(const AppEntitlement());
+  }
+
+  return FirebaseFirestore.instance
+      .collection('entitlements')
+      .doc(session.userId)
+      .snapshots()
+      .map((snap) => AppEntitlement.fromMap(snap.data()));
 });
+
+enum LiveCatalogAccess { loading, signedOut, guestPreview, freePreview, pro }
+
+extension LiveCatalogAccessX on LiveCatalogAccess {
+  bool get hasLiveAccess => this == LiveCatalogAccess.pro;
+
+  bool get showsPreviewData =>
+      this == LiveCatalogAccess.guestPreview ||
+      this == LiveCatalogAccess.freePreview;
+
+  bool get requiresSignIn => this == LiveCatalogAccess.signedOut;
+
+  bool get requiresUpgrade => this == LiveCatalogAccess.freePreview;
+}
+
+final liveCatalogAccessProvider = Provider<LiveCatalogAccess>((ref) {
+  final sessionAsync = ref.watch(sessionProvider);
+  final session = sessionAsync.value;
+
+  if (session == null) {
+    return sessionAsync.isLoading
+        ? LiveCatalogAccess.loading
+        : LiveCatalogAccess.signedOut;
+  }
+  if (session.isDemo) return LiveCatalogAccess.guestPreview;
+  if (!session.isAuthenticated) return LiveCatalogAccess.signedOut;
+
+  final entitlementAsync = ref.watch(appEntitlementProvider);
+  if (entitlementAsync.isLoading && !entitlementAsync.hasValue) {
+    return LiveCatalogAccess.loading;
+  }
+  final entitlement = entitlementAsync.value ?? const AppEntitlement();
+  return entitlement.isPro
+      ? LiveCatalogAccess.pro
+      : LiveCatalogAccess.freePreview;
+});
+
+final liveTrackCatalogServiceProvider = Provider<LiveTrackCatalogService>(
+  (ref) => LiveTrackCatalogService(),
+);
+
+final trackStreamProvider = StreamProvider<List<Track>>((ref) {
+  final access = ref.watch(liveCatalogAccessProvider);
+  if (access.hasLiveAccess) {
+    final selectedRegion = ref.watch(selectedRegionProvider);
+    final region = selectedRegion ?? 'Global';
+    // The selected genre drives live retrieval: changing it refetches a
+    // genre-scoped catalog instead of post-filtering a genre-blind feed.
+    final genre = ref.watch(selectedGenreProvider);
+    return Stream<List<Track>>.fromFuture(
+      ref
+          .watch(liveTrackCatalogServiceProvider)
+          .fetchTrendingTracks(region: region, genre: genre),
+    );
+  }
+  if (access.showsPreviewData) return _guestTrackRepository.watchTracks();
+  return Stream<List<Track>>.value(const <Track>[]);
+});
+
+final MockTrackRepository _guestTrackRepository = MockTrackRepository();
 
 final userProfileProvider = StreamProvider<UserProfile>((ref) {
   final session = ref.watch(sessionProvider).value;
+  if (session?.isDemo == true) {
+    return Stream<UserProfile>.value(
+      UserProfile.empty(
+        id: session!.userId,
+        displayName: session.displayName,
+        preferredRegion: 'Global',
+      ),
+    );
+  }
   if (session?.isAuthenticated != true && session?.isDemo != true) {
     return Stream<UserProfile>.value(
       UserProfile.empty(
         id: 'public-guest',
         displayName: 'Guest DJ',
-        preferredRegion: 'GH',
+        preferredRegion: 'Global',
       ),
     );
   }
@@ -166,20 +253,45 @@ final userProfileProvider = StreamProvider<UserProfile>((ref) {
 /// This is LOCAL UI state, deliberately decoupled from the Firestore user
 /// profile: region selection must work instantly for everyone — including
 /// unauthenticated "guest" sessions, which have no writable profile doc (and
-/// whose profile stream is a constant). `null` means "fall back to the
-/// signed-in profile's preferredRegion". Signed-in changes are also persisted
-/// to the profile for cross-session durability.
+/// whose profile stream is a constant). The in-session default is always
+/// `Global`; persisted profile regions are only used by Settings as a saved
+/// preference, not as an implicit startup filter.
 class SelectedRegionController extends Notifier<String?> {
   @override
-  String? build() => null;
+  String? build() => 'Global';
 
   void set(String? region) => state = region;
 }
 
 final selectedRegionProvider =
     NotifierProvider<SelectedRegionController, String?>(
-  SelectedRegionController.new,
-);
+      SelectedRegionController.new,
+    );
+
+/// User-selected genre lane for the live catalog/charts. `null` means "All" —
+/// no lane — and is the in-session default. A specific lane (e.g. `House`)
+/// drives genre-aware live retrieval (see [trackStreamProvider]) rather than
+/// post-filtering a genre-blind feed.
+class SelectedGenreController extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? genre) {
+    if (genre == null) {
+      state = null;
+      return;
+    }
+    final trimmed = genre.trim();
+    state = (trimmed.isEmpty || trimmed.toLowerCase() == 'all')
+        ? null
+        : trimmed;
+  }
+}
+
+final selectedGenreProvider =
+    NotifierProvider<SelectedGenreController, String?>(
+      SelectedGenreController.new,
+    );
 
 final visibleTracksProvider = Provider<List<Track>>((ref) {
   final tracks = ref.watch(trackStreamProvider).value ?? const <Track>[];
@@ -238,8 +350,13 @@ final selectedTrackProvider = Provider<Track?>((ref) {
 
 final availableGenresProvider = Provider<List<String>>((ref) {
   final genres =
-      ref.watch(trackStreamProvider).value?.map((track) => track.genre) ?? [];
-  return ['All', ...genres.toSet().toList()..sort()];
+      ref
+          .watch(trackStreamProvider)
+          .value
+          ?.map((track) => canonicalGenre(track.genre))
+          .where(isSpecificGenre) ??
+      const Iterable<String>.empty();
+  return mergedGenreOptions(genres);
 });
 
 final availableVibesProvider = Provider<List<String>>((ref) {
@@ -249,7 +366,18 @@ final availableVibesProvider = Provider<List<String>>((ref) {
 });
 
 final availableRegionsProvider = Provider<List<String>>((ref) {
-  final regionSet = <String>{'Global'};
+  final regionSet = <String>{
+    'Global',
+    'GH',
+    'NG',
+    'ZA',
+    'GB',
+    'US',
+    'CA',
+    'AU',
+    'DE',
+    'FR',
+  };
   for (final track in ref.watch(trackStreamProvider).value ?? const <Track>[]) {
     regionSet.addAll(track.regionScores.keys);
   }

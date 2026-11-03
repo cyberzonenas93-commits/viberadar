@@ -1,11 +1,11 @@
 import 'package:collection/collection.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/track.dart';
+import 'platform_play_actions.dart';
 import 'source_badges.dart';
 
 class TrackDetailPanel extends StatelessWidget {
@@ -107,11 +107,10 @@ class TrackDetailPanel extends StatelessWidget {
                                 color: AppTheme.panelRaised,
                                 alignment: Alignment.center,
                                 child: CircularProgressIndicator(
-                                  value: loadingProgress.expectedTotalBytes !=
-                                          null
-                                      ? loadingProgress
-                                              .cumulativeBytesLoaded /
-                                          loadingProgress.expectedTotalBytes!
+                                  value:
+                                      loadingProgress.expectedTotalBytes != null
+                                      ? loadingProgress.cumulativeBytesLoaded /
+                                            loadingProgress.expectedTotalBytes!
                                       : null,
                                   color: AppTheme.cyan,
                                   strokeWidth: 2,
@@ -161,22 +160,10 @@ class TrackDetailPanel extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (_bestPlatformUrl(track.platformLinks) != null)
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: () => _openLink(
-                        _bestPlatformUrl(track.platformLinks)!,
-                      ),
-                      icon: const Icon(Icons.play_circle_filled_rounded),
-                      label: Text(
-                        'Listen on ${_bestPlatformLabel(track.platformLinks)}',
-                      ),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
-                  ),
+                PlatformPlayActions(
+                  links: track.platformLinks,
+                  labelStyle: PlatformPlayLabelStyle.playOnPlatform,
+                ),
                 const SizedBox(height: 12),
                 if (track.isRisingFast)
                   Container(
@@ -340,18 +327,9 @@ class TrackDetailPanel extends StatelessWidget {
                 const SizedBox(height: 10),
                 SourceBadges(sources: track.effectiveSources),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: track.platformLinks.entries
-                      .map(
-                        (entry) => FilledButton.tonalIcon(
-                          onPressed: () => _openLink(entry.value),
-                          icon: const Icon(Icons.open_in_new_rounded),
-                          label: Text(entry.key.toUpperCase()),
-                        ),
-                      )
-                      .toList(),
+                PlatformPlayActions(
+                  links: track.platformLinks,
+                  labelStyle: PlatformPlayLabelStyle.playOnPlatform,
                 ),
                 const SizedBox(height: 18),
                 Text(
@@ -416,38 +394,6 @@ class TrackDetailPanel extends StatelessWidget {
     final bpmScore = 1 - ((seed.bpm - candidate.bpm).abs() / 30).clamp(0, 1);
     final trendScore = candidate.trendScore * 0.15;
     return genreScore + vibeScore + (bpmScore * 0.25) + trendScore;
-  }
-
-  Future<void> _openLink(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri != null) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
-  }
-
-  static String? _bestPlatformUrl(Map<String, String> links) {
-    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
-    for (final key in priority) {
-      final url = links[key];
-      if (url != null && url.isNotEmpty) return url;
-    }
-    return links.values.firstOrNull;
-  }
-
-  static String _bestPlatformLabel(Map<String, String> links) {
-    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
-    const labels = {
-      'spotify': 'Spotify',
-      'apple': 'Apple Music',
-      'youtube': 'YouTube',
-      'soundcloud': 'SoundCloud',
-      'audius': 'Audius',
-      'beatport': 'Beatport',
-    };
-    for (final key in priority) {
-      if (links.containsKey(key)) return labels[key] ?? key;
-    }
-    return 'Browser';
   }
 }
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:math' as math;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -6,6 +7,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../services/spotify_artist_service.dart';
+
+typedef ArtistSearch = Future<List<SpotifyArtistResult>> Function(String query);
+typedef ArtistImageLookup =
+    Future<Map<String, String>> Function(List<String> names);
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onComplete});
@@ -20,7 +25,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     with TickerProviderStateMixin {
   final _pageController = PageController();
   int _currentPage = 0;
-  bool _showingArtistPicker = false;
   late final AnimationController _bgController;
 
   static const _pages = <_OnboardingPage>[
@@ -74,16 +78,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    if (_showingArtistPicker) {
-      return Scaffold(
-        backgroundColor: AppTheme.ink,
-        body: _OnboardingArtistPicker(
-          onComplete: widget.onComplete,
-          onSkip: () => widget.onComplete(const []),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: AppTheme.ink,
       body: Stack(
@@ -134,18 +128,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     },
                   ),
                 ),
-                // Credit
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
-                  child: Text(
-                    'Designed and Built by Angelo Nartey.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textTertiary,
-                      fontSize: 11,
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                ),
                 // Indicators and button
                 Padding(
                   padding: const EdgeInsets.fromLTRB(32, 0, 32, 40),
@@ -173,13 +155,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         }),
                       ),
                       const Spacer(),
-                      // Next / Choose Artists button
+                      // Next / sign-in button. Artist preferences are account
+                      // data and are collected only after authentication.
                       _currentPage == _pages.length - 1
                           ? FilledButton.icon(
-                              onPressed: () =>
-                                  setState(() => _showingArtistPicker = true),
+                              onPressed: () => widget.onComplete(const []),
                               icon: const Icon(Icons.arrow_forward_rounded),
-                              label: const Text('Choose Artists'),
+                              label: const Text('Continue'),
                               style: FilledButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 24,
@@ -219,23 +201,30 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
 // ── Onboarding artist picker ──────────────────────────────────────────────────
 
-class _OnboardingArtistPicker extends StatefulWidget {
-  const _OnboardingArtistPicker({
+class OnboardingArtistPicker extends StatefulWidget {
+  const OnboardingArtistPicker({
+    super.key,
     required this.onComplete,
     required this.onSkip,
+    this.artistSearch,
+    this.artistImageLookup,
   });
   final void Function(List<String> artists) onComplete;
   final VoidCallback onSkip;
+  final ArtistSearch? artistSearch;
+  final ArtistImageLookup? artistImageLookup;
 
   @override
-  State<_OnboardingArtistPicker> createState() =>
-      _OnboardingArtistPickerState();
+  State<OnboardingArtistPicker> createState() => _OnboardingArtistPickerState();
 }
 
-class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
+class _OnboardingArtistPickerState extends State<OnboardingArtistPicker> {
   final _searchCtrl = TextEditingController();
   final _spotify = SpotifyArtistService();
+  late final ArtistSearch _artistSearch;
+  late final ArtistImageLookup _artistImageLookup;
   final Set<String> _selected = {};
+  final Map<String, String> _popularImages = {};
   List<SpotifyArtistResult> _searchResults = [];
   bool _searching = false;
   Timer? _debounce;
@@ -299,6 +288,112 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _artistSearch = widget.artistSearch ?? _spotify.searchArtistsByName;
+    _artistImageLookup =
+        widget.artistImageLookup ?? _spotify.fetchOnboardingArtistImages;
+    unawaited(_loadPopularImages());
+  }
+
+  Future<void> _loadPopularImages() async {
+    for (var i = 0; i < _popular.length; i += 12) {
+      final batch = _popular
+          .skip(i)
+          .take(12)
+          .where((name) => !_popularImages.containsKey(name))
+          .toList();
+      if (batch.isEmpty) continue;
+
+      Map<String, String> updates;
+      try {
+        updates = await _artistImageLookup(batch);
+      } catch (e, st) {
+        developer.log(
+          'Failed to fetch onboarding Spotify artist image batch',
+          name: 'Onboarding',
+          error: e,
+          stackTrace: st,
+        );
+        updates = const {};
+      }
+      if (!mounted) return;
+
+      final validUpdates = <String, String>{};
+      for (final entry in updates.entries) {
+        final imageUrl = _validImageUrl(entry.value);
+        if (imageUrl != null) validUpdates[entry.key] = imageUrl;
+      }
+      if (validUpdates.isNotEmpty) {
+        setState(() => _popularImages.addAll(validUpdates));
+      }
+    }
+  }
+
+  String? _validImageUrl(String? imageUrl) {
+    final trimmed = imageUrl?.trim();
+    return trimmed == null || trimmed.isEmpty ? null : trimmed;
+  }
+
+  Widget _buildFooter() {
+    final selectedCount = Text(
+      '${_selected.length} selected',
+      style: const TextStyle(color: Colors.white54, fontSize: 12),
+    );
+    final skipButton = TextButton(
+      onPressed: widget.onSkip,
+      child: const Text('Skip', style: TextStyle(color: Colors.white38)),
+    );
+    final startButton = FilledButton(
+      onPressed: () => widget.onComplete(_selected.toList()),
+      style: FilledButton.styleFrom(
+        backgroundColor: AppTheme.cyan,
+        foregroundColor: AppTheme.ink,
+        padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: const Text(
+        'Get Started',
+        style: TextStyle(fontWeight: FontWeight.w700),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth < 400) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                selectedCount,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    skipButton,
+                    const SizedBox(width: 12),
+                    Expanded(child: startButton),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return Row(
+            children: [
+              selectedCount,
+              const Spacer(),
+              skipButton,
+              const SizedBox(width: 12),
+              startButton,
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  @override
   void dispose() {
     _searchCtrl.dispose();
     _debounce?.cancel();
@@ -318,7 +413,7 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
       if (!mounted) return;
       setState(() => _searching = true);
       try {
-        final results = await _spotify.searchArtistsByName(query);
+        final results = await _artistSearch(query);
         if (mounted) {
           setState(() {
             _searchResults = results;
@@ -335,8 +430,9 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final showSearch = _searchCtrl.text.length >= 2;
-    final displayItems =
-        showSearch ? _searchResults.map((r) => r.name).toList() : _popular;
+    final displayItems = showSearch
+        ? _searchResults.map((r) => r.name).toList()
+        : _popular;
 
     return SafeArea(
       child: Column(
@@ -353,7 +449,7 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
                   style: theme.textTheme.headlineMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: -0.8,
+                    letterSpacing: 0,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -369,36 +465,47 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
                   decoration: InputDecoration(
                     hintText: 'Search any artist...',
                     hintStyle: const TextStyle(color: Colors.white38),
-                    prefixIcon: const Icon(Icons.search_rounded,
-                        color: Colors.white38, size: 18),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: Colors.white38,
+                      size: 18,
+                    ),
                     suffixIcon: _searching
                         ? const Padding(
                             padding: EdgeInsets.all(12),
                             child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: AppTheme.violet)),
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.violet,
+                              ),
+                            ),
                           )
                         : null,
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: 0.08),
                     isDense: true,
-                    contentPadding:
-                        const EdgeInsets.symmetric(vertical: 12),
+                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                    ),
                     enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide:
-                            BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.15),
+                      ),
+                    ),
                     focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(
-                            color: AppTheme.cyan, width: 1.5)),
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppTheme.cyan,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -413,34 +520,43 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
                 runSpacing: 6,
                 children: _selected
                     .take(8)
-                    .map((name) => GestureDetector(
-                          onTap: () =>
-                              setState(() => _selected.remove(name)),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppTheme.violet.withValues(alpha: 0.25),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                  color: AppTheme.violet
-                                      .withValues(alpha: 0.5)),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(name,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500)),
-                                const SizedBox(width: 4),
-                                const Icon(Icons.close_rounded,
-                                    color: Colors.white70, size: 12),
-                              ],
+                    .map(
+                      (name) => GestureDetector(
+                        onTap: () => setState(() => _selected.remove(name)),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.violet.withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: AppTheme.violet.withValues(alpha: 0.5),
                             ),
                           ),
-                        ))
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white70,
+                                size: 12,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    )
                     .toList(),
               ),
             ),
@@ -449,8 +565,7 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 32),
-              gridDelegate:
-                  const SliverGridDelegateWithMaxCrossAxisExtent(
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: 140,
                 childAspectRatio: 0.85,
                 crossAxisSpacing: 10,
@@ -459,8 +574,9 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
               itemCount: displayItems.length,
               itemBuilder: (context, i) {
                 final name = displayItems[i];
-                final imageUrl =
-                    showSearch ? _searchResults[i].imageUrl : null;
+                final imageUrl = showSearch
+                    ? _validImageUrl(_searchResults[i].imageUrl)
+                    : _popularImages[name];
                 final isSelected = _selected.contains(name);
                 return GestureDetector(
                   onTap: () => setState(() {
@@ -492,62 +608,35 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(30),
-                              child: imageUrl != null
-                                  ? CachedNetworkImage(
-                                      imageUrl: imageUrl,
-                                      width: 56,
-                                      height: 56,
-                                      fit: BoxFit.cover)
-                                  : Container(
-                                      width: 56,
-                                      height: 56,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            AppTheme.violet
-                                                .withValues(alpha: 0.4),
-                                            AppTheme.cyan
-                                                .withValues(alpha: 0.3),
-                                          ],
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          name.isNotEmpty
-                                              ? name[0].toUpperCase()
-                                              : '?',
-                                          style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 22,
-                                              fontWeight: FontWeight.w700),
-                                        ),
-                                      ),
-                                    ),
+                              child: _ArtistImage(
+                                name: name,
+                                imageUrl: imageUrl,
+                              ),
                             ),
                             if (isSelected)
                               Container(
                                 width: 18,
                                 height: 18,
                                 decoration: const BoxDecoration(
-                                    color: AppTheme.violet,
-                                    shape: BoxShape.circle),
-                                child: const Icon(Icons.check_rounded,
-                                    color: Colors.white, size: 12),
+                                  color: AppTheme.violet,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.check_rounded,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
                               ),
                           ],
                         ),
                         const SizedBox(height: 8),
                         Padding(
-                          padding:
-                              const EdgeInsets.symmetric(horizontal: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
                           child: Text(
                             name,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              color: isSelected
-                                  ? Colors.white
-                                  : Colors.white70,
+                              color: isSelected ? Colors.white : Colors.white70,
                               fontSize: 11,
                               fontWeight: isSelected
                                   ? FontWeight.w700
@@ -565,39 +654,59 @@ class _OnboardingArtistPickerState extends State<_OnboardingArtistPicker> {
             ),
           ),
           // Footer
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 16, 32, 32),
-            child: Row(
-              children: [
-                Text(
-                  '${_selected.length} selected',
-                  style: const TextStyle(color: Colors.white54, fontSize: 12),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: widget.onSkip,
-                  child: const Text('Skip',
-                      style: TextStyle(color: Colors.white38)),
-                ),
-                const SizedBox(width: 12),
-                FilledButton(
-                  onPressed: () =>
-                      widget.onComplete(_selected.toList()),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.cyan,
-                    foregroundColor: AppTheme.ink,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 28, vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: const Text('Get Started',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ],
-            ),
-          ),
+          _buildFooter(),
         ],
+      ),
+    );
+  }
+}
+
+class _ArtistImage extends StatelessWidget {
+  const _ArtistImage({required this.name, required this.imageUrl});
+
+  final String name;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = _fallback();
+    if (imageUrl == null) return fallback;
+
+    return CachedNetworkImage(
+      key: ValueKey('onboarding-artist-image-$name'),
+      imageUrl: imageUrl!,
+      width: 56,
+      height: 56,
+      fit: BoxFit.cover,
+      memCacheWidth: 112,
+      memCacheHeight: 112,
+      placeholder: (_, _) => fallback,
+      errorWidget: (_, _, _) => fallback,
+    );
+  }
+
+  Widget _fallback() {
+    return Container(
+      width: 56,
+      height: 56,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.violet.withValues(alpha: 0.4),
+            AppTheme.cyan.withValues(alpha: 0.3),
+          ],
+        ),
+      ),
+      child: Center(
+        child: Text(
+          name.isNotEmpty ? name[0].toUpperCase() : '?',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
       ),
     );
   }
@@ -654,7 +763,8 @@ class _PageContentState extends State<_PageContent>
       animation: _entryController,
       builder: (context, _) {
         final opacity = Curves.easeOut.transform(_entryController.value);
-        final slideY = (1 - Curves.easeOut.transform(_entryController.value)) * 30;
+        final slideY =
+            (1 - Curves.easeOut.transform(_entryController.value)) * 30;
 
         return Opacity(
           opacity: opacity,
@@ -700,11 +810,7 @@ class _PageContentState extends State<_PageContent>
                       shaderCallback: (bounds) => LinearGradient(
                         colors: page.gradient,
                       ).createShader(bounds),
-                      child: Icon(
-                        page.icon,
-                        size: 56,
-                        color: Colors.white,
-                      ),
+                      child: Icon(page.icon, size: 56, color: Colors.white),
                     ),
                   ),
                   const SizedBox(height: 48),
@@ -719,7 +825,7 @@ class _PageContentState extends State<_PageContent>
                       style: theme.textTheme.headlineMedium?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: -0.8,
+                        letterSpacing: 0,
                       ),
                     ),
                   ),
@@ -763,19 +869,18 @@ class _OrbsPainter extends CustomPainter {
 
     // Large slow-moving orb
     final orb1X = size.width * 0.3 + math.cos(angle) * size.width * 0.15;
-    final orb1Y = size.height * 0.25 + math.sin(angle * 0.7) * size.height * 0.1;
+    final orb1Y =
+        size.height * 0.25 + math.sin(angle * 0.7) * size.height * 0.1;
     _drawOrb(canvas, Offset(orb1X, orb1Y), size.width * 0.35, colors[0], 0.08);
 
     // Smaller counter-rotating orb
-    final orb2X =
-        size.width * 0.7 + math.cos(-angle * 0.8) * size.width * 0.12;
+    final orb2X = size.width * 0.7 + math.cos(-angle * 0.8) * size.width * 0.12;
     final orb2Y =
         size.height * 0.65 + math.sin(-angle * 0.6) * size.height * 0.08;
     _drawOrb(canvas, Offset(orb2X, orb2Y), size.width * 0.28, colors[1], 0.06);
 
     // Tiny accent orb
-    final orb3X =
-        size.width * 0.5 + math.cos(angle * 1.3) * size.width * 0.2;
+    final orb3X = size.width * 0.5 + math.cos(angle * 1.3) * size.width * 0.2;
     final orb3Y =
         size.height * 0.8 + math.sin(angle * 0.9) * size.height * 0.05;
     _drawOrb(canvas, Offset(orb3X, orb3Y), size.width * 0.18, colors[0], 0.04);

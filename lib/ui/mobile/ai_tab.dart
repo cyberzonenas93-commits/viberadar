@@ -5,14 +5,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../data/sources/mock_track_seed.dart';
 import '../../models/crate.dart';
+import '../../models/crate_track.dart';
+import '../../models/track.dart';
+import '../../providers/app_state.dart';
 import '../../providers/setlist_provider.dart';
 import '../../services/ai_copilot_service.dart';
+import '../../services/set_resolution_service.dart';
 
-// ── Injectable provider (overridable in tests) ─────────────────────────────
+// ── Injectable providers (overridable in tests) ────────────────────────────
 
-final aiCopilotServiceProvider =
-    Provider<AiCopilotService>((ref) => AiCopilotService());
+final aiCopilotServiceProvider = Provider<AiCopilotService>(
+  (ref) => AiCopilotService(),
+);
+
+final setResolutionServiceProvider = Provider<SetResolutionService>(
+  (ref) => SetResolutionService(),
+);
 
 // ── Draft track model ──────────────────────────────────────────────────────
 
@@ -28,10 +38,6 @@ class _DraftTrack {
   final String artist;
   final int bpm;
   final String key;
-
-  /// Synthesized stable id — deferred Firestore resolution handled on desktop.
-  String get synthesizedId =>
-      'ai:${('${artist.toLowerCase()} - ${title.toLowerCase()}').trim()}';
 }
 
 // ── Crate-block regex (mirrors ai_copilot_screen.dart) ────────────────────
@@ -51,12 +57,14 @@ final _crateRegex = RegExp(r'```crate\s*\n([\s\S]*?)\n```');
         final title = t['title']?.toString() ?? '';
         final artist = t['artist']?.toString() ?? '';
         if (title.isEmpty) continue;
-        tracks.add(_DraftTrack(
-          title: title,
-          artist: artist,
-          bpm: (t['bpm'] as num?)?.toInt() ?? 0,
-          key: t['key']?.toString() ?? '',
-        ));
+        tracks.add(
+          _DraftTrack(
+            title: title,
+            artist: artist,
+            bpm: (t['bpm'] as num?)?.toInt() ?? 0,
+            key: t['key']?.toString() ?? '',
+          ),
+        );
       }
     }
     return (name: name, tracks: tracks);
@@ -82,6 +90,11 @@ class _AiTabState extends ConsumerState<AiTab> {
   String? _errorText;
   String? _draftName;
   List<_DraftTrack> _draftTracks = const [];
+
+  // Resolution state: draft songs → playable CrateTracks.
+  bool _resolving = false;
+  List<CrateTrack> _resolved = const [];
+  int _foundCount = 0;
 
   @override
   void dispose() {
@@ -112,30 +125,38 @@ class _AiTabState extends ConsumerState<AiTab> {
                   controller: _promptController,
                   maxLines: null,
                   keyboardType: TextInputType.multiline,
-                  style:
-                      const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 14,
+                  ),
                   decoration: InputDecoration(
                     hintText: 'Describe the set you want to build…',
                     hintStyle: const TextStyle(
-                        color: AppTheme.textTertiary, fontSize: 14),
+                      color: AppTheme.textTertiary,
+                      fontSize: 14,
+                    ),
                     filled: true,
                     fillColor: AppTheme.panelRaised,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
-                          color: AppTheme.edge.withValues(alpha: 0.5)),
+                        color: AppTheme.edge.withValues(alpha: 0.5),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
                       borderSide: BorderSide(
-                          color: AppTheme.edge.withValues(alpha: 0.5)),
+                        color: AppTheme.edge.withValues(alpha: 0.5),
+                      ),
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppTheme.violet),
+                      borderSide: const BorderSide(color: AppTheme.cyan),
                     ),
                     contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 12),
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -146,20 +167,25 @@ class _AiTabState extends ConsumerState<AiTab> {
                   child: ElevatedButton(
                     onPressed: _loading ? null : _onBuild,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.violet,
-                      foregroundColor: Colors.white,
+                      backgroundColor: AppTheme.cyan,
+                      foregroundColor: AppTheme.ink,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                     child: _loading
                         ? const SizedBox(
                             width: 20,
                             height: 20,
                             child: CircularProgressIndicator(
-                                color: Colors.white, strokeWidth: 2),
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
                           )
-                        : const Text('Build',
-                            style: TextStyle(fontWeight: FontWeight.w600)),
+                        : const Text(
+                            'Build',
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -175,31 +201,17 @@ class _AiTabState extends ConsumerState<AiTab> {
                   _buildDraftHeader(),
                   ..._draftTracks.map(_buildTrackRow),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    height: 46,
-                    child: ElevatedButton(
-                      onPressed: _onSave,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.lime.withValues(alpha: 0.15),
-                        foregroundColor: AppTheme.lime,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                        side:
-                            BorderSide(color: AppTheme.lime.withValues(alpha: 0.4)),
-                      ),
-                      child: const Text('Save as setlist',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                  ),
+                  ..._buildDraftActions(),
                 ] else ...[
-                  // Save button is always present but disabled when no draft
+                  // Disabled placeholder when there is no draft yet.
                   SizedBox(
                     height: 46,
                     child: ElevatedButton(
                       onPressed: null,
                       style: ElevatedButton.styleFrom(
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                       child: const Text('Save as setlist'),
                     ),
@@ -230,20 +242,27 @@ class _AiTabState extends ConsumerState<AiTab> {
             height: 34,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [AppTheme.violet, AppTheme.pink],
+                colors: [AppTheme.cyan, AppTheme.lime],
               ),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.auto_awesome_rounded,
-                color: Colors.white, size: 18),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: AppTheme.ink,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 10),
-          const Text(
-            'AI Set Builder',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
+          const Expanded(
+            child: Text(
+              'AI Set Builder',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -258,18 +277,22 @@ class _AiTabState extends ConsumerState<AiTab> {
       decoration: BoxDecoration(
         color: const Color(0xFFFF6B6B).withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFFF6B6B).withValues(alpha: 0.3)),
+        border: Border.all(
+          color: const Color(0xFFFF6B6B).withValues(alpha: 0.3),
+        ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.warning_amber_rounded,
-              color: Color(0xFFFF6B6B), size: 16),
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: Color(0xFFFF6B6B),
+            size: 16,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               _errorText!,
-              style:
-                  const TextStyle(color: Color(0xFFFF6B6B), fontSize: 13),
+              style: const TextStyle(color: Color(0xFFFF6B6B), fontSize: 13),
             ),
           ),
         ],
@@ -302,8 +325,11 @@ class _AiTabState extends ConsumerState<AiTab> {
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
-          const Icon(Icons.playlist_play_rounded,
-              color: AppTheme.violet, size: 18),
+          const Icon(
+            Icons.playlist_play_rounded,
+            color: AppTheme.cyan,
+            size: 18,
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -317,8 +343,7 @@ class _AiTabState extends ConsumerState<AiTab> {
           ),
           Text(
             '${_draftTracks.length} tracks',
-            style:
-                const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
           ),
         ],
       ),
@@ -375,6 +400,8 @@ class _AiTabState extends ConsumerState<AiTab> {
       _replyText = null;
       _draftName = null;
       _draftTracks = const [];
+      _resolved = const [];
+      _foundCount = 0;
     });
 
     try {
@@ -386,36 +413,254 @@ class _AiTabState extends ConsumerState<AiTab> {
       );
 
       final parsed = _extractCrate(reply);
+      final fallbackDrafts = parsed == null && _looksLikeSetRequest(prompt)
+          ? _buildLocalDraftTracks(prompt)
+          : const <_DraftTrack>[];
 
+      if (!mounted) return;
       setState(() {
         _loading = false;
         if (parsed != null && parsed.tracks.isNotEmpty) {
           _draftName = parsed.name;
           _draftTracks = parsed.tracks;
+        } else if (fallbackDrafts.isNotEmpty) {
+          _draftName = _fallbackSetName(prompt);
+          _draftTracks = fallbackDrafts;
         } else {
           _replyText = reply;
         }
       });
     } catch (e) {
+      if (!mounted) return;
+      final fallbackDrafts = _buildLocalDraftTracks(prompt);
       setState(() {
         _loading = false;
-        _errorText = 'Something went wrong — please try again.';
+        if (fallbackDrafts.isNotEmpty) {
+          _draftName = _fallbackSetName(prompt);
+          _draftTracks = fallbackDrafts;
+        } else {
+          _errorText = 'AI build is temporarily unavailable. Try again soon.';
+        }
       });
     }
   }
 
-  Future<void> _onSave() async {
+  bool _looksLikeSetRequest(String prompt) {
+    final text = prompt.toLowerCase();
+    return text.contains('set') ||
+        text.contains('crate') ||
+        text.contains('playlist') ||
+        text.contains('dj set') ||
+        text.contains('party') ||
+        text.contains('wedding') ||
+        text.contains('club') ||
+        text.contains('vibe');
+  }
+
+  String _fallbackSetName(String prompt) {
+    final cleaned = prompt
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'[^\w\s-]'), '')
+        .trim();
+    if (cleaned.isEmpty) return 'Draft Set';
+    final words = cleaned.split(' ').take(4).join(' ');
+    return '$words Draft';
+  }
+
+  List<_DraftTrack> _buildLocalDraftTracks(String prompt) {
+    final promptTokens = prompt
+        .toLowerCase()
+        .split(RegExp(r'[^a-z0-9]+'))
+        .where((token) => token.length >= 3)
+        .toSet();
+    final liveTracks = ref.read(trackStreamProvider).value ?? const <Track>[];
+    final source = liveTracks.isNotEmpty ? liveTracks : buildMockTracks();
+    final ranked = source.toList()
+      ..sort((a, b) {
+        final aScore = _trackPromptScore(a, promptTokens);
+        final bScore = _trackPromptScore(b, promptTokens);
+        final byPrompt = bScore.compareTo(aScore);
+        if (byPrompt != 0) return byPrompt;
+        return b.trendScore.compareTo(a.trendScore);
+      });
+
+    return ranked
+        .take(10)
+        .map(
+          (track) => _DraftTrack(
+            title: track.title,
+            artist: track.artist,
+            bpm: track.bpm,
+            key: track.keySignature,
+          ),
+        )
+        .toList(growable: false);
+  }
+
+  int _trackPromptScore(Track track, Set<String> promptTokens) {
+    if (promptTokens.isEmpty) return 0;
+    final haystack = [
+      track.title,
+      track.artist,
+      track.genre,
+      track.vibe,
+      track.leadRegion,
+      ...track.effectiveSources,
+    ].join(' ').toLowerCase();
+    return promptTokens.where(haystack.contains).length;
+  }
+
+  // ── Draft action buttons (resolve → save / add) ─────────────────────────
+
+  List<Widget> _buildDraftActions() {
+    if (_resolving) {
+      return [
+        SizedBox(
+          height: 46,
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    color: AppTheme.cyan,
+                    strokeWidth: 2,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  'Finding tracks… $_foundCount/${_draftTracks.length}',
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ];
+    }
+
+    if (_resolved.isEmpty) {
+      return [
+        SizedBox(
+          height: 46,
+          child: ElevatedButton.icon(
+            onPressed: _resolve,
+            icon: const Icon(Icons.playlist_add_check_rounded, size: 18),
+            label: const Text(
+              'Resolve & add',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.lime.withValues(alpha: 0.15),
+              foregroundColor: AppTheme.lime,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              side: BorderSide(color: AppTheme.lime.withValues(alpha: 0.4)),
+            ),
+          ),
+        ),
+      ];
+    }
+
+    final withLinks = _resolved.where((t) => t.hasUrl).length;
+    return [
+      Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Text(
+          '$withLinks/${_resolved.length} tracks found with play links',
+          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+        ),
+      ),
+      SizedBox(
+        height: 46,
+        child: ElevatedButton(
+          onPressed: _onSave,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppTheme.lime.withValues(alpha: 0.15),
+            foregroundColor: AppTheme.lime,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            side: BorderSide(color: AppTheme.lime.withValues(alpha: 0.4)),
+          ),
+          child: const Text(
+            'Save as new setlist',
+            style: TextStyle(fontWeight: FontWeight.w600),
+          ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      SizedBox(
+        height: 46,
+        child: OutlinedButton.icon(
+          onPressed: _addToExisting,
+          icon: const Icon(Icons.library_add_outlined, size: 18),
+          label: const Text('Add to setlist…'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: AppTheme.cyan,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            side: BorderSide(color: AppTheme.cyan.withValues(alpha: 0.4)),
+          ),
+        ),
+      ),
+    ];
+  }
+
+  // ── Resolve draft songs → playable CrateTracks ──────────────────────────
+
+  Future<void> _resolve() async {
     if (_draftTracks.isEmpty) return;
+    setState(() {
+      _resolving = true;
+      _foundCount = 0;
+    });
+    final library = ref.read(trackStreamProvider).value ?? const <Track>[];
+    final drafts = _draftTracks
+        .map((t) => (title: t.title, artist: t.artist, bpm: t.bpm, key: t.key))
+        .toList();
+    try {
+      final resolved = await ref
+          .read(setResolutionServiceProvider)
+          .resolve(
+            drafts,
+            library: library,
+            onProgress: (found, _) {
+              if (mounted) setState(() => _foundCount = found);
+            },
+          );
+      if (!mounted) return;
+      setState(() {
+        _resolving = false;
+        _resolved = resolved;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _resolving = false;
+        _errorText = 'Could not resolve tracks — please try again.';
+      });
+    }
+  }
 
+  // ── Save as a new setlist ────────────────────────────────────────────────
+
+  Future<void> _onSave() async {
+    if (_resolved.isEmpty) return;
     final name = _draftName ?? 'AI Set';
-    final trackIds = _draftTracks.map((t) => t.synthesizedId).toList();
     final now = DateTime.now();
-
     final crate = Crate(
       id: const Uuid().v4(),
       name: name,
       context: 'AI set',
-      trackIds: trackIds,
+      tracks: _resolved,
       createdAt: now,
       updatedAt: now,
     );
@@ -426,7 +671,7 @@ class _AiTabState extends ConsumerState<AiTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Saved "$name"'),
-            backgroundColor: AppTheme.violet,
+            backgroundColor: AppTheme.cyan,
             duration: const Duration(seconds: 3),
           ),
         );
@@ -436,6 +681,80 @@ class _AiTabState extends ConsumerState<AiTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to save: ${e.toString()}'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  // ── Append to an existing setlist ────────────────────────────────────────
+
+  Future<void> _addToExisting() async {
+    if (_resolved.isEmpty) return;
+    final crates = ref.read(setlistsProvider);
+    if (crates.isEmpty) {
+      // Nothing to add to yet — fall back to creating a new setlist.
+      await _onSave();
+      return;
+    }
+
+    final picked = await showModalBottomSheet<Crate>(
+      context: context,
+      backgroundColor: AppTheme.panel,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (_) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+              child: Text(
+                'Add to setlist',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            for (final c in crates)
+              ListTile(
+                title: Text(
+                  c.name,
+                  style: const TextStyle(color: AppTheme.textPrimary),
+                ),
+                subtitle: Text(
+                  '${c.tracks.length} tracks',
+                  style: const TextStyle(color: AppTheme.textTertiary),
+                ),
+                onTap: () => Navigator.pop(context, c),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null) return;
+
+    try {
+      await ref.read(setlistActionsProvider).addTracks(picked, _resolved);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Added ${_resolved.length} to "${picked.name}"'),
+            backgroundColor: AppTheme.cyan,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to add: ${e.toString()}'),
             backgroundColor: Colors.redAccent,
           ),
         );

@@ -73,31 +73,63 @@ class FirestoreTrackRepository implements TrackRepository {
   final _controller = StreamController<List<Track>>.broadcast();
   List<Track>? _cached;
   bool _initialFetchDone = false;
+  Future<List<Track>>? _fetchInFlight;
 
   @override
   Future<void> refresh() async {
-    final tracks = await _fetchOnce();
+    final tracks = await _fetchFreshOnce();
     _cached = tracks;
     _controller.add(tracks);
   }
 
   @override
   Stream<List<Track>> watchTracks() async* {
-    // Yield cached data immediately if available (e.g. from Firestore disk cache)
+    // Yield memory cache immediately for same-session subscribers.
     if (_cached != null) {
       yield _cached!;
+    } else {
+      final cached = await _fetchFromDiskCache();
+      if (cached.isNotEmpty) {
+        _cached = cached;
+        yield cached;
+      }
     }
 
-    // Do one network fetch on first subscribe
+    // Do one server fetch on first subscribe, shared across all listeners.
     if (!_initialFetchDone) {
       _initialFetchDone = true;
-      final tracks = await _fetchOnce();
-      _cached = tracks;
-      yield tracks;
+      scheduleMicrotask(() => unawaited(refresh()));
     }
 
-    // Then yield any future refreshes
+    // Then yield the first server refresh and any later explicit refreshes.
     yield* _controller.stream;
+  }
+
+  Future<List<Track>> _fetchFreshOnce() {
+    final inFlight = _fetchInFlight;
+    if (inFlight != null) return inFlight;
+
+    final fetch = _fetchOnce().whenComplete(() => _fetchInFlight = null);
+    _fetchInFlight = fetch;
+    return fetch;
+  }
+
+  Future<List<Track>> _fetchFromDiskCache() async {
+    try {
+      final cached = await _firestore
+          .collection('tracks')
+          .orderBy('trend_score', descending: true)
+          .limit(_pageSize)
+          .get(const GetOptions(source: Source.cache));
+
+      if (cached.docs.isEmpty) return const <Track>[];
+
+      return cached.docs
+          .map((doc) => Track.fromMap(doc.data(), id: doc.id))
+          .toList();
+    } catch (_) {
+      return const <Track>[];
+    }
   }
 
   /// Single `.get()` call — one read per document, no ongoing listener.

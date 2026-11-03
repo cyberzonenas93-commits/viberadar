@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
@@ -24,10 +25,11 @@ class AppBootstrap {
             ? config.toOptions()
             : DefaultFirebaseOptions.currentPlatform,
       );
+      await _activateAppCheck();
 
-      // Desktop no longer auto-signs in anonymously. The auth gate shows
+      // Desktop no longer auto-creates a backend session. The auth gate shows
       // onboarding + sign-in / account creation first; "Continue as Guest"
-      // still does an anonymous sign-in on demand for the phone-pairing flow.
+      // activates local demo mode without live service calls.
 
       final trackRepository = FirestoreTrackRepository(
         FirebaseFirestore.instance,
@@ -41,9 +43,7 @@ class AppBootstrap {
       );
 
       return AppBootstrapResult(
-        statusMessage: config.isConfigured
-            ? 'Connected to Firebase with runtime configuration.'
-            : 'Connected to Firebase project viberadar-462b8. Firestore is live; Google sign-in still needs provider and client setup.',
+        statusMessage: '',
         providerOverrides: [
           trackRepositoryProvider.overrideWithValue(trackRepository),
           userRepositoryProvider.overrideWithValue(userRepository),
@@ -53,11 +53,53 @@ class AppBootstrap {
     } catch (error) {
       return AppBootstrapResult.mock(
         statusMessage: kIsWeb
-            ? 'Firebase initialization failed, so live tracks are unavailable. Error: $error'
-            : 'Firebase initialization failed, so VibeRadar switched to demo mode. Error: $error',
+            ? 'Live services failed to initialize, so live tracks are unavailable. Error: $error'
+            : 'Live services failed to initialize, so VibeRadar switched to demo mode. Error: $error',
         includeMockTracks: !kIsWeb,
       );
     }
+  }
+}
+
+Future<void> _activateAppCheck() async {
+  const enabled = bool.fromEnvironment(
+    'FIREBASE_APP_CHECK_ENABLED',
+    defaultValue: true,
+  );
+  if (!enabled) return;
+
+  const webSiteKey = String.fromEnvironment(
+    'FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY',
+  );
+  const debugToken = String.fromEnvironment('FIREBASE_APPCHECK_DEBUG_TOKEN');
+
+  try {
+    await FirebaseAppCheck.instance.activate(
+      providerWeb: kReleaseMode
+          ? webSiteKey.isEmpty
+                ? null
+                : ReCaptchaV3Provider(webSiteKey)
+          : WebDebugProvider(
+              debugToken: debugToken.isEmpty ? null : debugToken,
+            ),
+      providerAndroid: kReleaseMode
+          ? const AndroidPlayIntegrityProvider()
+          : AndroidDebugProvider(
+              debugToken: debugToken.isEmpty ? null : debugToken,
+            ),
+      providerApple: kReleaseMode
+          ? const AppleAppAttestWithDeviceCheckFallbackProvider()
+          : AppleDebugProvider(
+              debugToken: debugToken.isEmpty ? null : debugToken,
+            ),
+    );
+  } catch (error, stackTrace) {
+    developer.log(
+      'Firebase App Check activation failed; protected backend calls may be rejected if App Check enforcement is enabled.',
+      name: 'Bootstrap',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 }
 
@@ -90,7 +132,7 @@ class AppBootstrapResult {
   final String statusMessage;
   final List<Object?> providerOverrides;
 
-  /// True when Firebase init failed and the app fell back to demo/mock data,
+  /// True when live service init failed and the app fell back to demo/mock data,
   /// so the UI can clearly signal that the data on screen is not live.
   final bool isDemoMode;
 }

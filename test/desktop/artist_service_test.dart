@@ -79,8 +79,11 @@ void main() {
       ];
 
       final catalog = svc.buildArtistCatalog(tracks);
-      expect(catalog.map((a) => a.name).toList(),
-          ['HighArtist', 'MidArtist', 'LowArtist']);
+      expect(catalog.map((a) => a.name).toList(), [
+        'HighArtist',
+        'MidArtist',
+        'LowArtist',
+      ]);
     });
 
     test('tracks with empty artist name are silently ignored', () {
@@ -154,7 +157,7 @@ void main() {
 
     test('0-BPM tracks are excluded from range calculation', () {
       final tracks = [
-        _track(id: 'b4', artist: 'Producer Y', bpm: 0),   // unknown
+        _track(id: 'b4', artist: 'Producer Y', bpm: 0), // unknown
         _track(id: 'b5', artist: 'Producer Y', bpm: 110),
         _track(id: 'b6', artist: 'Producer Y', bpm: 125),
       ];
@@ -189,10 +192,16 @@ void main() {
   group('ArtistModel.leadRegion', () {
     test('returns region with highest AVERAGE score across tracks', () {
       final tracks = [
-        _track(id: 'r1', artist: 'Regional Act',
-            regionScores: {'NG': 0.9, 'GH': 0.1}),
-        _track(id: 'r2', artist: 'Regional Act',
-            regionScores: {'NG': 0.7, 'GH': 0.6}),
+        _track(
+          id: 'r1',
+          artist: 'Regional Act',
+          regionScores: {'NG': 0.9, 'GH': 0.1},
+        ),
+        _track(
+          id: 'r2',
+          artist: 'Regional Act',
+          regionScores: {'NG': 0.7, 'GH': 0.6},
+        ),
       ];
       // NG avg = (0.9+0.7)/2 = 0.8, GH avg = (0.1+0.6)/2 = 0.35
       final model = svc.buildArtistCatalog(tracks).single;
@@ -200,9 +209,7 @@ void main() {
     });
 
     test('returns "Global" when no track has region scores', () {
-      final tracks = [
-        _track(id: 'r3', artist: 'Global Act', regionScores: {}),
-      ];
+      final tracks = [_track(id: 'r3', artist: 'Global Act', regionScores: {})];
       final model = svc.buildArtistCatalog(tracks).single;
       expect(model.leadRegion, 'Global');
     });
@@ -266,17 +273,20 @@ void main() {
   // ── getArtist ───────────────────────────────────────────────────────────────
 
   group('ArtistService.getArtist', () {
-    test('returns ArtistModel for a known artist (case-insensitive lookup)', () {
-      final tracks = [
-        _track(id: 'ga1', artist: 'Tiwa Savage', trendScore: 0.8),
-        _track(id: 'ga2', artist: 'Tiwa Savage', trendScore: 0.6),
-        _track(id: 'ga3', artist: 'Other Artist', trendScore: 0.5),
-      ];
+    test(
+      'returns ArtistModel for a known artist (case-insensitive lookup)',
+      () {
+        final tracks = [
+          _track(id: 'ga1', artist: 'Tiwa Savage', trendScore: 0.8),
+          _track(id: 'ga2', artist: 'Tiwa Savage', trendScore: 0.6),
+          _track(id: 'ga3', artist: 'Other Artist', trendScore: 0.5),
+        ];
 
-      final model = svc.getArtist('tiwa savage', tracks);
-      expect(model, isNotNull);
-      expect(model!.trackCount, 2);
-    });
+        final model = svc.getArtist('tiwa savage', tracks);
+        expect(model, isNotNull);
+        expect(model!.trackCount, 2);
+      },
+    );
 
     test('returns null for an artist with no matching tracks', () {
       final tracks = [_track(id: 'ga4', artist: 'Wizkid', trendScore: 0.9)];
@@ -289,9 +299,7 @@ void main() {
 
   group('ArtistService collaborator extraction', () {
     test('collaborators from "feat." syntax are extracted', () {
-      final tracks = [
-        _track(id: 'c1', artist: 'Main Artist feat. Guest DJ'),
-      ];
+      final tracks = [_track(id: 'c1', artist: 'Main Artist feat. Guest DJ')];
       final model = svc.buildArtistCatalog(tracks).single;
       // model is built for "Main Artist feat. Guest DJ" as the full artist key
       // collaborators should list "Guest DJ"
@@ -310,18 +318,14 @@ void main() {
 
   group('ArtistModel.tracksByEra', () {
     test('2020 release falls into "2020s" era', () {
-      final tracks = [
-        _track(id: 'e1', artist: 'Modern', releaseYear: 2022),
-      ];
+      final tracks = [_track(id: 'e1', artist: 'Modern', releaseYear: 2022)];
       final model = svc.buildArtistCatalog(tracks).single;
       expect(model.tracksByEra.keys, contains('2020s'));
       expect(model.tracksByEra['2020s']!.first.id, 'e1');
     });
 
     test('1998 release falls into "Pre-2000" era', () {
-      final tracks = [
-        _track(id: 'e2', artist: 'Classic', releaseYear: 1998),
-      ];
+      final tracks = [_track(id: 'e2', artist: 'Classic', releaseYear: 1998)];
       final model = svc.buildArtistCatalog(tracks).single;
       expect(model.tracksByEra.keys, contains('Pre-2000'));
     });
@@ -333,8 +337,7 @@ void main() {
         _track(id: 'e5', artist: 'Veteran', releaseYear: 2023),
       ];
       final model = svc.buildArtistCatalog(tracks).single;
-      expect(model.tracksByEra.keys,
-          containsAll(['2000s', '2010s', '2020s']));
+      expect(model.tracksByEra.keys, containsAll(['2000s', '2010s', '2020s']));
     });
   });
 }

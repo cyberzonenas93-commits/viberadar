@@ -92,7 +92,9 @@ class LocalMatchService {
     final queryTitleStripped = _stripRemixMarkers(queryTitle);
 
     for (final lib in library) {
-      final libTitle = _normalise(lib.title.isNotEmpty ? lib.title : lib.fileName);
+      final libTitle = _normalise(
+        lib.title.isNotEmpty ? lib.title : lib.fileName,
+      );
       final libArtist = _normalise(lib.artist);
 
       // ── Tier 1: Exact artist+title ──
@@ -115,7 +117,8 @@ class LocalMatchService {
       // ── Tier 3: Remix/Edit stripped match ──
       if (artistMatch) {
         final libTitleStripped = _stripRemixMarkers(libTitle);
-        if (libTitleStripped == queryTitleStripped && libTitleStripped.length > 3) {
+        if (libTitleStripped == queryTitleStripped &&
+            libTitleStripped.length > 3) {
           final score = libTitle == queryTitle ? 1.0 : 0.9;
           remixMatches.add(_ScoredLib(lib, score));
           continue;
@@ -134,7 +137,8 @@ class LocalMatchService {
 
       // ── Tier 5: Filename heuristic (no metadata match) ──
       final libFileName = _normalise(lib.fileName);
-      if (libFileName.contains(queryTitle) && libFileName.contains(queryArtist)) {
+      if (libFileName.contains(queryTitle) &&
+          libFileName.contains(queryArtist)) {
         filenameMatches.add(_ScoredLib(lib, 0.7));
       } else if (libFileName.contains(queryTitle) && queryTitle.length > 5) {
         filenameMatches.add(_ScoredLib(lib, 0.5));
@@ -224,8 +228,7 @@ class LocalMatchService {
   /// Check if two normalised artist strings match (substring or exact).
   bool _artistsMatch(String queryArtist, String libArtist) {
     if (queryArtist.isEmpty || libArtist.isEmpty) return true;
-    return libArtist.contains(queryArtist) ||
-        queryArtist.contains(libArtist);
+    return libArtist.contains(queryArtist) || queryArtist.contains(libArtist);
   }
 
   /// Among duplicate files, pick the one with best quality.
@@ -250,7 +253,12 @@ class LocalMatchService {
   /// Strip remix/edit markers for comparison (e.g. "song radio edit" → "song").
   String _stripRemixMarkers(String normalised) {
     return normalised
-        .replaceAll(RegExp(r'\b(remix|edit|version|mix|extended|radio|original|instrumental|acoustic|live|clean|explicit|remaster)\b'), '')
+        .replaceAll(
+          RegExp(
+            r'\b(remix|edit|version|mix|extended|radio|original|instrumental|acoustic|live|clean|explicit|remaster)\b',
+          ),
+          '',
+        )
         .replaceAll(RegExp(r'\s+'), ' ')
         .trim();
   }

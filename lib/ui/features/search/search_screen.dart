@@ -3,15 +3,15 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/music_genres.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
-import '../../../services/apple_music_artist_service.dart';
-import '../../../services/spotify_artist_service.dart';
+import '../../../services/platform_search_service.dart';
 import '../../../services/youtube_search_service.dart';
+import '../../widgets/platform_play_actions.dart';
 import '../../widgets/ui_kit.dart';
 
 part 'search_screen_results.dart';
@@ -27,8 +27,8 @@ class _SearchResult {
   final int durationMs;
   final String? spotifyUrl;
   final String? appleUrl;
-  final String? applePreviewUrl;
   final String? youtubeUrl;
+  final String? deezerUrl;
   final int popularity;
 
   const _SearchResult({
@@ -39,14 +39,15 @@ class _SearchResult {
     this.durationMs = 0,
     this.spotifyUrl,
     this.appleUrl,
-    this.applePreviewUrl,
     this.youtubeUrl,
+    this.deezerUrl,
     this.popularity = 0,
   });
 
   bool get hasSpotify => spotifyUrl != null && spotifyUrl!.isNotEmpty;
   bool get hasApple => appleUrl != null && appleUrl!.isNotEmpty;
   bool get hasYoutube => youtubeUrl != null && youtubeUrl!.isNotEmpty;
+  bool get hasDeezer => deezerUrl != null && deezerUrl!.isNotEmpty;
 
   String get durationFormatted {
     if (durationMs == 0) return '';
@@ -55,68 +56,19 @@ class _SearchResult {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
-  String get bestUrl => spotifyUrl ?? appleUrl ?? youtubeUrl ?? '';
-
-  _SearchResult mergeApple(AppleMusicTrack apple) {
-    return _SearchResult(
-      title: title,
-      artist: artist,
-      albumName: albumName,
-      artworkUrl: artworkUrl ?? apple.artworkUrl,
-      durationMs: durationMs > 0 ? durationMs : apple.durationMs,
-      spotifyUrl: spotifyUrl,
-      appleUrl: apple.appleUrl,
-      applePreviewUrl: apple.previewUrl,
-      youtubeUrl: youtubeUrl,
-      popularity: popularity,
-    );
-  }
-
-  static String _key(String title, String artist) =>
-      '${title.toLowerCase().trim()}::${artist.toLowerCase().trim()}';
-
-  String get key => _key(title, artist);
-
-  static List<_SearchResult> merge(
-    List<SpotifyTrackInfo> spotify,
-    List<AppleMusicTrack> apple,
-  ) {
-    final map = <String, _SearchResult>{};
-
-    for (final t in spotify) {
-      final r = _SearchResult(
-        title: t.name,
-        artist: t.artists,
-        albumName: t.albumName,
-        artworkUrl: t.albumArt,
-        durationMs: t.durationMs,
-        spotifyUrl: t.spotifyUrl,
-        popularity: t.popularity,
+  factory _SearchResult.fromPlatform(PlatformTrackResult track) =>
+      _SearchResult(
+        title: track.title,
+        artist: track.artist,
+        albumName: isSpecificGenre(track.genre) ? track.genre! : '',
+        artworkUrl: track.artworkUrl,
+        durationMs: track.durationMs,
+        spotifyUrl: track.spotifyUrl,
+        appleUrl: track.appleUrl,
+        youtubeUrl: track.youtubeUrl,
+        deezerUrl: track.deezerUrl,
+        popularity: track.popularity,
       );
-      map[r.key] = r;
-    }
-
-    for (final t in apple) {
-      final k = _key(t.name, t.artistName);
-      if (map.containsKey(k)) {
-        map[k] = map[k]!.mergeApple(t);
-      } else {
-        map[k] = _SearchResult(
-          title: t.name,
-          artist: t.artistName,
-          albumName: t.albumName,
-          artworkUrl: t.artworkUrl,
-          durationMs: t.durationMs,
-          appleUrl: t.appleUrl,
-          applePreviewUrl: t.previewUrl,
-        );
-      }
-    }
-
-    final results = map.values.toList();
-    results.sort((a, b) => b.popularity.compareTo(a.popularity));
-    return results;
-  }
 }
 
 // ── Screen ────────────────────────────────────────────────────────────────────
@@ -129,9 +81,7 @@ class SearchScreen extends ConsumerStatefulWidget {
 }
 
 class _SearchScreenState extends ConsumerState<SearchScreen> {
-  final _spotify = SpotifyArtistService();
-  final _apple = AppleMusicArtistService();
-  final _youtube = YoutubeSearchService();
+  final _platformSearch = PlatformSearchService();
   final _controller = TextEditingController();
   final _focus = FocusNode();
 
@@ -177,22 +127,11 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     if (!mounted) return;
     setState(() => _searching = true);
     try {
-      final results = await Future.wait([
-        _spotify
-            .searchTracks(q, limit: 20)
-            .catchError((_) => <SpotifyTrackInfo>[]),
-        _apple.searchSongs(q, limit: 20).catchError((_) => <AppleMusicTrack>[]),
-        _youtube
-            .searchMusic(q, limit: 12)
-            .catchError((_) => <YoutubeVideoResult>[]),
-      ]);
+      final results = await _platformSearch.searchMusicPlatforms(q, limit: 40);
       if (!mounted) return;
       setState(() {
-        _results = _SearchResult.merge(
-          results[0] as List<SpotifyTrackInfo>,
-          results[1] as List<AppleMusicTrack>,
-        );
-        _youtubeResults = results[2] as List<YoutubeVideoResult>;
+        _results = results.map(_SearchResult.fromPlatform).toList();
+        _youtubeResults = const <YoutubeVideoResult>[];
         _searching = false;
       });
     } catch (_) {
@@ -205,6 +144,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final theme = Theme.of(context);
     final tracksAsync = ref.watch(trackStreamProvider);
     final allTracks = tracksAsync.value ?? [];
+    final loadingTracks = tracksAsync.isLoading && allTracks.isEmpty;
     final topTracks = [...allTracks]
       ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
 
@@ -235,7 +175,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'Search across Spotify, Apple Music and more',
+                'Search Apple Music, Spotify, YouTube Music, and Deezer',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
@@ -307,6 +247,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           child: _query.isEmpty
               ? _DiscoveryView(
                   topTracks: topTracks.take(40).toList(),
+                  loadingTracks: loadingTracks,
                   onGenreSearch: (g) {
                     _controller.text = g;
                     _controller.selection = TextSelection.collapsed(
@@ -319,7 +260,8 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               : _searching && _results.isEmpty && _youtubeResults.isEmpty
               ? const Center(
                   child: RadarLoader(
-                    message: 'Searching Spotify, Apple Music, YouTube...',
+                    message:
+                        'Searching Apple Music, Spotify, YouTube Music, and Deezer...',
                   ),
                 )
               : _results.isEmpty && _youtubeResults.isEmpty

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
+import 'package:viberadar/models/crate_track.dart';
 import 'package:viberadar/models/session_state.dart';
 import 'package:viberadar/models/track.dart';
 import 'package:viberadar/models/user_profile.dart';
@@ -25,7 +26,7 @@ class _FakePairingService extends PairingService {
 
   // Captured calls
   final List<({String pairingId, Crate crate, String editorUid})>
-      pushSetlistCalls = [];
+  pushSetlistCalls = [];
 
   @override
   Future<({String pairingId, String desktopName})> claimPairing(
@@ -80,8 +81,7 @@ class _FakeUserRepository implements UserRepository {
   Stream<UserProfile> watchUser({
     required String userId,
     required String fallbackName,
-  }) =>
-      Stream.value(UserProfile.empty(id: userId, displayName: fallbackName));
+  }) => Stream.value(UserProfile.empty(id: userId, displayName: fallbackName));
 
   @override
   Future<void> toggleWatchlist({
@@ -133,29 +133,29 @@ const _session = SessionState(
 );
 
 Track _track(String id) => Track(
-      id: id,
-      title: 'Track $id',
-      artist: 'Artist $id',
-      artworkUrl: '',
-      bpm: 128,
-      keySignature: '8A',
-      genre: 'House',
-      vibe: 'energetic',
-      trendScore: 0.75,
-      regionScores: const {},
-      platformLinks: const {},
-      createdAt: DateTime(2024, 1, 1),
-      updatedAt: DateTime(2024, 1, 1),
-      energyLevel: 0.8,
-      trendHistory: const [],
-    );
+  id: id,
+  title: 'Track $id',
+  artist: 'Artist $id',
+  artworkUrl: '',
+  bpm: 128,
+  keySignature: '8A',
+  genre: 'House',
+  vibe: 'energetic',
+  trendScore: 0.75,
+  regionScores: const {},
+  platformLinks: const {},
+  createdAt: DateTime(2024, 1, 1),
+  updatedAt: DateTime(2024, 1, 1),
+  energyLevel: 0.8,
+  trendHistory: const [],
+);
 
 Crate _crate({List<String> trackIds = const [], String id = 'crate-1'}) =>
     Crate(
       id: id,
       name: 'Test Setlist',
       context: 'Open format',
-      trackIds: trackIds,
+      tracks: trackIds.map(CrateTrack.reference).toList(),
       createdAt: DateTime(2024, 1, 1),
       updatedAt: DateTime(2024, 1, 1),
     );
@@ -173,13 +173,13 @@ Future<ProviderContainer> _pumpSheet(
   late ProviderContainer container;
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [
-        pairingServiceProvider.overrideWithValue(fake),
-      ],
+      overrides: [pairingServiceProvider.overrideWithValue(fake)],
       child: Consumer(
         builder: (context, ref, _) {
           container = ProviderScope.containerOf(context);
-          return const MaterialApp(home: Scaffold(body: ConnectComputerSheet()));
+          return const MaterialApp(
+            home: Scaffold(body: ConnectComputerSheet()),
+          );
         },
       ),
     ),
@@ -225,61 +225,50 @@ void main() {
           container.read(pairedComputerProvider)?.desktopName,
           equals('Studio Mac'),
         );
-        expect(
-          container.read(pairedComputerProvider)?.pairingId,
-          equals('p1'),
-        );
+        expect(container.read(pairedComputerProvider)?.pairingId, equals('p1'));
       },
     );
 
-    testWidgets(
-      'successful connect shows SnackBar "Connected to Studio Mac"',
-      (tester) async {
-        final fake = _FakePairingService();
-        await _pumpSheet(tester, fake);
+    testWidgets('successful connect shows SnackBar "Connected to Studio Mac"', (
+      tester,
+    ) async {
+      final fake = _FakePairingService();
+      await _pumpSheet(tester, fake);
 
-        await tester.enterText(
-          find.byKey(const Key('pairing_code_field')),
-          'ABC234',
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const Key('connect_button')));
-        await _settle(tester);
+      await tester.enterText(
+        find.byKey(const Key('pairing_code_field')),
+        'ABC234',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('connect_button')));
+      await _settle(tester);
 
-        expect(
-          find.textContaining('Connected to Studio Mac'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(find.textContaining('Connected to Studio Mac'), findsOneWidget);
+    });
   });
 
   group('ConnectComputerSheet — invalid code', () {
-    testWidgets(
-      'bad code shows error message inline and keeps provider null',
-      (tester) async {
-        final fake = _FakePairingService();
-        final container = await _pumpSheet(tester, fake);
+    testWidgets('bad code shows error message inline and keeps provider null', (
+      tester,
+    ) async {
+      final fake = _FakePairingService();
+      final container = await _pumpSheet(tester, fake);
 
-        // Enter a bad code.
-        await tester.enterText(
-          find.byKey(const Key('pairing_code_field')),
-          'BADCOD',
-        );
-        await tester.pump();
-        await tester.tap(find.byKey(const Key('connect_button')));
-        await _settle(tester);
+      // Enter a bad code.
+      await tester.enterText(
+        find.byKey(const Key('pairing_code_field')),
+        'BADCOD',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('connect_button')));
+      await _settle(tester);
 
-        // Inline error message should appear.
-        expect(
-          find.textContaining('Invalid or expired code'),
-          findsOneWidget,
-        );
+      // Inline error message should appear.
+      expect(find.textContaining('Invalid or expired code'), findsOneWidget);
 
-        // Provider must still be null.
-        expect(container.read(pairedComputerProvider), isNull);
-      },
-    );
+      // Provider must still be null.
+      expect(container.read(pairedComputerProvider), isNull);
+    });
   });
 
   group('SetlistEditor — Send to computer', () {
@@ -298,8 +287,7 @@ void main() {
               // Pre-set the pairedComputerProvider via a subclass that
               // returns the desired initial state from build().
               pairedComputerProvider.overrideWith(
-                () =>
-                    _PreseededPairedComputerController(pairedComputer),
+                () => _PreseededPairedComputerController(pairedComputer),
               ),
               trackStreamProvider.overrideWith(
                 (ref) => Stream.value([_track('a'), _track('b')]),
@@ -332,45 +320,40 @@ void main() {
       },
     );
 
-    testWidgets(
-      'Send button shows SnackBar with desktopName after push',
-      (tester) async {
-        final fake = _FakePairingService();
-        const pairedComputer = PairedComputer('p1', 'Studio Mac');
-        final crate = _crate(trackIds: ['a'], id: 'crate-snack');
+    testWidgets('Send button shows SnackBar with desktopName after push', (
+      tester,
+    ) async {
+      final fake = _FakePairingService();
+      const pairedComputer = PairedComputer('p1', 'Studio Mac');
+      final crate = _crate(trackIds: ['a'], id: 'crate-snack');
 
-        await tester.pumpWidget(
-          ProviderScope(
-            overrides: [
-              pairingServiceProvider.overrideWithValue(fake),
-              pairedComputerProvider.overrideWith(
-                () =>
-                    _PreseededPairedComputerController(pairedComputer),
-              ),
-              trackStreamProvider.overrideWith(
-                (ref) => Stream.value([_track('a')]),
-              ),
-              sessionProvider.overrideWithValue(const AsyncData(_session)),
-              userRepositoryProvider.overrideWithValue(_FakeUserRepository()),
-            ],
-            child: MaterialApp(home: SetlistEditor(crate: crate)),
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 50));
-        await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            pairingServiceProvider.overrideWithValue(fake),
+            pairedComputerProvider.overrideWith(
+              () => _PreseededPairedComputerController(pairedComputer),
+            ),
+            trackStreamProvider.overrideWith(
+              (ref) => Stream.value([_track('a')]),
+            ),
+            sessionProvider.overrideWithValue(const AsyncData(_session)),
+            userRepositoryProvider.overrideWithValue(_FakeUserRepository()),
+          ],
+          child: MaterialApp(home: SetlistEditor(crate: crate)),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pumpAndSettle();
 
-        await tester.tap(find.textContaining('Send to'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 100));
-        await tester.pump();
+      await tester.tap(find.textContaining('Send to'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump();
 
-        expect(
-          find.textContaining('Sent to Studio Mac'),
-          findsOneWidget,
-        );
-      },
-    );
+      expect(find.textContaining('Sent to Studio Mac'), findsOneWidget);
+    });
 
     testWidgets(
       'Send button is NOT shown when pairedComputerProvider is null',

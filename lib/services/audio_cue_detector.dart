@@ -61,14 +61,14 @@ class AudioCueDetector {
       result = await Process.run(
         ffmpeg,
         [
-          '-v', 'error',          // suppress banner noise
+          '-v', 'error', // suppress banner noise
           '-i', filePath,
-          '-ac', '1',             // mono
-          '-ar', '$_sampleRate',  // target sample rate
-          '-f', 's16le',          // signed 16-bit little-endian PCM
-          '-',                    // write to stdout
+          '-ac', '1', // mono
+          '-ar', '$_sampleRate', // target sample rate
+          '-f', 's16le', // signed 16-bit little-endian PCM
+          '-', // write to stdout
         ],
-        stdoutEncoding: null,     // receive raw bytes, not a String
+        stdoutEncoding: null, // receive raw bytes, not a String
       );
     } catch (e) {
       // ffmpeg binary not found or OS-level failure
@@ -85,13 +85,16 @@ class AudioCueDetector {
     if (samples.isEmpty) return null;
 
     // ── 4. Build energy envelope ─────────────────────────────────────────
-    final windowSamples = (_windowSec * _sampleRate).round().clamp(1, samples.length);
+    final windowSamples = (_windowSec * _sampleRate).round().clamp(
+      1,
+      samples.length,
+    );
     final envelope = buildEnergyEnvelope(samples, windowSamples);
     if (envelope.isEmpty) return null;
 
     // ── 5. Derive events from the envelope ───────────────────────────────
-    final totalDur = durationSeconds ??
-        (samples.length / _sampleRate.toDouble());
+    final totalDur =
+        durationSeconds ?? (samples.length / _sampleRate.toDouble());
 
     final events = detectEventsFromEnvelope(
       envelope,
@@ -130,7 +133,9 @@ class AudioCueDetector {
   /// Each element is the RMS of one [windowSize]-sample window.
   /// Pure function — safe to call in tests with synthetic data.
   static List<double> buildEnergyEnvelope(
-      List<double> samples, int windowSize) {
+    List<double> samples,
+    int windowSize,
+  ) {
     if (samples.isEmpty || windowSize <= 0) return [];
     final count = (samples.length / windowSize).ceil();
     final env = List<double>.filled(count, 0.0);
@@ -209,11 +214,7 @@ class AudioCueDetector {
     double t(int w) => w * windowSec;
 
     // ── 1. Intro: always t=0 ─────────────────────────────────────────────
-    raw.add((
-      timeSeconds: 0.0,
-      type: CueType.intro,
-      confidence: 0.80,
-    ));
+    raw.add((timeSeconds: 0.0, type: CueType.intro, confidence: 0.80));
 
     // ── 2. First sustained rise (first drop) ─────────────────────────────
     // Scan through the first 40% of the track for the first window where
@@ -226,11 +227,7 @@ class AudioCueDetector {
           final riseStart = math.max(0, i - 1);
           final jumpMag = (norm[i] - norm[riseStart]).clamp(0.0, 1.0);
           final conf = (0.50 + jumpMag * 0.45).clamp(0.40, 0.95);
-          raw.add((
-            timeSeconds: t(i),
-            type: CueType.drop,
-            confidence: conf,
-          ));
+          raw.add((timeSeconds: t(i), type: CueType.drop, confidence: conf));
           break;
         }
       }
@@ -338,8 +335,7 @@ class AudioCueDetector {
         ));
 
         // Outro: last few windows (last 8 seconds or last 5% of track)
-        final outroSec =
-            math.max(totalDuration - 8.0, totalDuration * 0.95);
+        final outroSec = math.max(totalDuration - 8.0, totalDuration * 0.95);
         if (outroSec > 0 && outroSec < totalDuration) {
           raw.add((
             timeSeconds: outroSec,

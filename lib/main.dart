@@ -85,10 +85,16 @@ Future<void> _migrateOpenAiKeyToKeychain() async {
 
     await secure.writeSecret(kOpenAiApiKey, legacyKey);
     await prefs.remove('openai_api_key');
-    developer.log('Migrated openai_api_key from SharedPreferences to Keychain',
-        name: 'KeyMigration');
+    developer.log(
+      'Migrated openai_api_key from SharedPreferences to Keychain',
+      name: 'KeyMigration',
+    );
   } catch (e, st) {
-    developer.log('OpenAI key migration failed (non-fatal)',
-        name: 'KeyMigration', error: e, stackTrace: st);
+    developer.log(
+      'OpenAI key migration failed (non-fatal)',
+      name: 'KeyMigration',
+      error: e,
+      stackTrace: st,
+    );
   }
 }

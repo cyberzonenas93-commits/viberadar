@@ -6,13 +6,14 @@ import '../models/track.dart';
 /// Weights (8 dimensions)
 /// ─────────────────────────────────────────────
 ///  long_term_popularity   0.20  (trend_score proxy)
-///  chart_legacy           0.15  (platform breadth)
+///  chart_legacy           0.15  (platform breadth + Soundcharts evidence)
 ///  replay_longevity       0.15  (energy + history depth)
 ///  dj_usefulness          0.12  (BPM sweetspot + key)
 ///  timelessness           0.10  (age × sustained popularity)
 ///  familiarity            0.10  (mainstream crossover appeal)
 ///  artist_influence       0.08  (regional + source breadth)
-///  cross_source           0.10  (how many sources carry it)
+///  cross_source           0.10  (how many sources carry it, weighted toward
+///                                Shazam/TikTok/Boomplay chart signals)
 class GreatestOfService {
   // ─── public API ────────────────────────────────────────────────────────────
 
@@ -88,16 +89,19 @@ class GreatestOfService {
 
     // ── Release-year range (uses effectiveReleaseYear) ──
     if (yearFrom != null) {
-      filtered =
-          filtered.where((t) => t.effectiveReleaseYear >= yearFrom).toList();
+      filtered = filtered
+          .where((t) => t.effectiveReleaseYear >= yearFrom)
+          .toList();
     }
     if (yearTo != null) {
-      filtered =
-          filtered.where((t) => t.effectiveReleaseYear <= yearTo).toList();
+      filtered = filtered
+          .where((t) => t.effectiveReleaseYear <= yearTo)
+          .toList();
     }
 
     filtered.sort(
-        (a, b) => computeGreatestScore(b).compareTo(computeGreatestScore(a)));
+      (a, b) => computeGreatestScore(b).compareTo(computeGreatestScore(a)),
+    );
 
     return filtered.take(limit).toList();
   }
@@ -111,8 +115,9 @@ class GreatestOfService {
   /// More platform links → wider cultural footprint.
   double _chartLegacy(Track t) {
     final count = t.platformLinks.length;
+    final soundchartsBonus = _soundchartsEvidence(t) * 0.35;
     // Normalise: 0 → 0.0, 5+ → 1.0
-    return (count / 5).clamp(0.0, 1.0);
+    return ((count / 5) + soundchartsBonus).clamp(0.0, 1.0);
   }
 
   /// Replay longevity: energy level + trend-history depth.
@@ -140,8 +145,9 @@ class GreatestOfService {
     }
 
     // Bonus for tracks with a known key (better harmonic mixing).
-    final keyBonus =
-        (t.keySignature.isNotEmpty && t.keySignature != '--') ? 0.15 : 0.0;
+    final keyBonus = (t.keySignature.isNotEmpty && t.keySignature != '--')
+        ? 0.15
+        : 0.0;
 
     return (bpmScore + keyBonus).clamp(0.0, 1.0);
   }
@@ -174,8 +180,29 @@ class GreatestOfService {
   /// Cross-source prominence: how many distinct ingestion sources carry this track.
   double _crossSourceProminence(Track t) {
     final sourceCount = t.effectiveSources.length;
+    final soundchartsBonus = _soundchartsEvidence(t) * 0.4;
     // 1 source → 0.2, 3+ sources → 1.0
-    return ((sourceCount - 1) / 2).clamp(0.0, 1.0);
+    return (((sourceCount - 1) / 2) + soundchartsBonus).clamp(0.0, 1.0);
+  }
+
+  double _soundchartsEvidence(Track t) {
+    final evidence = <String>{};
+    for (final source in t.effectiveSources) {
+      final normalized = source.toLowerCase();
+      if (_isSoundchartsSignal(normalized)) evidence.add(normalized);
+    }
+    for (final key in t.platformLinks.keys) {
+      final normalized = key.toLowerCase();
+      if (_isSoundchartsSignal(normalized)) evidence.add(normalized);
+    }
+    return (evidence.length / 3).clamp(0.0, 1.0);
+  }
+
+  bool _isSoundchartsSignal(String value) {
+    return value.contains('soundcharts') ||
+        value.contains('shazam') ||
+        value.contains('tiktok') ||
+        value.contains('boomplay');
   }
 
   // ─── era helpers ──────────────────────────────────────────────────────────

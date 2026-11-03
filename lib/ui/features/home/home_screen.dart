@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/config/music_genres.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
@@ -11,6 +12,7 @@ import '../../../providers/app_state.dart';
 import '../../../providers/repositories.dart';
 import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
+import '../../widgets/ui_kit.dart';
 
 part 'home_screen_widgets.dart';
 part 'home_screen_cards.dart';
@@ -31,19 +33,21 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  String _selectedGenre = 'All';
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final allTracks = widget.allTracks;
-    // Prefer the reactive local selection (works for guests too); fall back to
-    // the signed-in profile's region when nothing has been picked this session.
-    final region =
-        ref.watch(selectedRegionProvider) ?? widget.userProfile.preferredRegion;
-    final genreFiltered = _selectedGenre == 'All'
+    final tracksAsync = ref.watch(trackStreamProvider);
+    final loadingTracks = tracksAsync.isLoading && allTracks.isEmpty;
+    final liveAccess = ref.watch(liveCatalogAccessProvider);
+    final selectedGenre = ref.watch(selectedGenreProvider);
+    final selectedGenreLabel = selectedGenre ?? 'All';
+    // Prefer the reactive local selection (works for guests too). Default to
+    // Global so the dashboard never silently locks to a legacy profile market.
+    final region = ref.watch(selectedRegionProvider) ?? 'Global';
+    final genreFiltered = selectedGenre == null || liveAccess.hasLiveAccess
         ? allTracks
-        : allTracks.where((t) => t.genre == _selectedGenre).toList();
+        : allTracks.where((t) => genreMatches(t.genre, selectedGenre)).toList();
     // Sort by regional score when a specific region is set, otherwise global trendScore
     final sorted = [...genreFiltered];
     if (region.isNotEmpty && region != 'Global') {
@@ -78,17 +82,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Genre breakdown
     final genreCounts = <String, int>{};
     for (final t in allTracks) {
-      if (t.genre.isNotEmpty) {
-        genreCounts[t.genre] = (genreCounts[t.genre] ?? 0) + 1;
+      final genre = canonicalGenre(t.genre);
+      if (isSpecificGenre(genre)) {
+        genreCounts[genre] = (genreCounts[genre] ?? 0) + 1;
       }
     }
     final topGenres = genreCounts.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
+    // Genre quick-filter chips come from the full DJ catalog (plus any genres
+    // discovered in the feed), NOT just the genres present in the current feed
+    // — otherwise an all-unknown feed would only ever offer All + Other.
+    // Format. The 'All' chip is rendered separately, so exclude it here.
+    final genreChips = ref
+        .watch(availableGenresProvider)
+        .where((genre) => genre != 'All')
+        .toList();
     final screenWidth = MediaQuery.sizeOf(context).width;
     final compact = screenWidth < 700;
     final edge = compact ? 16.0 : 28.0;
     final welcomePadding = compact ? 18.0 : 24.0;
-    final gridMaxExtent = compact ? 176.0 : 200.0;
+    final gridMaxExtent = compact ? 186.0 : 200.0;
+    final filterHeight = MediaQuery.textScalerOf(
+      context,
+    ).scale(34).clamp(34.0, 46.0).toDouble();
 
     return CustomScrollView(
       slivers: [
@@ -103,12 +119,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
                 colors: [
-                  AppTheme.violet.withValues(alpha: 0.15),
-                  AppTheme.pink.withValues(alpha: 0.08),
-                  AppTheme.panel,
+                  AppTheme.cyan.withValues(alpha: 0.12),
+                  AppTheme.lime.withValues(alpha: 0.08),
+                  AppTheme.panel.withValues(alpha: 0.96),
                 ],
               ),
-              border: Border.all(color: AppTheme.violet.withValues(alpha: 0.2)),
+              border: Border.all(color: AppTheme.cyan.withValues(alpha: 0.18)),
             ),
             child: compact
                 ? Column(
@@ -117,6 +133,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       _buildWelcomeCopy(
                         theme: theme,
                         allTracks: allTracks,
+                        loadingTracks: loadingTracks,
                         risingCount: rising.length,
                         topGenres: topGenres,
                       ),
@@ -130,6 +147,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: _buildWelcomeCopy(
                           theme: theme,
                           allTracks: allTracks,
+                          loadingTracks: loadingTracks,
                           risingCount: rising.length,
                           topGenres: topGenres,
                         ),
@@ -143,93 +161,139 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
         const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-        // ── #1 Trending Hero ──────────────────────────────────────────────
-        if (top.length >= 3)
+        if (loadingTracks)
+          const SliverFillRemaining(
+            hasScrollBody: false,
+            child: Center(child: RadarLoader(message: 'Loading tracks…')),
+          )
+        else ...[
+          // ── #1 Trending Hero ──────────────────────────────────────────────
+          if (top.length >= 3)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: edge),
+                child: _SectionHeader(
+                  icon: Icons.whatshot_rounded,
+                  label: 'Top Trending',
+                  color: AppTheme.amber,
+                ),
+              ),
+            ),
+          if (top.length >= 3)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(edge, 12, edge, 0),
+                child: compact
+                    ? Column(
+                        children: [
+                          _HeroCard(track: top[0], ref: ref),
+                          const SizedBox(height: 12),
+                          _RunnerCard(
+                            track: top[1],
+                            rank: 2,
+                            ref: ref,
+                            accent: const Color(0xFFC0C0C0),
+                          ),
+                          const SizedBox(height: 12),
+                          _RunnerCard(
+                            track: top[2],
+                            rank: 3,
+                            ref: ref,
+                            accent: const Color(0xFFCD7F32),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 5,
+                            child: _HeroCard(track: top[0], ref: ref),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            flex: 3,
+                            child: Column(
+                              children: [
+                                _RunnerCard(
+                                  track: top[1],
+                                  rank: 2,
+                                  ref: ref,
+                                  accent: const Color(0xFFC0C0C0),
+                                ),
+                                const SizedBox(height: 12),
+                                _RunnerCard(
+                                  track: top[2],
+                                  rank: 3,
+                                  ref: ref,
+                                  accent: const Color(0xFFCD7F32),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+
+          const SliverToBoxAdapter(child: SizedBox(height: 28)),
+
+          // ── Genre Quick Filters ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.symmetric(horizontal: edge),
-              child: _SectionHeader(
-                icon: Icons.whatshot_rounded,
-                label: 'Top Trending',
-                color: AppTheme.amber,
-              ),
-            ),
-          ),
-        if (top.length >= 3)
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(edge, 12, edge, 0),
-              child: compact
-                  ? Column(
-                      children: [
-                        _HeroCard(track: top[0], ref: ref),
-                        const SizedBox(height: 12),
-                        _RunnerCard(
-                          track: top[1],
-                          rank: 2,
-                          ref: ref,
-                          accent: const Color(0xFFC0C0C0),
-                        ),
-                        const SizedBox(height: 12),
-                        _RunnerCard(
-                          track: top[2],
-                          rank: 3,
-                          ref: ref,
-                          accent: const Color(0xFFCD7F32),
-                        ),
-                      ],
-                    )
-                  : Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 5,
-                          child: _HeroCard(track: top[0], ref: ref),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 3,
-                          child: Column(
-                            children: [
-                              _RunnerCard(
-                                track: top[1],
-                                rank: 2,
-                                ref: ref,
-                                accent: const Color(0xFFC0C0C0),
+              child: SizedBox(
+                height: filterHeight,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: genreChips.length + 1, // +1 for "All"
+                  separatorBuilder: (_, i) => const SizedBox(width: 8),
+                  itemBuilder: (ctx, i) {
+                    // First item is "All" to clear the filter
+                    if (i == 0) {
+                      final isAll = selectedGenre == null;
+                      return GestureDetector(
+                        onTap: () {
+                          ref.read(selectedGenreProvider.notifier).set(null);
+                        },
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.click,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 7,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isAll
+                                  ? AppTheme.cyan.withValues(alpha: 0.16)
+                                  : AppTheme.panelRaised,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: isAll
+                                    ? AppTheme.cyan.withValues(alpha: 0.42)
+                                    : AppTheme.edge.withValues(alpha: 0.4),
                               ),
-                              const SizedBox(height: 12),
-                              _RunnerCard(
-                                track: top[2],
-                                rank: 3,
-                                ref: ref,
-                                accent: const Color(0xFFCD7F32),
+                            ),
+                            child: Text(
+                              'All',
+                              style: TextStyle(
+                                color: isAll
+                                    ? AppTheme.cyan
+                                    : AppTheme.textPrimary,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-            ),
-          ),
-
-        const SliverToBoxAdapter(child: SizedBox(height: 28)),
-
-        // ── Genre Quick Filters ───────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.symmetric(horizontal: edge),
-            child: SizedBox(
-              height: 34,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: topGenres.take(8).length + 1, // +1 for "All"
-                separatorBuilder: (_, i) => const SizedBox(width: 8),
-                itemBuilder: (ctx, i) {
-                  // First item is "All" to clear the filter
-                  if (i == 0) {
-                    final isAll = _selectedGenre == 'All';
+                      );
+                    }
+                    final genre = genreChips[i - 1];
+                    final isSelected = selectedGenreLabel == genre;
                     return GestureDetector(
-                      onTap: () => setState(() => _selectedGenre = 'All'),
+                      onTap: () {
+                        ref.read(selectedGenreProvider.notifier).set(genre);
+                      },
                       child: MouseRegion(
                         cursor: SystemMouseCursors.click,
                         child: Container(
@@ -238,170 +302,51 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             vertical: 7,
                           ),
                           decoration: BoxDecoration(
-                            color: isAll
-                                ? AppTheme.violet.withValues(alpha: 0.2)
+                            color: isSelected
+                                ? AppTheme.cyan.withValues(alpha: 0.16)
                                 : AppTheme.panelRaised,
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                              color: isAll
-                                  ? AppTheme.violet.withValues(alpha: 0.5)
+                              color: isSelected
+                                  ? AppTheme.cyan.withValues(alpha: 0.42)
                                   : AppTheme.edge.withValues(alpha: 0.4),
                             ),
                           ),
                           child: Text(
-                            'All',
+                            genre,
                             style: TextStyle(
-                              color: isAll
-                                  ? AppTheme.violet
+                              color: isSelected
+                                  ? AppTheme.cyan
                                   : AppTheme.textPrimary,
                               fontSize: 11,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ),
                       ),
                     );
-                  }
-                  final genre = topGenres[i - 1];
-                  final isSelected = _selectedGenre == genre.key;
-                  return GestureDetector(
-                    onTap: () => setState(() => _selectedGenre = genre.key),
-                    child: MouseRegion(
-                      cursor: SystemMouseCursors.click,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppTheme.violet.withValues(alpha: 0.2)
-                              : AppTheme.panelRaised,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppTheme.violet.withValues(alpha: 0.5)
-                                : AppTheme.edge.withValues(alpha: 0.4),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              genre.key,
-                              style: TextStyle(
-                                color: isSelected
-                                    ? AppTheme.violet
-                                    : AppTheme.textPrimary,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 1,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.violet.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                '${genre.value}',
-                                style: const TextStyle(
-                                  color: AppTheme.violet,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                },
+                  },
+                ),
               ),
             ),
           ),
-        ),
 
-        const SliverToBoxAdapter(child: SizedBox(height: 24)),
+          const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
-        // ── Hot Right Now Grid ────────────────────────────────────────────
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(edge, 0, edge, 12),
-            child: _SectionHeader(
-              icon: Icons.local_fire_department_rounded,
-              label: 'Hot Right Now',
-              color: AppTheme.amber,
-              count: '${(top.length - 3).clamp(0, 48)}',
-            ),
-          ),
-        ),
-        SliverPadding(
-          padding: EdgeInsets.fromLTRB(edge, 0, edge, 24),
-          sliver: SliverGrid(
-            gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: gridMaxExtent,
-              childAspectRatio: 0.72,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            delegate: SliverChildBuilderDelegate((context, i) {
-              final idx = i + 3;
-              if (idx >= top.length) return null;
-              return _TrackCard(track: top[idx], rank: idx + 1, ref: ref);
-            }, childCount: (top.length - 3).clamp(0, 48)),
-          ),
-        ),
-
-        // ── Rising Fast ──────────────────────────────────────────────────
-        if (risingTop.isNotEmpty) ...[
+          // ── Hot Right Now Grid ────────────────────────────────────────────
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(edge, 0, edge, 12),
               child: _SectionHeader(
-                icon: Icons.rocket_launch_rounded,
-                label: 'Rising Fast',
-                color: AppTheme.pink,
-                count: '${risingTop.length}',
-              ),
-            ),
-          ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 210,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                padding: EdgeInsets.fromLTRB(edge, 0, edge, 0),
-                itemCount: risingTop.length,
-                separatorBuilder: (_, i) => const SizedBox(width: 12),
-                itemBuilder: (ctx, i) =>
-                    _RisingCard(track: risingTop[i], ref: ref),
-              ),
-            ),
-          ),
-          const SliverToBoxAdapter(child: SizedBox(height: 28)),
-        ],
-
-        // ── Hot in Region ────────────────────────────────────────────────
-        if (regionalTop.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(edge, 0, edge, 12),
-              child: _SectionHeader(
-                icon: Icons.public_rounded,
-                label: 'Hot in ${formatRegionLabel(region)}',
-                color: AppTheme.cyan,
-                count: '${regionalTop.length}',
+                icon: Icons.local_fire_department_rounded,
+                label: 'Hot Right Now',
+                color: AppTheme.amber,
+                count: '${(top.length - 3).clamp(0, 48)}',
               ),
             ),
           ),
           SliverPadding(
-            padding: EdgeInsets.fromLTRB(edge, 0, edge, 32),
+            padding: EdgeInsets.fromLTRB(edge, 0, edge, 24),
             sliver: SliverGrid(
               gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
                 maxCrossAxisExtent: gridMaxExtent,
@@ -409,13 +354,73 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 crossAxisSpacing: 12,
                 mainAxisSpacing: 12,
               ),
-              delegate: SliverChildBuilderDelegate(
-                (context, i) =>
-                    _TrackCard(track: regionalTop[i], rank: i + 1, ref: ref),
-                childCount: regionalTop.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, i) {
+                final idx = i + 3;
+                if (idx >= top.length) return null;
+                return _TrackCard(track: top[idx], rank: idx + 1, ref: ref);
+              }, childCount: (top.length - 3).clamp(0, 48)),
             ),
           ),
+
+          // ── Rising Fast ──────────────────────────────────────────────────
+          if (risingTop.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(edge, 0, edge, 12),
+                child: _SectionHeader(
+                  icon: Icons.rocket_launch_rounded,
+                  label: 'Rising Fast',
+                  color: AppTheme.pink,
+                  count: '${risingTop.length}',
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 210,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: EdgeInsets.fromLTRB(edge, 0, edge, 0),
+                  itemCount: risingTop.length,
+                  separatorBuilder: (_, i) => const SizedBox(width: 12),
+                  itemBuilder: (ctx, i) =>
+                      _RisingCard(track: risingTop[i], ref: ref),
+                ),
+              ),
+            ),
+            const SliverToBoxAdapter(child: SizedBox(height: 28)),
+          ],
+
+          // ── Hot in Region ────────────────────────────────────────────────
+          if (regionalTop.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(edge, 0, edge, 12),
+                child: _SectionHeader(
+                  icon: Icons.public_rounded,
+                  label: 'Hot in ${formatRegionLabel(region)}',
+                  color: AppTheme.cyan,
+                  count: '${regionalTop.length}',
+                ),
+              ),
+            ),
+            SliverPadding(
+              padding: EdgeInsets.fromLTRB(edge, 0, edge, 32),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: gridMaxExtent,
+                  childAspectRatio: 0.72,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (context, i) =>
+                      _TrackCard(track: regionalTop[i], rank: i + 1, ref: ref),
+                  childCount: regionalTop.length,
+                ),
+              ),
+            ),
+          ],
         ],
       ],
     );
@@ -424,6 +429,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildWelcomeCopy({
     required ThemeData theme,
     required List<Track> allTracks,
+    required bool loadingTracks,
     required int risingCount,
     required List<MapEntry<String, int>> topGenres,
   }) {
@@ -438,14 +444,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        Text(
-          'Your DJ intelligence dashboard. ${allTracks.length} tracks from 8 sources across 6 regions.',
-          style: const TextStyle(
-            color: AppTheme.textSecondary,
-            fontSize: 13,
-            height: 1.4,
-          ),
-        ),
+        loadingTracks
+            ? const InlineLoadingText(
+                label: 'Loading your DJ intelligence catalog…',
+                style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              )
+            : Text(
+                'Your DJ intelligence dashboard. ${allTracks.length} tracks from 8 sources across 6 regions.',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
         const SizedBox(height: 16),
         Wrap(
           spacing: 8,
@@ -456,20 +471,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               label: '${allTracks.length}',
               sublabel: 'tracks',
               color: AppTheme.cyan,
+              loading: loadingTracks,
             ),
             _StatPill(
               icon: Icons.trending_up_rounded,
               label: '$risingCount',
               sublabel: 'rising',
               color: AppTheme.pink,
+              loading: loadingTracks,
             ),
             _StatPill(
               icon: Icons.people_rounded,
               label: '${_uniqueArtists(allTracks)}',
               sublabel: 'artists',
               color: AppTheme.violet,
+              loading: loadingTracks,
             ),
-            if (topGenres.isNotEmpty)
+            if (!loadingTracks && topGenres.isNotEmpty)
               _StatPill(
                 icon: Icons.album_rounded,
                 label: topGenres.first.key,
@@ -483,6 +501,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildStatusControls(String region, {required bool compact}) {
+    final genre = ref.watch(selectedGenreProvider) ?? 'All';
     final liveBadge = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -528,6 +547,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         children: [
           liveBadge,
           _RegionPickerBadge(currentRegion: region),
+          _GenrePickerBadge(currentGenre: genre),
         ],
       );
     }
@@ -538,6 +558,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         liveBadge,
         const SizedBox(height: 10),
         _RegionPickerBadge(currentRegion: region),
+        const SizedBox(height: 10),
+        _GenrePickerBadge(currentGenre: genre),
       ],
     );
   }

@@ -84,7 +84,7 @@ class Track {
       artworkUrl: map['artwork_url'] as String? ?? '',
       bpm: (map['bpm'] as num?)?.round() ?? 0,
       keySignature: map['key'] as String? ?? '--',
-      genre: map['genre'] as String? ?? 'Open Format',
+      genre: map['genre'] as String? ?? 'Other',
       vibe: map['vibe'] as String? ?? 'club',
       trendScore: (map['trend_score'] as num?)?.toDouble() ?? 0,
       regionScores: _parseDoubleMap(map['region_scores']),

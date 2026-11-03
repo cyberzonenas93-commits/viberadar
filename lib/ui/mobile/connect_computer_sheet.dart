@@ -3,35 +3,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../providers/paired_computer_provider.dart';
 import '../../services/pairing_service.dart';
+import 'qr_scan_screen.dart';
 
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
-
-/// Holds the active phone↔desktop pairing.
-class PairedComputer {
-  const PairedComputer(this.pairingId, this.desktopName);
-
-  final String pairingId;
-  final String desktopName;
-}
-
-// ---------------------------------------------------------------------------
-// Riverpod provider (Notifier — matches SelectedRegionController style)
-// ---------------------------------------------------------------------------
-
-class PairedComputerController extends Notifier<PairedComputer?> {
-  @override
-  PairedComputer? build() => null;
-
-  void set(PairedComputer? p) => state = p;
-}
-
-final pairedComputerProvider =
-    NotifierProvider<PairedComputerController, PairedComputer?>(
-  PairedComputerController.new,
-);
+export '../../providers/paired_computer_provider.dart';
 
 // ---------------------------------------------------------------------------
 // ConnectComputerSheet
@@ -60,6 +36,15 @@ class _ConnectComputerSheetState extends ConsumerState<ConnectComputerSheet> {
     super.dispose();
   }
 
+  Future<void> _scan() async {
+    final scanned = await Navigator.of(
+      context,
+    ).push<String>(MaterialPageRoute(builder: (_) => const QrScanScreen()));
+    if (!mounted || scanned == null) return;
+    _codeController.text = scanned.toUpperCase();
+    await _connect();
+  }
+
   Future<void> _connect() async {
     final code = _codeController.text.trim().toUpperCase();
     if (code.isEmpty) return;
@@ -70,16 +55,14 @@ class _ConnectComputerSheetState extends ConsumerState<ConnectComputerSheet> {
     });
 
     try {
-      final result = await ref
-          .read(pairingServiceProvider)
-          .claimPairing(code);
+      final result = await ref.read(pairingServiceProvider).claimPairing(code);
       if (!mounted) return;
 
       // Update state before closing so that tests can read it while the widget
       // is still in the tree (no separate Navigator pop in widget tests).
-      ref.read(pairedComputerProvider.notifier).set(
-            PairedComputer(result.pairingId, result.desktopName),
-          );
+      ref
+          .read(pairedComputerProvider.notifier)
+          .set(PairedComputer(result.pairingId, result.desktopName));
 
       // Close the sheet if it has its own route (modal usage).
       if (Navigator.of(context).canPop()) {
@@ -137,6 +120,31 @@ class _ConnectComputerSheetState extends ConsumerState<ConnectComputerSheet> {
             'Enter the 6-character code shown on your desktop app.',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
           ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.lime.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.lime.withValues(alpha: 0.25)),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.cloud_done_outlined, color: AppTheme.lime, size: 16),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Signed in on your Mac with the same account? Your setlists '
+                    'already sync automatically — no code needed.',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
           const SizedBox(height: 20),
           TextField(
             key: const Key('pairing_code_field'),
@@ -172,11 +180,16 @@ class _ConnectComputerSheetState extends ConsumerState<ConnectComputerSheet> {
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
+                borderSide: BorderSide(
+                  color: AppTheme.edge.withValues(alpha: 0.6),
+                ),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: AppTheme.violet, width: 1.5),
+                borderSide: const BorderSide(
+                  color: AppTheme.violet,
+                  width: 1.5,
+                ),
               ),
               errorBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -212,11 +225,22 @@ class _ConnectComputerSheetState extends ConsumerState<ConnectComputerSheet> {
                   )
                 : const Text(
                     'Connect',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                   ),
+          ),
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: _loading ? null : _scan,
+            icon: const Icon(Icons.qr_code_scanner_rounded, size: 18),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.cyan,
+              side: BorderSide(color: AppTheme.cyan.withValues(alpha: 0.4)),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            label: const Text('Scan QR code instead'),
           ),
           const SizedBox(height: 8),
         ],

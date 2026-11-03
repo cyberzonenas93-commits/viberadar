@@ -41,7 +41,7 @@ Track _track({
     id: id,
     title: title,
     artist: artist,
-    artworkUrl: '',       // empty → no network attempt
+    artworkUrl: '', // empty → no network attempt
     bpm: bpm,
     keySignature: '8B',
     genre: genre,
@@ -69,8 +69,11 @@ const _authSession = SessionState(
 );
 
 // Guest user profile
-UserProfile get _guestProfile =>
-    UserProfile.empty(id: 'public-guest', displayName: 'Guest DJ', preferredRegion: 'GH');
+UserProfile get _guestProfile => UserProfile.empty(
+  id: 'public-guest',
+  displayName: 'Guest DJ',
+  preferredRegion: 'GH',
+);
 
 // ---------------------------------------------------------------------------
 // Desktop viewport helper
@@ -87,30 +90,42 @@ void _setDesktopSize(WidgetTester tester) {
 // Helper: wrap a widget in ProviderScope + MaterialApp with minimum overrides
 // ---------------------------------------------------------------------------
 
-Widget _wrap(
-  Widget child, {
-  List<Track>? tracks,
-}) {
-  final effectiveTracks = tracks ??
+Widget _wrap(Widget child, {List<Track>? tracks}) {
+  final effectiveTracks =
+      tracks ??
       [
-        _track(id: 't1', title: 'Track Alpha', artist: 'Burna Boy',
-            trendScore: 0.9),
-        _track(id: 't2', title: 'Track Beta', artist: 'Wizkid',
-            trendScore: 0.6),
-        _track(id: 't3', title: 'Track Gamma', artist: 'Davido',
-            trendScore: 0.3),
+        _track(
+          id: 't1',
+          title: 'Track Alpha',
+          artist: 'Burna Boy',
+          trendScore: 0.9,
+        ),
+        _track(
+          id: 't2',
+          title: 'Track Beta',
+          artist: 'Wizkid',
+          trendScore: 0.6,
+        ),
+        _track(
+          id: 't3',
+          title: 'Track Gamma',
+          artist: 'Davido',
+          trendScore: 0.3,
+        ),
       ];
 
   return ProviderScope(
     overrides: [
-      trackStreamProvider.overrideWith(
-          (ref) => Stream.value(effectiveTracks)),
-      sessionProvider.overrideWith(
-          (ref) => Stream.value(_authSession)),
+      trackStreamProvider.overrideWith((ref) => Stream.value(effectiveTracks)),
+      sessionProvider.overrideWith((ref) => Stream.value(_authSession)),
       // crateProvider is a NotifierProvider — the default (empty) state is
       // fine for smoke tests; we don't need to override it.
-      availableRegionsProvider.overrideWithValue(
-          const ['Global', 'GH', 'NG', 'US']),
+      availableRegionsProvider.overrideWithValue(const [
+        'Global',
+        'GH',
+        'NG',
+        'US',
+      ]),
     ],
     child: MaterialApp(
       // Dark theme so AppTheme colours resolve correctly
@@ -126,12 +141,11 @@ Widget _wrap(
 
 void main() {
   group('TrendingScreen smoke tests', () {
-    testWidgets('builds without throwing and shows a track title',
-        (tester) async {
+    testWidgets('builds without throwing and shows a track title', (
+      tester,
+    ) async {
       _setDesktopSize(tester);
-      await tester.pumpWidget(
-        _wrap(const TrendingScreen()),
-      );
+      await tester.pumpWidget(_wrap(const TrendingScreen()));
       await tester.pumpAndSettle();
 
       // Screen built; verify at least one track title is visible
@@ -146,8 +160,9 @@ void main() {
       expect(find.text('Trending'), findsOneWidget);
     });
 
-    testWidgets('shows empty-state message when track list is empty',
-        (tester) async {
+    testWidgets('shows empty-state message when track list is empty', (
+      tester,
+    ) async {
       _setDesktopSize(tester);
       await tester.pumpWidget(_wrap(const TrendingScreen(), tracks: []));
       await tester.pumpAndSettle();
@@ -175,28 +190,40 @@ void main() {
     testWidgets('builds without throwing', (tester) async {
       _setDesktopSize(tester);
       final tracks = [
-        _track(id: 'h1', title: 'Home Track 1', artist: 'Artist One',
-            trendScore: 0.85),
-        _track(id: 'h2', title: 'Home Track 2', artist: 'Artist Two',
-            trendScore: 0.70),
-        _track(id: 'h3', title: 'Home Track 3', artist: 'Artist Three',
-            trendScore: 0.55),
+        _track(
+          id: 'h1',
+          title: 'Home Track 1',
+          artist: 'Artist One',
+          trendScore: 0.85,
+        ),
+        _track(
+          id: 'h2',
+          title: 'Home Track 2',
+          artist: 'Artist Two',
+          trendScore: 0.70,
+        ),
+        _track(
+          id: 'h3',
+          title: 'Home Track 3',
+          artist: 'Artist Three',
+          trendScore: 0.55,
+        ),
       ];
 
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
             sessionProvider.overrideWith((ref) => Stream.value(_authSession)),
-            availableRegionsProvider.overrideWithValue(
-                const ['Global', 'GH', 'NG']),
+            availableRegionsProvider.overrideWithValue(const [
+              'Global',
+              'GH',
+              'NG',
+            ]),
           ],
           child: MaterialApp(
             theme: ThemeData.dark(),
             home: Scaffold(
-              body: HomeScreen(
-                allTracks: tracks,
-                userProfile: _guestProfile,
-              ),
+              body: HomeScreen(allTracks: tracks, userProfile: _guestProfile),
             ),
           ),
         ),
@@ -207,11 +234,17 @@ void main() {
       expect(find.text('Welcome to VibeRadar'), findsOneWidget);
     });
 
-    testWidgets('shows Top Trending section when 3+ tracks provided',
-        (tester) async {
+    testWidgets('shows Top Trending section when 3+ tracks provided', (
+      tester,
+    ) async {
       _setDesktopSize(tester);
       final tracks = [
-        _track(id: 'ht1', title: 'Hero Track', artist: 'Star', trendScore: 0.95),
+        _track(
+          id: 'ht1',
+          title: 'Hero Track',
+          artist: 'Star',
+          trendScore: 0.95,
+        ),
         _track(id: 'ht2', title: 'Second', artist: 'Star', trendScore: 0.80),
         _track(id: 'ht3', title: 'Third', artist: 'Star', trendScore: 0.70),
       ];
@@ -270,15 +303,23 @@ void main() {
     testWidgets('builds without throwing and shows heading', (tester) async {
       _setDesktopSize(tester);
       final tracks = <Track>[
-        _track(id: 'g1', title: 'Greatest One', artist: 'Legend',
-            trendScore: 0.9, releaseYear: 2015),
-        _track(id: 'g2', title: 'Greatest Two', artist: 'Icon',
-            trendScore: 0.75, releaseYear: 2010),
+        _track(
+          id: 'g1',
+          title: 'Greatest One',
+          artist: 'Legend',
+          trendScore: 0.9,
+          releaseYear: 2015,
+        ),
+        _track(
+          id: 'g2',
+          title: 'Greatest Two',
+          artist: 'Icon',
+          trendScore: 0.75,
+          releaseYear: 2010,
+        ),
       ];
 
-      await tester.pumpWidget(
-        _wrap(const GreatestOfScreen(), tracks: tracks),
-      );
+      await tester.pumpWidget(_wrap(const GreatestOfScreen(), tracks: tracks));
       // We use pump rather than pumpAndSettle to avoid the async platformSearch
       // timer running indefinitely.  One frame is enough to assert the widget
       // tree rendered correctly.
@@ -287,8 +328,9 @@ void main() {
       expect(find.text('Greatest Of'), findsOneWidget);
     });
 
-    testWidgets('renders with empty track list without throwing',
-        (tester) async {
+    testWidgets('renders with empty track list without throwing', (
+      tester,
+    ) async {
       _setDesktopSize(tester);
       await tester.pumpWidget(_wrap(const GreatestOfScreen(), tracks: []));
       await tester.pump();

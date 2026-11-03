@@ -15,6 +15,8 @@ class SidebarNav extends StatefulWidget {
     required this.onSelected,
     required this.statusMessage,
     this.isDemoMode = false,
+    this.liveRefreshEnabled = true,
+    this.onRefreshLocked,
     this.onRefreshComplete,
   });
 
@@ -22,10 +24,14 @@ class SidebarNav extends StatefulWidget {
   final ValueChanged<AppSection> onSelected;
   final String statusMessage;
 
-  /// When true the app is running on demo/offline data (Firebase unavailable);
-  /// the status indicator switches to an amber warning so it can't be mistaken
-  /// for a healthy "connected" state.
+  /// When true the app is running on local demo/mock data.
   final bool isDemoMode;
+
+  /// When false, the refresh button becomes an upgrade/sign-in prompt instead
+  /// of triggering the live ingestion function.
+  final bool liveRefreshEnabled;
+
+  final VoidCallback? onRefreshLocked;
 
   /// Called after a manual refresh completes so the parent can update the track cache.
   final VoidCallback? onRefreshComplete;
@@ -39,6 +45,19 @@ class _SidebarNavState extends State<SidebarNav> {
   String? _refreshResult;
 
   Future<void> _refresh() async {
+    if (!widget.liveRefreshEnabled) {
+      widget.onRefreshLocked?.call();
+      setState(
+        () => _refreshResult = widget.isDemoMode
+            ? 'Sign in to refresh live trends.'
+            : 'VibeRadar Pro unlocks live refresh.',
+      );
+      Future.delayed(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _refreshResult = null);
+      });
+      return;
+    }
+
     setState(() {
       _refreshing = true;
       _refreshResult = null;
@@ -60,19 +79,23 @@ class _SidebarNavState extends State<SidebarNav> {
   Widget build(BuildContext context) {
     final selectedSection = widget.selectedSection;
     final onSelected = widget.onSelected;
-    final statusMessage = _refreshResult ?? widget.statusMessage;
+    final statusMessage =
+        _refreshResult ??
+        (widget.isDemoMode
+            ? 'MOCK SONGS ONLY. These are not real live tracks.'
+            : '');
 
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: AppTheme.panel.withValues(alpha: 0.92),
+        gradient: AppTheme.surfaceGradient,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.edge.withValues(alpha: 0.58)),
+        border: Border.all(color: AppTheme.hairlineStrong),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.28),
-            blurRadius: 28,
-            offset: const Offset(0, 18),
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 24,
+            offset: const Offset(0, 14),
           ),
         ],
       ),
@@ -267,9 +290,9 @@ class _BrandHeader extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   boxShadow: AppTheme.glow(
-                    AppTheme.cyan,
+                    AppTheme.lime,
                     blur: 16,
-                    opacity: 0.28,
+                    opacity: 0.18,
                   ),
                 ),
                 child: ClipRRect(
@@ -290,7 +313,7 @@ class _BrandHeader extends StatelessWidget {
                   children: [
                     ShaderMask(
                       shaderCallback: (bounds) => const LinearGradient(
-                        colors: [AppTheme.textPrimary, AppTheme.cyan],
+                        colors: [AppTheme.textPrimary, AppTheme.lime],
                       ).createShader(bounds),
                       child: Text(
                         'VIBERADAR',
@@ -304,7 +327,7 @@ class _BrandHeader extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     const Text(
-                      'DJ intelligence',
+                      'Production workspace',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -327,8 +350,8 @@ class _BrandHeader extends StatelessWidget {
               gradient: LinearGradient(
                 colors: [
                   AppTheme.cyan.withValues(alpha: 0),
-                  AppTheme.cyan.withValues(alpha: 0.36),
-                  AppTheme.pink.withValues(alpha: 0.26),
+                  AppTheme.cyan.withValues(alpha: 0.30),
+                  AppTheme.lime.withValues(alpha: 0.24),
                   AppTheme.amber.withValues(alpha: 0),
                 ],
               ),
@@ -374,7 +397,7 @@ class _RefreshButton extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       child: Material(
         color: refreshing
-            ? AppTheme.cyan.withValues(alpha: 0.08)
+            ? AppTheme.lime.withValues(alpha: 0.08)
             : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
         child: InkWell(
@@ -390,13 +413,13 @@ class _RefreshButton extends StatelessWidget {
                     height: 17,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: AppTheme.cyan,
+                      color: AppTheme.lime,
                     ),
                   )
                 else
                   const Icon(
                     Icons.refresh_rounded,
-                    color: AppTheme.cyan,
+                    color: AppTheme.lime,
                     size: 17,
                   ),
                 const SizedBox(width: 8),
@@ -429,11 +452,11 @@ class _StatusPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isDemoMode ? AppTheme.amber : AppTheme.lime;
+    final color = isDemoMode ? AppTheme.amber : AppTheme.cyan;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: isDemoMode ? 0.12 : 0.08),
+        color: color.withValues(alpha: isDemoMode ? 0.14 : 0.08),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.34)),
       ),
@@ -445,7 +468,7 @@ class _StatusPill extends StatelessWidget {
             child: Icon(
               isDemoMode
                   ? Icons.warning_amber_rounded
-                  : Icons.check_circle_rounded,
+                  : Icons.info_outline_rounded,
               color: color,
               size: 14,
             ),
@@ -453,13 +476,15 @@ class _StatusPill extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              isDemoMode ? 'Demo mode: sample data is loaded.' : statusMessage,
-              maxLines: isDemoMode ? 2 : 1,
+              isDemoMode
+                  ? 'MOCK SONGS ONLY. Not real live tracks.'
+                  : statusMessage,
+              maxLines: isDemoMode ? 3 : 2,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: isDemoMode ? AppTheme.amber : AppTheme.textSecondary,
                 fontSize: 10.5,
-                fontWeight: isDemoMode ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: isDemoMode ? FontWeight.w800 : FontWeight.w500,
               ),
             ),
           ),
@@ -505,13 +530,13 @@ class _NavItemState extends State<_NavItem> {
           margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 1),
           decoration: BoxDecoration(
             color: isActive
-                ? AppTheme.cyan.withValues(alpha: 0.12)
+                ? AppTheme.lime.withValues(alpha: 0.11)
                 : _hovered
                 ? AppTheme.textPrimary.withValues(alpha: 0.045)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             border: isActive
-                ? Border.all(color: AppTheme.cyan.withValues(alpha: 0.24))
+                ? Border.all(color: AppTheme.lime.withValues(alpha: 0.22))
                 : null,
           ),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
@@ -521,7 +546,7 @@ class _NavItemState extends State<_NavItem> {
                 width: 3,
                 height: 18,
                 decoration: BoxDecoration(
-                  color: isActive ? AppTheme.cyan : Colors.transparent,
+                  color: isActive ? AppTheme.lime : Colors.transparent,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -529,7 +554,7 @@ class _NavItemState extends State<_NavItem> {
               Icon(
                 widget.icon,
                 size: 17,
-                color: isActive ? AppTheme.cyan : AppTheme.textTertiary,
+                color: isActive ? AppTheme.lime : AppTheme.textTertiary,
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -553,9 +578,7 @@ class _NavItemState extends State<_NavItem> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [AppTheme.violet, AppTheme.pink],
-                    ),
+                    gradient: AppTheme.brandGradient,
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(

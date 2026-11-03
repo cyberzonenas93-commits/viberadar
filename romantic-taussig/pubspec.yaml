@@ -1,0 +1,60 @@
+name: viberadar
+description: "VibeRadar - DJ trend intelligence platform"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^3.3.1
+  riverpod: ^3.2.1
+  google_fonts: ^8.0.2
+  intl: ^0.20.2
+  url_launcher: ^6.3.2
+  fl_chart: ^1.2.0
+  collection: ^1.19.1
+  firebase_core: ^4.6.0
+  firebase_auth: ^6.3.0
+  cloud_firestore: ^6.2.0
+  firebase_storage: ^13.2.0
+  google_sign_in: ^7.2.0
+
+  # Desktop
+  window_manager: ^0.3.9
+
+  # Navigation
+  go_router: ^14.0.0
+
+  # Data
+  http: ^1.2.1
+  shared_preferences: ^2.2.3
+  uuid: ^4.4.0
+  logger: ^2.3.0
+  cached_network_image: ^3.3.1
+  flutter_animate: ^4.5.0
+  file_picker: ^10.3.10
+  path: ^1.9.1
+  crypto: ^3.0.7
+  path_provider: ^2.1.5
+  flutter_dotenv: ^5.2.1
+  just_audio: ^0.9.42
+  xml: ^6.5.0
+
+  # Video playback
+  webview_flutter: ^4.10.0
+  video_player: ^2.9.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env

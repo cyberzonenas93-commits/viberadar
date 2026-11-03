@@ -85,7 +85,7 @@ class ArtistModel {
 
   // ── convenience getters ──────────────────────────────────────────────────
 
-  String get primaryGenre => genres.isNotEmpty ? genres.first : 'Open Format';
+  String get primaryGenre => genres.isNotEmpty ? genres.first : 'Other';
 
   bool get hasBpmData => bpmRange.length == 2 && bpmRange[0] > 0;
 

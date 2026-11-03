@@ -17,11 +17,7 @@ Map<String, dynamic> setlistDocData(
   String editorUid,
   String nowIso,
 ) {
-  return {
-    ...crate.toMap(),
-    'lastEditedBy': editorUid,
-    'updated_at': nowIso,
-  };
+  return {...crate.toMap(), 'lastEditedBy': editorUid, 'updated_at': nowIso};
 }
 
 // ---------------------------------------------------------------------------
@@ -38,27 +34,25 @@ Map<String, dynamic> setlistDocData(
 /// instances so unit tests can supply fakes without initialising the Firebase
 /// app.
 class PairingService {
-  PairingService({
-    FirebaseFirestore? firestore,
-    FirebaseFunctions? functions,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _functions = functions ?? FirebaseFunctions.instance;
+  PairingService({FirebaseFirestore? firestore, FirebaseFunctions? functions})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _functions = functions ?? FirebaseFunctions.instance;
 
   /// No-Firebase constructor for use in tests and subclasses that override
   /// every Firebase-touching method.  [_firestore] and [_functions] are `null`
   /// — they must never be accessed.
   @visibleForTesting
-  PairingService.testOnly()
-      : _firestore = null,
-        _functions = null;
+  PairingService.testOnly() : _firestore = null, _functions = null;
 
   final FirebaseFirestore? _firestore;
   final FirebaseFunctions? _functions;
 
   // ── Callable helpers ───────────────────────────────────────────────────────
 
-  HttpsCallable _callable(String name) =>
-      _functions!.httpsCallable(name, options: HttpsCallableOptions(timeout: const Duration(seconds: 30)));
+  HttpsCallable _callable(String name) => _functions!.httpsCallable(
+    name,
+    options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+  );
 
   // ── Pairing handshake ──────────────────────────────────────────────────────
 
@@ -68,9 +62,9 @@ class PairingService {
   Future<({String pairingId, String code})> createPairing({
     String desktopName = 'Desktop',
   }) async {
-    final result = await _callable('createPairing').call<Map<String, dynamic>>({
-      'desktopName': desktopName,
-    });
+    final result = await _callable(
+      'createPairing',
+    ).call<Map<String, dynamic>>({'desktopName': desktopName});
     final data = result.data;
     return (
       pairingId: data['pairingId'] as String,
@@ -85,9 +79,9 @@ class PairingService {
   Future<({String pairingId, String desktopName})> claimPairing(
     String code,
   ) async {
-    final result = await _callable('claimPairing').call<Map<String, dynamic>>({
-      'code': code,
-    });
+    final result = await _callable(
+      'claimPairing',
+    ).call<Map<String, dynamic>>({'code': code});
     final data = result.data;
     return (
       pairingId: data['pairingId'] as String,
@@ -95,13 +89,19 @@ class PairingService {
     );
   }
 
+  /// Revokes an existing phone↔desktop pairing.
+  ///
+  /// Either the desktop user or the paired phone user can call this. Firestore
+  /// rules immediately stop shared-setlist access once the backend marks the
+  /// pairing as revoked.
+  Future<void> revokePairing(String pairingId) async {
+    await _callable('revokePairing').call<void>({'pairingId': pairingId});
+  }
+
   // ── Shared-setlist channel ─────────────────────────────────────────────────
 
   CollectionReference<Map<String, dynamic>> _setlistsRef(String pairingId) =>
-      _firestore!
-          .collection('pairings')
-          .doc(pairingId)
-          .collection('setlists');
+      _firestore!.collection('pairings').doc(pairingId).collection('setlists');
 
   /// Watches the shared-setlist subcollection for [pairingId].
   ///
@@ -109,9 +109,7 @@ class PairingService {
   /// Firestore snapshot.
   Stream<List<Crate>> watchSharedSetlists(String pairingId) {
     return _setlistsRef(pairingId).snapshots().map((snap) {
-      final crates = snap.docs
-          .map((doc) => Crate.fromMap(doc.data()))
-          .toList()
+      final crates = snap.docs.map((doc) => Crate.fromMap(doc.data())).toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return crates;
     });
@@ -128,10 +126,9 @@ class PairingService {
     required String editorUid,
   }) async {
     final nowIso = DateTime.now().toIso8601String();
-    await _setlistsRef(pairingId).doc(crate.id).set(
-          setlistDocData(crate, editorUid, nowIso),
-          SetOptions(merge: true),
-        );
+    await _setlistsRef(pairingId)
+        .doc(crate.id)
+        .set(setlistDocData(crate, editorUid, nowIso), SetOptions(merge: true));
   }
 
   /// Deletes the shared-setlist document identified by [setlistId] from the

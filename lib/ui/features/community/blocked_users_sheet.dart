@@ -47,7 +47,10 @@ class _BlockedUsersList extends ConsumerWidget {
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.close_rounded, color: AppTheme.textSecondary),
+                icon: const Icon(
+                  Icons.close_rounded,
+                  color: AppTheme.textSecondary,
+                ),
                 onPressed: () => Navigator.pop(context),
               ),
             ],
@@ -70,7 +73,10 @@ class _BlockedUsersList extends ConsumerWidget {
                 return const Center(
                   child: Text(
                     "You haven't blocked anyone.",
-                    style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+                    style: TextStyle(
+                      color: AppTheme.textTertiary,
+                      fontSize: 13,
+                    ),
                   ),
                 );
               }
@@ -78,9 +84,14 @@ class _BlockedUsersList extends ConsumerWidget {
               return ListView.separated(
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 itemCount: ids.length,
-                separatorBuilder: (_, __) =>
-                    const Divider(height: 1, color: AppTheme.edge, indent: 16, endIndent: 16),
-                itemBuilder: (ctx, i) => _BlockedRow(blockedUid: ids[i], myId: myId),
+                separatorBuilder: (_, __) => const Divider(
+                  height: 1,
+                  color: AppTheme.edge,
+                  indent: 16,
+                  endIndent: 16,
+                ),
+                itemBuilder: (ctx, i) =>
+                    _BlockedRow(blockedUid: ids[i], myId: myId),
               );
             },
           ),
@@ -106,7 +117,9 @@ class _BlockedRow extends ConsumerWidget {
       leading: CircleAvatar(
         radius: 18,
         backgroundColor: AppTheme.violet.withValues(alpha: 0.2),
-        backgroundImage: photo.isNotEmpty ? CachedNetworkImageProvider(photo) : null,
+        backgroundImage: photo.isNotEmpty
+            ? CachedNetworkImageProvider(photo)
+            : null,
         child: photo.isEmpty
             ? const Icon(Icons.person_rounded, size: 18, color: AppTheme.violet)
             : null,

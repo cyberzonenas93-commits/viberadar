@@ -42,7 +42,9 @@ Future<void> showReportDialog(
       return StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: AppTheme.panel,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           title: const Text(
             'Report content',
             style: TextStyle(color: AppTheme.textPrimary),

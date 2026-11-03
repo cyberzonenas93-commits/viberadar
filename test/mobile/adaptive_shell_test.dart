@@ -40,26 +40,29 @@ class _AdaptiveShellUnderTest extends StatelessWidget {
 }
 
 Widget _wrap(Widget child) => ProviderScope(
-      overrides: [
-        setlistsProvider.overrideWithValue(const []),
-        sessionProvider.overrideWith((ref) => Stream.value(
-              const SessionState.demo(),
-            )),
-        userProfileProvider.overrideWith((ref) => Stream.value(
-              UserProfile.empty(
-                id: 'test',
-                displayName: 'Test DJ',
-                preferredRegion: 'GH',
-              ),
-            )),
-        trackStreamProvider.overrideWith((ref) => Stream.value(const <Track>[])),
-      ],
-      child: MaterialApp(home: child),
-    );
+  overrides: [
+    setlistsProvider.overrideWithValue(const []),
+    sessionProvider.overrideWith(
+      (ref) => Stream.value(const SessionState.demo()),
+    ),
+    userProfileProvider.overrideWith(
+      (ref) => Stream.value(
+        UserProfile.empty(
+          id: 'test',
+          displayName: 'Test DJ',
+          preferredRegion: 'GH',
+        ),
+      ),
+    ),
+    trackStreamProvider.overrideWith((ref) => Stream.value(const <Track>[])),
+  ],
+  child: MaterialApp(home: child),
+);
 
 void main() {
-  testWidgets('MobileShell shown on iOS; desktop placeholder absent',
-      (tester) async {
+  testWidgets('MobileShell shown on iOS; desktop placeholder absent', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
     await tester.pumpWidget(_wrap(const _AdaptiveShellUnderTest()));
@@ -71,8 +74,9 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('Desktop placeholder shown on macOS; MobileShell absent',
-      (tester) async {
+  testWidgets('Desktop placeholder shown on macOS; MobileShell absent', (
+    tester,
+  ) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
 
     await tester.pumpWidget(_wrap(const _AdaptiveShellUnderTest()));
@@ -84,7 +88,7 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('MobileShell renders all 5 nav destinations', (tester) async {
+  testWidgets('MobileShell renders all 6 nav destinations', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
     await tester.pumpWidget(_wrap(const MobileShell()));
@@ -92,14 +96,17 @@ void main() {
 
     expect(find.text('Home'), findsWidgets);
     expect(find.text('Trending'), findsWidgets);
+    expect(find.text('Search'), findsWidgets);
     expect(find.text('AI'), findsWidgets);
-    expect(find.text('Library'), findsWidgets);
+    // Setlists promoted to a primary destination (was buried under More).
+    expect(find.text('Setlists'), findsWidgets);
     expect(find.text('More'), findsWidgets);
+    expect(find.text('Library'), findsNothing);
 
     debugDefaultTargetPlatformOverride = null;
   });
 
-  testWidgets('tapping More opens its (static) menu', (tester) async {
+  testWidgets('tapping More shows mobile-valid routes only', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
 
     await tester.pumpWidget(_wrap(const MobileShell()));
@@ -113,6 +120,11 @@ void main() {
     // whole scrolling list, and the lazy ListView won't build off-screen rows.
     expect(find.text('For You'), findsOneWidget);
     expect(find.text('Artists'), findsOneWidget);
+    expect(find.text('Set Builder'), findsOneWidget);
+    expect(find.text('Setlists'), findsOneWidget);
+    expect(find.text('Connect Computer'), findsOneWidget);
+    expect(find.text('Duplicates'), findsNothing);
+    expect(find.text('Exports'), findsNothing);
 
     debugDefaultTargetPlatformOverride = null;
   });

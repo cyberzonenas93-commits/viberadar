@@ -14,6 +14,7 @@ class _ArtistGridScreen extends StatelessWidget {
   final List<String> allRegions;
   final List<SpotifyArtistResult> spotifyResults;
   final bool searchingSpotify;
+  final bool loadingTracks;
   final ValueChanged<String> onSearchChanged;
   final ValueChanged<String> onGenreChanged;
   final ValueChanged<String> onRegionChanged;
@@ -30,6 +31,7 @@ class _ArtistGridScreen extends StatelessWidget {
     required this.allRegions,
     required this.spotifyResults,
     required this.searchingSpotify,
+    required this.loadingTracks,
     required this.onSearchChanged,
     required this.onGenreChanged,
     required this.onRegionChanged,
@@ -51,15 +53,21 @@ class _ArtistGridScreen extends StatelessWidget {
           children: [
             const Icon(Icons.people_rounded, color: AppTheme.violet, size: 22),
             const SizedBox(width: 10),
-            Text('Artists',
-                style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
+            Text(
+              'Artists',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: AppTheme.textPrimary,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 4),
-        Text(
-          '${artists.length} artists from ${allTracks.length} tracks  ·  Tap an artist to see their full catalog',
+        TrackCountText(
+          isLoading: loadingTracks,
+          count: allTracks.length,
+          labelBuilder: (count) =>
+              '${artists.length} artists from $count tracks  ·  Tap an artist to see their full catalog',
           style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -72,7 +80,11 @@ class _ArtistGridScreen extends StatelessWidget {
         decoration: InputDecoration(
           hintText: 'Search artists...',
           hintStyle: const TextStyle(color: AppTheme.textTertiary),
-          prefixIcon: const Icon(Icons.search_rounded, size: 18, color: AppTheme.textTertiary),
+          prefixIcon: const Icon(
+            Icons.search_rounded,
+            size: 18,
+            color: AppTheme.textTertiary,
+          ),
           contentPadding: const EdgeInsets.symmetric(vertical: 10),
           isDense: true,
           filled: true,
@@ -92,9 +104,19 @@ class _ArtistGridScreen extends StatelessWidget {
     final filterToolbar = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        _FilterDropdown(label: 'Genre', value: filterGenre, options: allGenres, onChanged: onGenreChanged),
+        _FilterDropdown(
+          label: 'Genre',
+          value: filterGenre,
+          options: allGenres,
+          onChanged: onGenreChanged,
+        ),
         const SizedBox(width: 8),
-        _FilterDropdown(label: 'Region', value: filterRegion, options: allRegions, onChanged: onRegionChanged),
+        _FilterDropdown(
+          label: 'Region',
+          value: filterRegion,
+          options: allRegions,
+          onChanged: onRegionChanged,
+        ),
         const SizedBox(width: 12),
         searchField,
       ],
@@ -117,33 +139,37 @@ class _ArtistGridScreen extends StatelessWidget {
                     ),
                   ],
                 )
-              : Row(
-                  children: [
-                    titleBlock,
-                    const Spacer(),
-                    filterToolbar,
-                  ],
-                ),
+              : Row(children: [titleBlock, const Spacer(), filterToolbar]),
         ),
         const SizedBox(height: 16),
         Expanded(
           child: CustomScrollView(
             slivers: [
-              if (artists.isEmpty && spotifyResults.isEmpty)
+              if (loadingTracks)
                 const SliverFillRemaining(
-                  child: Center(child: Text('No artists found', style: TextStyle(color: AppTheme.textTertiary))),
+                  child: Center(child: RadarLoader(message: 'Loading tracks…')),
+                )
+              else if (artists.isEmpty && spotifyResults.isEmpty)
+                const SliverFillRemaining(
+                  child: Center(
+                    child: Text(
+                      'No artists found',
+                      style: TextStyle(color: AppTheme.textTertiary),
+                    ),
+                  ),
                 )
               else ...[
                 if (artists.isNotEmpty)
                   SliverPadding(
                     padding: const EdgeInsets.fromLTRB(28, 0, 28, 16),
                     sliver: SliverGrid(
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 200,
-                        childAspectRatio: 0.78,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 12,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 200,
+                            childAspectRatio: 0.78,
+                            crossAxisSpacing: 12,
+                            mainAxisSpacing: 12,
+                          ),
                       delegate: SliverChildBuilderDelegate(
                         (context, i) => _ArtistCard(
                           artist: artists[i],
@@ -159,12 +185,30 @@ class _ArtistGridScreen extends StatelessWidget {
                       padding: const EdgeInsets.fromLTRB(28, 8, 28, 12),
                       child: Row(
                         children: [
-                          const Icon(Icons.search_rounded, color: Color(0xFF1DB954), size: 16),
+                          const Icon(
+                            Icons.search_rounded,
+                            color: Color(0xFF1DB954),
+                            size: 16,
+                          ),
                           const SizedBox(width: 8),
-                          const Text('Discover on Spotify', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+                          const Text(
+                            'Discover on Spotify',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
                           if (searchingSpotify) ...[
                             const SizedBox(width: 10),
-                            const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF1DB954))),
+                            const SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Color(0xFF1DB954),
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -174,16 +218,18 @@ class _ArtistGridScreen extends StatelessWidget {
                     SliverPadding(
                       padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
                       sliver: SliverGrid(
-                        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                          maxCrossAxisExtent: 200,
-                          childAspectRatio: 0.78,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 12,
-                        ),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 200,
+                              childAspectRatio: 0.78,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 12,
+                            ),
                         delegate: SliverChildBuilderDelegate(
                           (context, i) => _SpotifyArtistCard(
                             result: spotifyResults[i],
-                            onTap: () => onSpotifyArtistTapped(spotifyResults[i]),
+                            onTap: () =>
+                                onSpotifyArtistTapped(spotifyResults[i]),
                           ),
                           childCount: spotifyResults.length,
                         ),

@@ -3,17 +3,26 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 
-export { createPairing, claimPairing } from "./pairing";
-export { spotifyProxy, appleProxy, youtubeProxy } from "./proxy";
+export { createPairing, claimPairing, revokePairing } from "./pairing";
+export {
+  spotifyProxy,
+  spotifyOnboardingArtistImages,
+  appleProxy,
+  soundchartsProxy,
+  youtubeProxy,
+} from "./proxy";
 export { openaiProxy } from "./openai";
+export { syncAppStorePurchase, appStoreServerNotification } from "./iap";
 export { deleteMyAccount, onUserDeleted } from "./accountCleanup";
 export { decayTrendingScores } from "./decayTrending";
+export { ingestSoundchartsDaily } from "./soundchartsIngest";
+export { notifyOnSharedSetlist } from "./messaging";
 export {
   onUploadCreated,
   onUploadDeleted,
   onFollowCreated,
   onFollowDeleted,
-  onUserLikesWritten,
+  toggleUploadLike,
 } from "./socialCounters";
 
 import { fetchAppleMusicSignals } from "./clients/appleMusic";
@@ -22,34 +31,32 @@ import { fetchAudiomackSignals } from "./clients/audiomack";
 import { fetchAudiusSignals } from "./clients/audius";
 import { fetchDeezerSignals } from "./clients/deezer";
 import { enrichTracksWithMusicBrainz } from "./clients/musicbrainz";
-import { fetchSoundchartsSignals } from "./clients/soundcharts";
 import { fetchSpotifySignals } from "./clients/spotify";
 import { fetchYouTubeSignals } from "./clients/youtube";
 import {
   APPLE_MUSIC_DEVELOPER_TOKEN,
+  APPLE_MUSIC_KEY_ID,
+  APPLE_MUSIC_PRIVATE_KEY,
+  APPLE_MUSIC_TEAM_ID,
   AUDIOMACK_CONSUMER_KEY,
   AUDIOMACK_CONSUMER_SECRET,
   BEATPORT_API_TOKEN,
   getConfiguredRegions,
-  getSoundchartsCreds,
-  getSoundchartsPlatforms,
   normalizeSecretValue,
-  SOUNDCHARTS_API_KEY,
-  SOUNDCHARTS_APP_ID,
   SOUNDCLOUD_CLIENT_ID,
   SOUNDCLOUD_OAUTH_TOKEN,
   SPOTIFY_CLIENT_ID,
   SPOTIFY_CLIENT_SECRET,
   YOUTUBE_API_KEY,
 } from "./lib/config";
-import { getUsageLimitsForUser } from "./lib/entitlements";
+import { getAppleMusicDeveloperToken } from "./lib/appleMusicToken";
+import { requireProUsageLimitsForUser } from "./lib/entitlements";
 import { mergeSignalsIntoTracks } from "./lib/normalize";
+import { loadExistingTrackState, writeTracks } from "./lib/trackStore";
 import { enforceUsageLimit } from "./lib/usage";
-import type {
-  IngestionSummary,
-  SourceTrackSignal,
-  UnifiedTrackRecord,
-} from "./types";
+import { verifyHttpAppCheckIfRequired } from "./lib/appCheck";
+import { isAnonymousDecodedToken } from "./lib/auth";
+import type { IngestionSummary, SourceTrackSignal } from "./types";
 
 admin.initializeApp();
 const firestore = admin.firestore();
@@ -59,13 +66,14 @@ const functionSecrets = [
   SPOTIFY_CLIENT_SECRET,
   YOUTUBE_API_KEY,
   APPLE_MUSIC_DEVELOPER_TOKEN,
+  APPLE_MUSIC_PRIVATE_KEY,
+  APPLE_MUSIC_KEY_ID,
+  APPLE_MUSIC_TEAM_ID,
   SOUNDCLOUD_CLIENT_ID,
   SOUNDCLOUD_OAUTH_TOKEN,
   BEATPORT_API_TOKEN,
   AUDIOMACK_CONSUMER_KEY,
   AUDIOMACK_CONSUMER_SECRET,
-  SOUNDCHARTS_APP_ID,
-  SOUNDCHARTS_API_KEY,
 ];
 
 export const ingestTrackSignals = onSchedule(
@@ -93,10 +101,26 @@ export const manualIngestTrackSignals = onRequest(
   async (request, response) => {
     response.set("Access-Control-Allow-Origin", "*");
     response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-    response.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    response.set(
+      "Access-Control-Allow-Headers",
+      "Authorization, Content-Type, X-Firebase-AppCheck",
+    );
 
     if (request.method === "OPTIONS") {
       response.status(204).send("");
+      return;
+    }
+
+    try {
+      await verifyHttpAppCheckIfRequired(request);
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      response.status(code === "permission-denied" ? 403 : 401).json({
+        error:
+          code === "permission-denied"
+            ? "Invalid App Check token"
+            : "App Check token required",
+      });
       return;
     }
 
@@ -110,6 +134,12 @@ export const manualIngestTrackSignals = onRequest(
     let uid: string;
     try {
       const decoded = await admin.auth().verifyIdToken(idToken);
+      if (isAnonymousDecodedToken(decoded)) {
+        response.status(403).json({
+          error: "A full account is required to refresh trends manually.",
+        });
+        return;
+      }
       uid = decoded.uid;
     } catch {
       response.status(403).json({ error: "Invalid or expired token" });
@@ -117,7 +147,10 @@ export const manualIngestTrackSignals = onRequest(
     }
 
     try {
-      const { limits } = await getUsageLimitsForUser(uid);
+      const { limits } = await requireProUsageLimitsForUser(
+        uid,
+        "VibeRadar Pro is required to refresh live trends manually.",
+      );
       await enforceUsageLimit({
         uid,
         key: "manual_ingest",
@@ -125,9 +158,17 @@ export const manualIngestTrackSignals = onRequest(
         window: "daily",
       });
     } catch (error) {
-      if ((error as { code?: unknown }).code === "resource-exhausted") {
+      const code = (error as { code?: unknown }).code;
+      if (code === "failed-precondition") {
+        response.status(402).json({
+          error: "VibeRadar Pro is required to refresh live trends manually.",
+        });
+        return;
+      }
+      if (code === "resource-exhausted") {
         response.status(429).json({
-          error: "Manual refresh limit reached. Try again after the daily reset.",
+          error:
+            "Manual refresh limit reached. Try again after the daily reset.",
         });
         return;
       }
@@ -150,7 +191,9 @@ async function withRetry<T>(
     } catch (error) {
       if (attempt >= retries) throw error;
       logger.warn(`Retry ${attempt + 1}/${retries}`, error);
-      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+      await new Promise((resolve) =>
+        setTimeout(resolve, delayMs * (attempt + 1)),
+      );
     }
   }
 }
@@ -182,8 +225,11 @@ async function runIngestion(): Promise<IngestionSummary> {
     if (ri > 0) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    const scCreds = getSoundchartsCreds();
-    const sourceNames = ["spotify", "youtube", "apple", "deezer", "soundcharts"];
+    // Soundcharts (shazam/tiktok/boomplay) is intentionally NOT fetched here —
+    // it runs in the once-a-day `ingestSoundchartsDaily` job, the only function
+    // bound to the Soundcharts secrets, so this 30-min job can't burn the free
+    // ~1,000-call budget.
+    const sourceNames = ["spotify", "youtube", "apple", "deezer"];
     const settled = await Promise.allSettled([
       withRetry(() =>
         fetchSpotifySignals({
@@ -200,25 +246,11 @@ async function runIngestion(): Promise<IngestionSummary> {
       ),
       withRetry(() =>
         fetchAppleMusicSignals({
-          developerToken: normalizeSecretValue(
-            APPLE_MUSIC_DEVELOPER_TOKEN.value(),
-          ),
+          developerToken: getAppleMusicDeveloperToken(),
           region,
         }),
       ),
-      withRetry(() =>
-        fetchDeezerSignals({ region }),
-      ),
-      // Soundcharts: shazam/tiktok/boomplay + soundcloud/beatport (one client).
-      // No-op until SOUNDCHARTS_APP_ID/API_KEY secrets are set (no rebuild later).
-      withRetry(() =>
-        fetchSoundchartsSignals({
-          region,
-          platforms: getSoundchartsPlatforms(),
-          appId: scCreds?.appId,
-          apiKey: scCreds?.apiKey,
-        }),
-      ),
+      withRetry(() => fetchDeezerSignals({ region })),
     ]);
 
     const regionCounts: Record<string, number> = {};
@@ -246,7 +278,7 @@ async function runIngestion(): Promise<IngestionSummary> {
     logger.warn("Billboard fetch failed", err);
   }
 
-  const existingSnapshots = await loadExistingTrackState();
+  const existingSnapshots = await loadExistingTrackState(firestore);
   const unifiedTracks = mergeSignalsIntoTracks(
     collectedSignals,
     existingSnapshots,
@@ -256,7 +288,7 @@ async function runIngestion(): Promise<IngestionSummary> {
   } catch (error) {
     logger.warn("MusicBrainz enrichment failed", error);
   }
-  await writeTracks(unifiedTracks);
+  await writeTracks(firestore, unifiedTracks);
 
   return {
     fetchedSignals: collectedSignals.length,
@@ -269,53 +301,7 @@ async function runIngestion(): Promise<IngestionSummary> {
       "audius",
       "audiomack",
       "deezer",
-      "shazam",
-      "tiktok",
-      "boomplay",
-      "soundcloud",
-      "beatport",
+      "billboard",
     ],
   };
-}
-
-async function loadExistingTrackState(): Promise<
-  Record<
-    string,
-    {
-      created_at?: string;
-      genre?: string;
-      platform_links?: Record<string, string>;
-      trend_history?: Array<{ label: string; score: number }>;
-    }
-  >
-> {
-  const snapshot = await firestore
-    .collection("tracks")
-    .select("created_at", "genre", "platform_links", "trend_history")
-    .get();
-  return Object.fromEntries(
-    snapshot.docs.map((doc) => [
-      doc.id,
-      {
-        created_at: doc.get("created_at"),
-        genre: doc.get("genre"),
-        platform_links: doc.get("platform_links"),
-        trend_history: doc.get("trend_history"),
-      },
-    ]),
-  );
-}
-
-async function writeTracks(tracks: UnifiedTrackRecord[]): Promise<void> {
-  // Firestore batch limit is 500 operations
-  for (let i = 0; i < tracks.length; i += 499) {
-    const chunk = tracks.slice(i, i + 499);
-    const batch = firestore.batch();
-    for (const track of chunk) {
-      batch.set(firestore.collection("tracks").doc(track.id), track, {
-        merge: true,
-      });
-    }
-    await batch.commit();
-  }
 }

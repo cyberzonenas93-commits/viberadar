@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
+import 'package:viberadar/models/crate_track.dart';
 import 'package:viberadar/models/session_state.dart';
 import 'package:viberadar/models/track.dart';
 import 'package:viberadar/models/user_profile.dart';
@@ -106,7 +107,7 @@ Crate _crate({required String id, required String name}) => Crate(
   id: id,
   name: name,
   context: 'Open format',
-  trackIds: const [],
+  tracks: const [],
   createdAt: DateTime(2025, 1, 1),
   updatedAt: DateTime(2025, 6, 1),
 );
@@ -494,7 +495,7 @@ void main() {
         id: 'c1',
         name: 'My Set',
         context: 'Open format',
-        trackIds: const ['track-1'],
+        tracks: ['track-1'].map(CrateTrack.reference).toList(),
         createdAt: DateTime(2025, 1, 1),
         updatedAt: DateTime(2025, 6, 1),
       );

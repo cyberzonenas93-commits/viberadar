@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/services/platform_search_service.dart';
 import 'package:viberadar/ui/mobile/search_tab.dart';
 
@@ -34,7 +35,11 @@ class _FakePlatformSearchService extends PlatformSearchService {
   ];
 
   @override
-  Future<List<PlatformTrackResult>> search(String query, {int limit = 50}) async {
+  Future<List<PlatformTrackResult>> searchMusicPlatforms(
+    String query, {
+    int limit = 50,
+    String? region,
+  }) async {
     // Immediate return; debounce in the real widget handles delay.
     return _fakeResults;
   }
@@ -47,8 +52,10 @@ class _FakePlatformSearchService extends PlatformSearchService {
 Widget _wrap({PlatformSearchService? service}) {
   return ProviderScope(
     overrides: [
-      platformSearchServiceProvider
-          .overrideWithValue(service ?? _FakePlatformSearchService()),
+      platformSearchServiceProvider.overrideWithValue(
+        service ?? _FakePlatformSearchService(),
+      ),
+      setlistsProvider.overrideWithValue(const []),
     ],
     child: const MaterialApp(home: Scaffold(body: SearchTab())),
   );
@@ -65,7 +72,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Search Spotify, Apple Music, YouTube'),
+        find.text('Search Apple Music, Spotify, YouTube Music, Deezer'),
         findsOneWidget,
       );
     });
@@ -79,8 +86,9 @@ void main() {
   });
 
   group('SearchTab — search flow', () {
-    testWidgets('results appear after typing and debounce elapses',
-        (tester) async {
+    testWidgets('results appear after typing and debounce elapses', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pumpAndSettle();
 
@@ -107,8 +115,27 @@ void main() {
       expect(find.text('Dua Lipa'), findsOneWidget);
     });
 
-    testWidgets('Open in affordance is present for a result with multiple URLs',
-        (tester) async {
+    testWidgets(
+      'Open in affordance is present for a result with multiple URLs',
+      (tester) async {
+        await tester.pumpWidget(_wrap());
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'pop hits');
+        await tester.pump(const Duration(milliseconds: 500));
+        await tester.pumpAndSettle();
+
+        // "Blinding Lights" has Spotify + Apple + YouTube, so at minimum one
+        // "Open in" button or icon is visible (we look for IconButtons or the
+        // text "Open in" — impl uses IconButtons with tooltips).
+        // The implementation renders IconButtons for each present URL.
+        expect(find.byType(IconButton), findsWidgets);
+      },
+    );
+
+    testWidgets('Add to setlist affordance opens the setlist sheet', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap());
       await tester.pumpAndSettle();
 
@@ -116,16 +143,21 @@ void main() {
       await tester.pump(const Duration(milliseconds: 500));
       await tester.pumpAndSettle();
 
-      // "Blinding Lights" has Spotify + Apple + YouTube, so at minimum one
-      // "Open in" button or icon is visible (we look for IconButtons or the
-      // text "Open in" — impl uses IconButtons with tooltips).
-      // The implementation renders IconButtons for each present URL.
-      expect(find.byType(IconButton), findsWidgets);
+      await tester.tap(
+        find.byKey(const Key('search_result_add_to_setlist')).first,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Add to Setlist'), findsOneWidget);
+      expect(find.text('New setlist…'), findsOneWidget);
+      expect(find.text('Blinding Lights — The Weeknd'), findsOneWidget);
     });
   });
 
   group('SearchTab — no results state', () {
-    testWidgets('shows "No results" when service returns empty', (tester) async {
+    testWidgets('shows "No results" when service returns empty', (
+      tester,
+    ) async {
       // Use a service that returns nothing
       final emptyService = _EmptySearchService();
 
@@ -143,8 +175,11 @@ void main() {
 
 class _EmptySearchService extends PlatformSearchService {
   @override
-  Future<List<PlatformTrackResult>> search(String query,
-      {int limit = 50}) async {
+  Future<List<PlatformTrackResult>> searchMusicPlatforms(
+    String query, {
+    int limit = 50,
+    String? region,
+  }) async {
     return [];
   }
 }

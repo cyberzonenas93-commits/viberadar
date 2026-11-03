@@ -35,17 +35,18 @@ class _CopilotChatState {
 class _CopilotChatNotifier extends Notifier<_CopilotChatState> {
   @override
   _CopilotChatState build() => _CopilotChatState(
-        messages: [
-          (
-            isUser: false,
-            text: 'Hey DJ! I\'m your VibeRadar AI Copilot powered by GPT-5.4. '
-                'I have access to the entire Apple Music, Spotify, YouTube, and Billboard '
-                'catalogue. Ask me anything — build sets, find tracks, harmonic mixing advice, '
-                'or regional music intel.',
-            isStreaming: false,
-          ),
-        ],
-      );
+    messages: [
+      (
+        isUser: false,
+        text:
+            'Hey DJ! I\'m your VibeRadar AI Copilot. '
+            'I have access to Soundcharts trend evidence, Apple Music, Spotify, YouTube, and Billboard '
+            'catalogue. Ask me anything — build sets, find tracks, harmonic mixing advice, '
+            'or regional music intel.',
+        isStreaming: false,
+      ),
+    ],
+  );
 
   void addUserMessage(String text) {
     state = state.copyWith(
@@ -140,7 +141,8 @@ class _CopilotChatNotifier extends Notifier<_CopilotChatState> {
 
 final _copilotChatProvider =
     NotifierProvider<_CopilotChatNotifier, _CopilotChatState>(
-        _CopilotChatNotifier.new);
+      _CopilotChatNotifier.new,
+    );
 
 // ── Year filter provider (shared with other screens) ──────────────────────────
 
@@ -154,8 +156,12 @@ class _CopilotYearFilterNotifier
   }
 }
 
-final copilotYearFilterProvider = NotifierProvider<_CopilotYearFilterNotifier,
-    ({int? yearFrom, int? yearTo})>(_CopilotYearFilterNotifier.new);
+final copilotYearFilterProvider =
+    NotifierProvider<
+      _CopilotYearFilterNotifier,
+      ({int? yearFrom, int? yearTo})
+    >(_CopilotYearFilterNotifier.new);
 
-final _aiServiceProvider =
-    Provider<AiCopilotService>((_) => AiCopilotService());
+final _aiServiceProvider = Provider<AiCopilotService>(
+  (_) => AiCopilotService(),
+);

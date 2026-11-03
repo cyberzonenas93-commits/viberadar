@@ -3,14 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/music_genres.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../services/greatest_of_service.dart';
 import '../../../services/platform_search_service.dart';
+import '../../../services/soundcharts_ai_ranking_service.dart';
+import '../../widgets/platform_play_actions.dart';
 import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
+import '../../widgets/ui_kit.dart';
 
 part 'greatest_of_screen_views.dart';
 part 'greatest_of_screen_cards.dart';
@@ -37,6 +41,7 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
   final _yearToController = TextEditingController();
   final _svc = GreatestOfService();
   final _platformSearch = PlatformSearchService();
+  final _ranking = SoundchartsAiRankingService();
 
   String _lastSearchKey = '';
 
@@ -50,7 +55,8 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
 
   /// Auto-search platforms when filters change
   void _autoSearchPlatforms() {
-    final searchKey = '$_selectedGenre|$_artistFilter|$_yearFrom|$_yearTo';
+    final searchKey =
+        '$_selectedGenre|$_selectedRegion|$_artistFilter|$_yearFrom|$_yearTo';
     if (searchKey == _lastSearchKey) return;
     _lastSearchKey = searchKey;
 
@@ -66,16 +72,40 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
       try {
         List<PlatformTrackResult> results;
         if (_artistFilter.isNotEmpty) {
-          results = await _platformSearch.searchByArtist(_artistFilter, limit: 100);
+          results = await _platformSearch.searchByArtist(
+            _artistFilter,
+            limit: 100,
+            region: _selectedRegion == 'All' ? null : _selectedRegion,
+          );
         } else {
           final era = _yearFrom != null ? '${_yearFrom}s' : null;
-          results = await _platformSearch.searchByGenre(_selectedGenre, limit: 100, era: era);
+          results = await _platformSearch.searchByGenre(
+            _selectedGenre,
+            limit: 100,
+            era: era,
+            region: _selectedRegion == 'All' ? null : _selectedRegion,
+            genreLane: _selectedGenre,
+          );
         }
-        if (mounted) setState(() { _platformResults = results; _searchingPlatforms = false; });
+        results = await _ranking.rankForGreatestOf(
+          results: results,
+          genre: _selectedGenre,
+          region: _selectedRegion,
+          artist: _artistFilter,
+          yearFrom: _yearFrom,
+          yearTo: _yearTo,
+        );
+        if (mounted) {
+          setState(() {
+            _platformResults = results;
+            _searchingPlatforms = false;
+          });
+        }
       } catch (_) {
         if (mounted) setState(() => _searchingPlatforms = false);
       }
     }
+
     doSearch();
   }
 
@@ -84,12 +114,18 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
     final theme = Theme.of(context);
     final tracksAsync = ref.watch(trackStreamProvider);
     final allTracks = tracksAsync.value ?? const <Track>[];
+    final loadingTracks = tracksAsync.isLoading && allTracks.isEmpty;
 
-    final genres = ['All', 'Afrobeats', 'Amapiano', 'Hip-Hop', 'R&B', 'House',
-        'Dancehall', 'Pop', 'Latin', 'Drill', 'Dance', 'UK Garage',
-        ...{for (final t in allTracks) if (t.genre.isNotEmpty) t.genre}];
-    final uniqueGenres = genres.toSet().toList();
-    final regions = ['All', ...{for (final t in allTracks) if (t.leadRegion.isNotEmpty) t.leadRegion}];
+    final uniqueGenres = mergedGenreOptions(
+      allTracks.map((track) => track.genre),
+    );
+    final regions = [
+      'All',
+      ...{
+        for (final t in allTracks)
+          if (t.leadRegion.isNotEmpty) t.leadRegion,
+      },
+    ];
 
     final topTracks = _svc.buildGreatestOfSet(
       tracks: allTracks,
@@ -105,10 +141,14 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _autoSearchPlatforms());
 
     // Pre-compute greatest scores map for display
-    final scoreMap = {for (final t in topTracks) t.id: _svc.computeGreatestScore(t)};
+    final scoreMap = {
+      for (final t in topTracks) t.id: _svc.computeGreatestScore(t),
+    };
 
     // Era grouping
-    final eraGroups = _groupByEra ? GreatestOfService.groupByEra(topTracks) : null;
+    final eraGroups = _groupByEra
+        ? GreatestOfService.groupByEra(topTracks)
+        : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,18 +162,30 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(Icons.emoji_events_rounded, color: AppTheme.amber, size: 24),
+                  const Icon(
+                    Icons.emoji_events_rounded,
+                    color: AppTheme.amber,
+                    size: 24,
+                  ),
                   const SizedBox(width: 10),
                   Flexible(
-                    child: Text('Greatest Of',
-                        style: theme.textTheme.headlineSmall
-                            ?.copyWith(color: AppTheme.textPrimary),
-                        overflow: TextOverflow.ellipsis),
+                    child: Text(
+                      'Greatest Of',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: AppTheme.textPrimary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   const SizedBox(width: 12),
-                  Text(
-                    '${topTracks.length} tracks',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  TrackCountText(
+                    isLoading: loadingTracks,
+                    count: topTracks.length,
+                    labelBuilder: (count) => '$count tracks',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
                   ),
                   const Spacer(),
                   const SizedBox(width: 8),
@@ -148,7 +200,10 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
               const SizedBox(height: 4),
               Text(
                 'Ranked by greatest-score — long-term popularity, DJ utility, and cultural impact.',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
               ),
               const SizedBox(height: 14),
               // Filter row
@@ -176,24 +231,42 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                       height: 34,
                       child: TextField(
                         controller: _artistController,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 12,
+                        ),
                         decoration: InputDecoration(
                           hintText: 'Artist…',
-                          hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-                          prefixIcon: const Icon(Icons.person_outline_rounded, size: 14, color: AppTheme.textTertiary),
+                          hintStyle: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 12,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.person_outline_rounded,
+                            size: 14,
+                            color: AppTheme.textTertiary,
+                          ),
                           filled: true,
                           fillColor: AppTheme.panelRaised,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 0,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
                         ),
-                        onChanged: (v) => setState(() => _artistFilter = v.trim()),
+                        onChanged: (v) =>
+                            setState(() => _artistFilter = v.trim()),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -203,57 +276,91 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                       height: 34,
                       child: TextField(
                         controller: _yearFromController,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 12,
+                        ),
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
                           hintText: 'From yr',
-                          hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                          hintStyle: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 12,
+                          ),
                           filled: true,
                           fillColor: AppTheme.panelRaised,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 0,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
                         ),
-                        onChanged: (v) => setState(() => _yearFrom = int.tryParse(v.trim())),
+                        onChanged: (v) =>
+                            setState(() => _yearFrom = int.tryParse(v.trim())),
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Text('–', style: TextStyle(color: AppTheme.textTertiary)),
+                    const Text(
+                      '–',
+                      style: TextStyle(color: AppTheme.textTertiary),
+                    ),
                     const SizedBox(width: 6),
                     SizedBox(
                       width: 90,
                       height: 34,
                       child: TextField(
                         controller: _yearToController,
-                        style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                        style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 12,
+                        ),
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
                           hintText: 'To yr',
-                          hintStyle: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+                          hintStyle: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 12,
+                          ),
                           filled: true,
                           fillColor: AppTheme.panelRaised,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 0,
+                          ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            borderSide: BorderSide(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
                         ),
-                        onChanged: (v) => setState(() => _yearTo = int.tryParse(v.trim())),
+                        onChanged: (v) =>
+                            setState(() => _yearTo = int.tryParse(v.trim())),
                       ),
                     ),
                     // Reset filters
-                    if (_artistFilter.isNotEmpty || _yearFrom != null || _yearTo != null ||
-                        _selectedGenre != 'All' || _selectedRegion != 'All') ...[
+                    if (_artistFilter.isNotEmpty ||
+                        _yearFrom != null ||
+                        _yearTo != null ||
+                        _selectedGenre != 'All' ||
+                        _selectedRegion != 'All') ...[
                       const SizedBox(width: 10),
                       GestureDetector(
                         onTap: () {
@@ -269,13 +376,24 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
                           });
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.panelRaised,
                             borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                            border: Border.all(
+                              color: AppTheme.edge.withValues(alpha: 0.5),
+                            ),
                           ),
-                          child: const Text('Clear', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                          child: const Text(
+                            'Clear',
+                            style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -288,100 +406,151 @@ class _GreatestOfScreenState extends ConsumerState<GreatestOfScreen> {
         const SizedBox(height: 20),
         // Content
         Expanded(
-          child: topTracks.isEmpty
+          child: loadingTracks
+              ? const Center(child: RadarLoader(message: 'Loading tracks…'))
+              : topTracks.isEmpty
               ? Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.music_off_rounded, color: AppTheme.textTertiary, size: 48),
+                      Icon(
+                        Icons.music_off_rounded,
+                        color: AppTheme.textTertiary,
+                        size: 48,
+                      ),
                       const SizedBox(height: 12),
-                      const Text('No tracks match your filters',
-                          style: TextStyle(color: AppTheme.textTertiary, fontSize: 14)),
+                      const Text(
+                        'No tracks match your filters',
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 14,
+                        ),
+                      ),
                     ],
                   ),
                 )
               : eraGroups != null
-                  ? _EraGroupedView(eraGroups: eraGroups, scoreMap: scoreMap, ref: ref)
-                  : CustomScrollView(
-                      slivers: [
-                        // Top 3 podium
-                        if (topTracks.length >= 3)
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
-                              child: _PodiumSection(
-                                  tracks: topTracks.take(3).toList(),
-                                  scoreMap: scoreMap,
-                                  ref: ref),
-                            ),
+              ? _EraGroupedView(
+                  eraGroups: eraGroups,
+                  scoreMap: scoreMap,
+                  ref: ref,
+                )
+              : CustomScrollView(
+                  slivers: [
+                    // Top 3 podium
+                    if (topTracks.length >= 3)
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+                          child: _PodiumSection(
+                            tracks: topTracks.take(3).toList(),
+                            scoreMap: scoreMap,
+                            ref: ref,
                           ),
-                        // Grid of remaining tracks
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                          sliver: SliverGrid(
-                            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                        ),
+                      ),
+                    // Grid of remaining tracks
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                      sliver: SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
                               maxCrossAxisExtent: 220,
                               childAspectRatio: 0.72,
                               crossAxisSpacing: 12,
                               mainAxisSpacing: 12,
                             ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, i) {
+                            final rank = topTracks.length >= 3 ? i + 4 : i + 1;
+                            final trackIndex = topTracks.length >= 3
+                                ? i + 3
+                                : i;
+                            if (trackIndex >= topTracks.length) return null;
+                            return _TrackCard(
+                              track: topTracks[trackIndex],
+                              rank: rank,
+                              greatestScore:
+                                  scoreMap[topTracks[trackIndex].id] ?? 0.0,
+                              ref: ref,
+                            );
+                          },
+                          childCount: topTracks.length >= 3
+                              ? topTracks.length - 3
+                              : topTracks.length,
+                        ),
+                      ),
+                    ),
+                    // Platform results section
+                    if (_platformResults.isNotEmpty || _searchingPlatforms) ...[
+                      SliverToBoxAdapter(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.cloud_download_rounded,
+                                color: AppTheme.cyan,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'From Music Platforms',
+                                style: TextStyle(
+                                  color: AppTheme.cyan,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (_searchingPlatforms)
+                                const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.cyan,
+                                  ),
+                                )
+                              else
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.cyan.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(5),
+                                  ),
+                                  child: Text(
+                                    '${_platformResults.length}',
+                                    style: const TextStyle(
+                                      color: AppTheme.cyan,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (_platformResults.isNotEmpty)
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                          sliver: SliverList(
                             delegate: SliverChildBuilderDelegate(
-                              (context, i) {
-                                final rank = topTracks.length >= 3 ? i + 4 : i + 1;
-                                final trackIndex = topTracks.length >= 3 ? i + 3 : i;
-                                if (trackIndex >= topTracks.length) return null;
-                                return _TrackCard(
-                                  track: topTracks[trackIndex],
-                                  rank: rank,
-                                  greatestScore: scoreMap[topTracks[trackIndex].id] ?? 0.0,
-                                  ref: ref,
-                                );
-                              },
-                              childCount: topTracks.length >= 3
-                                  ? topTracks.length - 3
-                                  : topTracks.length,
+                              (context, i) => _PlatformTrackRow(
+                                track: _platformResults[i],
+                                index: i,
+                              ),
+                              childCount: _platformResults.length,
                             ),
                           ),
                         ),
-                        // Platform results section
-                        if (_platformResults.isNotEmpty || _searchingPlatforms) ...[
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.cloud_download_rounded, color: AppTheme.cyan, size: 18),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'From Apple Music & Spotify',
-                                    style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 14),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  if (_searchingPlatforms)
-                                    const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.cyan))
-                                  else
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                      decoration: BoxDecoration(color: AppTheme.cyan.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(5)),
-                                      child: Text('${_platformResults.length}', style: const TextStyle(color: AppTheme.cyan, fontSize: 10, fontWeight: FontWeight.w600)),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          if (_platformResults.isNotEmpty)
-                            SliverPadding(
-                              padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                              sliver: SliverList(
-                                delegate: SliverChildBuilderDelegate(
-                                  (context, i) => _PlatformTrackRow(track: _platformResults[i], index: i),
-                                  childCount: _platformResults.length,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ],
-                    ),
+                    ],
+                  ],
+                ),
         ),
       ],
     );

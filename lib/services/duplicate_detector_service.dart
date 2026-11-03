@@ -44,7 +44,9 @@ class DuplicateDetectorService {
     }
     for (final entry in byTitleArtist.entries) {
       if (entry.value.length > 1) {
-        groups.add(DuplicateGroup(tracks: entry.value, reason: 'same_title_artist'));
+        groups.add(
+          DuplicateGroup(tracks: entry.value, reason: 'same_title_artist'),
+        );
         used.addAll(entry.value.map((t) => t.id));
       }
     }
@@ -91,7 +93,11 @@ class DuplicateDetectorService {
   }) async {
     final keeper = keepFile ?? group.recommended;
     if (keeper == null) {
-      return const CleanupResult(movedCount: 0, skippedCount: 0, errors: ['No keeper selected']);
+      return const CleanupResult(
+        movedCount: 0,
+        skippedCount: 0,
+        errors: ['No keeper selected'],
+      );
     }
 
     int moved = 0;
@@ -121,7 +127,11 @@ class DuplicateDetectorService {
       }
     }
 
-    return CleanupResult(movedCount: moved, skippedCount: skipped, errors: errors);
+    return CleanupResult(
+      movedCount: moved,
+      skippedCount: skipped,
+      errors: errors,
+    );
   }
 
   /// Move duplicate files to a review folder instead of Trash.
@@ -133,7 +143,11 @@ class DuplicateDetectorService {
   }) async {
     final keeper = keepFile ?? group.recommended;
     if (keeper == null) {
-      return const CleanupResult(movedCount: 0, skippedCount: 0, errors: ['No keeper selected']);
+      return const CleanupResult(
+        movedCount: 0,
+        skippedCount: 0,
+        errors: ['No keeper selected'],
+      );
     }
 
     final reviewDir = Directory(reviewFolderPath);
@@ -161,7 +175,11 @@ class DuplicateDetectorService {
       }
     }
 
-    return CleanupResult(movedCount: moved, skippedCount: skipped, errors: errors);
+    return CleanupResult(
+      movedCount: moved,
+      skippedCount: skipped,
+      errors: errors,
+    );
   }
 
   /// Batch cleanup: process multiple groups at once.
@@ -180,7 +198,10 @@ class DuplicateDetectorService {
       if (group.confidence < minConfidence) continue;
 
       final result = reviewFolderPath != null
-          ? await moveDuplicatesToReview(group, reviewFolderPath: reviewFolderPath)
+          ? await moveDuplicatesToReview(
+              group,
+              reviewFolderPath: reviewFolderPath,
+            )
           : await trashDuplicates(group);
 
       totalMoved += result.movedCount;
@@ -218,7 +239,8 @@ class DuplicateDetectorService {
     return score;
   }
 
-  String _normalize(String s) => s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+  String _normalize(String s) =>
+      s.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
 
   int _levenshtein(String a, String b) {
     if (a == b) return 0;
@@ -228,14 +250,22 @@ class DuplicateDetectorService {
       a.length + 1,
       (i) => List.generate(b.length + 1, (j) => 0),
     );
-    for (var i = 0; i <= a.length; i++) { dp[i][0] = i; }
-    for (var j = 0; j <= b.length; j++) { dp[0][j] = j; }
+    for (var i = 0; i <= a.length; i++) {
+      dp[i][0] = i;
+    }
+    for (var j = 0; j <= b.length; j++) {
+      dp[0][j] = j;
+    }
     for (var i = 1; i <= a.length; i++) {
       for (var j = 1; j <= b.length; j++) {
         dp[i][j] = a[i - 1] == b[j - 1]
             ? dp[i - 1][j - 1]
-            : 1 + [dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]]
-                .reduce((x, y) => x < y ? x : y);
+            : 1 +
+                  [
+                    dp[i - 1][j],
+                    dp[i][j - 1],
+                    dp[i - 1][j - 1],
+                  ].reduce((x, y) => x < y ? x : y);
       }
     }
     return dp[a.length][b.length];

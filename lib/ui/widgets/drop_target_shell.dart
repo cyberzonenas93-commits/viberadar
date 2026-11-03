@@ -19,7 +19,14 @@ enum DropType { directory, audioFile, unsupported }
 /// Audio extensions we accept via drag-drop. Kept in sync with the scanner's
 /// own extension list where practical.
 const Set<String> kSupportedAudioExtensions = {
-  '.mp3', '.wav', '.flac', '.aiff', '.aif', '.m4a', '.ogg', '.aac',
+  '.mp3',
+  '.wav',
+  '.flac',
+  '.aiff',
+  '.aif',
+  '.m4a',
+  '.ogg',
+  '.aac',
 };
 
 /// Pure-function classifier — testable without touching the filesystem.
@@ -117,8 +124,12 @@ class _DropTargetShellState extends ConsumerState<DropTargetShell>
       try {
         await ref.read(libraryProvider.notifier).scanDirectory(dir);
       } catch (e, st) {
-        developer.log('Drop scan failed for $dir',
-            name: 'DropTargetShell', error: e, stackTrace: st);
+        developer.log(
+          'Drop scan failed for $dir',
+          name: 'DropTargetShell',
+          error: e,
+          stackTrace: st,
+        );
         _showSnack('Failed to scan $dir');
       }
     }
@@ -179,9 +190,7 @@ class _DropTargetShellState extends ConsumerState<DropTargetShell>
                       const SizedBox(height: 16),
                       Text(
                         'Drop to import',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineSmall
+                        style: Theme.of(context).textTheme.headlineSmall
                             ?.copyWith(color: AppTheme.textPrimary),
                       ),
                       const SizedBox(height: 4),

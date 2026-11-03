@@ -1,10 +1,17 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:developer' as developer;
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:collection/collection.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/config/music_genres.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/app_section.dart';
@@ -17,18 +24,30 @@ import '../../models/user_profile.dart';
 import '../../providers/app_state.dart';
 import '../../providers/library_provider.dart';
 import '../../providers/repositories.dart';
-import 'dart:async';
-import 'dart:developer' as developer;
+import '../../providers/setlist_provider.dart';
 import '../../models/library_track.dart';
+import '../../services/account_deletion_service.dart';
+import '../../services/ai_copilot_service.dart';
+import '../../services/crate_export_planner.dart';
 import '../../services/export_service.dart';
 import '../../services/platform_search_service.dart';
 import '../../services/playlist_aggregation_service.dart';
 import '../../services/ingest_service.dart';
+import '../../services/set_builder_behavior_service.dart';
+import '../../services/set_folder_preparation_service.dart';
+import '../../services/set_sequence_planner.dart';
+import '../../services/soundcharts_ai_ranking_service.dart';
+import '../onboarding/screen_tutorial.dart';
 import '../widgets/command_palette.dart';
 import '../widgets/drop_target_shell.dart';
+import '../widgets/guest_mode_banner.dart';
+import '../widgets/platform_play_actions.dart';
+import '../widgets/pro_paywall.dart';
 import '../mobile/setlists_tab.dart';
 import '../widgets/sidebar_nav.dart';
+import '../widgets/subscription_section.dart';
 import '../widgets/track_detail_panel.dart';
+import '../widgets/ui_kit.dart';
 import '../widgets/vibe_backdrop.dart';
 import '../features/artists/artists_screen.dart';
 import '../features/for_you/for_you_screen.dart';
@@ -57,20 +76,61 @@ class VibeShell extends ConsumerStatefulWidget {
     super.key,
     required this.statusMessage,
     this.isDemoMode = false,
+    this.disableAutoIngest = false,
   });
 
   final String statusMessage;
   final bool isDemoMode;
+  final bool disableAutoIngest;
 
   @override
   ConsumerState<VibeShell> createState() => _VibeShellState();
 }
 
-class _VibeShellState extends ConsumerState<VibeShell> {
+class _VibeShellState extends ConsumerState<VibeShell>
+    with WidgetsBindingObserver {
   late final TextEditingController _searchController;
   late final FocusNode _searchFocusNode;
   late final FocusNode _filterFocusNode;
   Timer? _autoIngestTimer;
+  bool _appIsResumed = true;
+
+  // Tracks which synced setlists we've already seen, so a set arriving from the
+  // phone surfaces an in-app toast (the desktop has no push token).
+  final Set<String> _seenSetlistIds = {};
+  bool _seededSetlists = false;
+
+  void _onSetlistsChanged(List<Crate>? previous, List<Crate> next) {
+    final ids = next.map((c) => c.id).toSet();
+    if (!_seededSetlists) {
+      _seededSetlists = true;
+      _seenSetlistIds.addAll(ids);
+      return;
+    }
+    final fresh = next.where((c) => !_seenSetlistIds.contains(c.id)).toList();
+    _seenSetlistIds.addAll(ids);
+    if (fresh.isEmpty) return;
+
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    if (messenger == null) return;
+    messenger.showSnackBar(
+      SnackBar(
+        backgroundColor: AppTheme.violet,
+        content: Text(
+          fresh.length == 1
+              ? 'New setlist from your phone: “${fresh.first.name}”'
+              : '${fresh.length} new setlists synced from your phone',
+        ),
+        action: SnackBarAction(
+          label: 'View',
+          textColor: Colors.white,
+          onPressed: () => ref
+              .read(workspaceControllerProvider.notifier)
+              .setSection(AppSection.savedCrates),
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -78,6 +138,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     _searchController = TextEditingController();
     _searchFocusNode = FocusNode();
     _filterFocusNode = FocusNode();
+    WidgetsBinding.instance.addObserver(this);
 
     // Auto-ingest on app start (after a short delay to let UI settle)
     Future.delayed(const Duration(seconds: 5), () {
@@ -91,8 +152,12 @@ class _VibeShellState extends ConsumerState<VibeShell> {
   }
 
   Future<void> _autoIngest() async {
+    if (widget.disableAutoIngest) return;
+    if (!_appIsResumed) return;
+
     final session = ref.read(sessionProvider).value;
     if (session?.isAuthenticated != true) return;
+    if (!ref.read(liveCatalogAccessProvider).hasLiveAccess) return;
 
     try {
       await IngestService.triggerIngest();
@@ -133,6 +198,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _autoIngestTimer?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
@@ -141,7 +207,15 @@ class _VibeShellState extends ConsumerState<VibeShell> {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appIsResumed = state == AppLifecycleState.resumed;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    // Toast when a setlist arrives from the phone (desktop has no push token).
+    ref.listen<List<Crate>>(setlistsProvider, _onSetlistsChanged);
+
     final workspace = ref.watch(workspaceControllerProvider);
     final tracksAsync = ref.watch(trackStreamProvider);
     final visibleTracks = ref.watch(visibleTracksProvider);
@@ -153,12 +227,15 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         UserProfile.empty(
           id: session.userId,
           displayName: session.displayName,
-          preferredRegion: 'GH',
+          preferredRegion: 'Global',
         );
     final genres = ref.watch(availableGenresProvider);
     final vibes = ref.watch(availableVibesProvider);
     final regions = ref.watch(availableRegionsProvider);
     final allTracks = tracksAsync.value ?? const <Track>[];
+    final loadingTracks = tracksAsync.isLoading && allTracks.isEmpty;
+    final isGuestMode = widget.isDemoMode || session.isDemo;
+    final liveAccess = ref.watch(liveCatalogAccessProvider);
 
     if (_searchController.text != workspace.searchQuery) {
       _searchController.value = TextEditingValue(
@@ -169,29 +246,38 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       );
     }
 
-    Widget mainPanel() => _buildMainPanel(
-      context: context,
-      workspace: workspace,
-      allTracks: allTracks,
-      visibleTracks: visibleTracks,
-      tracksAsync: tracksAsync,
-      session: session,
-      userProfile: userProfile,
-      genres: genres,
-      vibes: vibes,
-      regions: regions,
+    Widget mainPanel() => TutorialHost(
+      key: ValueKey(workspace.section),
+      section: workspace.section,
+      child: _buildMainPanel(
+        context: context,
+        workspace: workspace,
+        allTracks: allTracks,
+        visibleTracks: visibleTracks,
+        tracksAsync: tracksAsync,
+        loadingTracks: loadingTracks,
+        session: session,
+        userProfile: userProfile,
+        genres: genres,
+        vibes: vibes,
+        regions: regions,
+      ),
     );
 
     Widget sidebar({BuildContext? drawerContext}) => SidebarNav(
       selectedSection: workspace.section,
       statusMessage: widget.statusMessage,
-      isDemoMode: widget.isDemoMode,
+      isDemoMode: isGuestMode,
       onSelected: (section) {
         ref.read(workspaceControllerProvider.notifier).setSection(section);
         if (drawerContext != null) {
           Navigator.of(drawerContext).maybePop();
         }
       },
+      liveRefreshEnabled: liveAccess.hasLiveAccess,
+      onRefreshLocked: isGuestMode
+          ? null
+          : () => showVibeRadarProSheet(context),
       onRefreshComplete: () => ref.read(trackRepositoryProvider).refresh(),
     );
 
@@ -223,7 +309,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
             builder: (context, constraints) {
               final viewportWidth = MediaQuery.sizeOf(context).width;
               final compact = viewportWidth < 960;
-              final body = _showDetailPanel(workspace.section) && !compact
+              final panelBody = _showDetailPanel(workspace.section) && !compact
                   ? Row(
                       children: [
                         Expanded(child: mainPanel()),
@@ -235,6 +321,21 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                       ],
                     )
                   : mainPanel();
+              final body = Column(
+                children: [
+                  if (isGuestMode)
+                    const GuestModeBanner(
+                      compact: true,
+                      margin: EdgeInsets.fromLTRB(0, 0, 0, 12),
+                    ),
+                  if (!isGuestMode)
+                    const ProUpsellBanner(
+                      compact: true,
+                      margin: EdgeInsets.fromLTRB(0, 0, 0, 12),
+                    ),
+                  Expanded(child: panelBody),
+                ],
+              );
 
               if (compact) {
                 final drawerWidth = viewportWidth < 360
@@ -257,7 +358,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                   ),
                   appBar: AppBar(
                     toolbarHeight: 56,
-                    backgroundColor: AppTheme.panel.withValues(alpha: 0.92),
+                    backgroundColor: AppTheme.panel.withValues(alpha: 0.98),
                     surfaceTintColor: Colors.transparent,
                     elevation: 0,
                     leading: Builder(
@@ -276,16 +377,12 @@ class _VibeShellState extends ConsumerState<VibeShell> {
                           width: 24,
                           height: 24,
                           decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [AppTheme.violet, AppTheme.pink],
-                            ),
+                            gradient: AppTheme.brandGradient,
                             borderRadius: BorderRadius.circular(7),
                           ),
                           child: const Icon(
                             Icons.radio_button_checked,
-                            color: Colors.white,
+                            color: AppTheme.ink,
                             size: 14,
                           ),
                         ),
@@ -357,12 +454,21 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     required List<Track> allTracks,
     required List<Track> visibleTracks,
     required AsyncValue<List<Track>> tracksAsync,
+    required bool loadingTracks,
     required SessionState session,
     required UserProfile userProfile,
     required List<String> genres,
     required List<String> vibes,
     required List<String> regions,
   }) {
+    if (session.isDemo && _requiresLiveServices(workspace.section)) {
+      return GuestLockedPanel(feature: workspace.section.label);
+    }
+    if (ref.watch(liveCatalogAccessProvider).requiresUpgrade &&
+        _requiresProLiveAccess(workspace.section)) {
+      return ProLockedPanel(feature: workspace.section.label);
+    }
+
     switch (workspace.section) {
       case AppSection.forYou:
         return ForYouScreen(
@@ -381,15 +487,20 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       case AppSection.regions:
         return _RegionsView(
           tracks: allTracks,
+          loadingTracks: loadingTracks,
           activeRegion: workspace.filters.region,
           ref: ref,
-          onSelectRegion: (region) => ref
-              .read(workspaceControllerProvider.notifier)
-              .updateFilters(workspace.filters.copyWith(region: region)),
+          onSelectRegion: (region) {
+            ref
+                .read(workspaceControllerProvider.notifier)
+                .updateFilters(workspace.filters.copyWith(region: region));
+            ref.read(selectedRegionProvider.notifier).set(region);
+          },
           onOpenRegionWorkbench: (region) {
             ref
                 .read(workspaceControllerProvider.notifier)
                 .updateFilters(workspace.filters.copyWith(region: region));
+            ref.read(selectedRegionProvider.notifier).set(region);
             ref
                 .read(workspaceControllerProvider.notifier)
                 .setSection(AppSection.trending);
@@ -401,11 +512,16 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       case AppSection.genres:
         return _GenresView(
           tracks: allTracks,
+          loadingTracks: loadingTracks,
           ref: ref,
           onSelectGenre: (genre) {
             ref
                 .read(workspaceControllerProvider.notifier)
                 .updateFilters(workspace.filters.copyWith(genre: genre));
+            // Drive genre-aware live retrieval, mirroring region selection.
+            ref
+                .read(selectedGenreProvider.notifier)
+                .set(genre == 'All' ? null : genre);
             ref
                 .read(workspaceControllerProvider.notifier)
                 .setSection(AppSection.trending);
@@ -414,6 +530,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
       case AppSection.setBuilder:
         return _SetBuilderView(
           allTracks: allTracks,
+          localLibrary: ref.watch(libraryProvider).tracks,
           genres: genres,
           vibes: vibes,
           session: session,
@@ -423,12 +540,14 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         return _SavedCratesView(
           allTracks: allTracks,
           crates: userProfile.savedCrates,
+          localLibrary: ref.watch(libraryProvider).tracks,
         );
       case AppSection.watchlist:
         return _WatchlistView(
           tracks: allTracks
               .where((track) => userProfile.watchlist.contains(track.id))
               .toList(),
+          loadingTracks: loadingTracks && userProfile.watchlist.isNotEmpty,
           onRemove: (trackId) => _toggleWatchlist(
             session: session,
             userProfile: userProfile,
@@ -463,7 +582,7 @@ class _VibeShellState extends ConsumerState<VibeShell> {
         return _SettingsView(
           session: session,
           userProfile: userProfile,
-          regions: regions.where((item) => item != 'Global').toList(),
+          regions: regions,
         );
     }
   }
@@ -473,11 +592,42 @@ class _VibeShellState extends ConsumerState<VibeShell> {
     return false; // No detail panel for any section
   }
 
+  bool _requiresLiveServices(AppSection section) {
+    return switch (section) {
+      AppSection.forYou ||
+      AppSection.search ||
+      AppSection.artists ||
+      AppSection.greatestOf ||
+      AppSection.setBuilder ||
+      AppSection.aiCopilot ||
+      AppSection.playlists ||
+      AppSection.community ||
+      AppSection.myProfile ||
+      AppSection.upload ||
+      AppSection.discoverDJs => true,
+      _ => false,
+    };
+  }
+
+  bool _requiresProLiveAccess(AppSection section) {
+    return switch (section) {
+      AppSection.forYou ||
+      AppSection.search ||
+      AppSection.artists ||
+      AppSection.greatestOf ||
+      AppSection.setBuilder ||
+      AppSection.aiCopilot ||
+      AppSection.playlists => true,
+      _ => false,
+    };
+  }
+
   Future<void> _toggleWatchlist({
     required SessionState session,
     required UserProfile userProfile,
     required String trackId,
   }) {
+    if (session.isDemo) return Future.value();
     return ref
         .read(userRepositoryProvider)
         .toggleWatchlist(

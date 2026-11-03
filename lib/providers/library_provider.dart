@@ -15,6 +15,7 @@ import '../services/library_persistence_service.dart';
 import '../services/library_scanner_service.dart';
 import '../services/spotify_artist_service.dart';
 import '../services/apple_music_artist_service.dart';
+import 'app_state.dart';
 
 const Set<String> _supportedAudioExtensions = {
   '.mp3',
@@ -284,6 +285,8 @@ class LibraryNotifier extends Notifier<LibraryState> {
     List<LibraryTrack> tracks, {
     int maxTracks = 100,
   }) async {
+    if (!ref.read(liveCatalogAccessProvider).hasLiveAccess) return;
+
     final needsArt = tracks.where((t) => t.artworkUrl == null).toList();
     if (needsArt.isEmpty) return;
 
@@ -499,6 +502,15 @@ class CrateNotifier extends Notifier<CrateState> {
     unawaited(_saveCratesToDisk(current));
   }
 
+  /// Replaces (or creates) [name] with [trackIds] in a single write. Used to
+  /// load a synced phone setlist into the Export Studio bench so it lands in the
+  /// same store as desktop-built crates (one place to match + export).
+  void importCrate(String name, List<String> trackIds) {
+    final updated = {...state.crates, name: List<String>.from(trackIds)};
+    state = state.copyWith(crates: updated);
+    unawaited(_saveCratesToDisk(updated));
+  }
+
   void removeTrackFromCrate(String crateName, String trackId) {
     final current = Map<String, List<String>>.from(state.crates);
     current[crateName] = (current[crateName] ?? [])
@@ -530,8 +542,16 @@ class AiCrateTrack {
   final String? spotifyUrl;
   final String? appleUrl;
   final String? youtubeUrl;
+  final String? soundchartsUrl;
+  final String? soundchartsSource;
+  final String? soundchartsRegion;
   final String? artworkUrl;
   final bool resolved; // true if we found it on a platform
+  final String? phaseLabel;
+  final double? confidence;
+  final List<String> reasons;
+  final bool localMatch;
+  final String? versionTag;
 
   const AiCrateTrack({
     required this.title,
@@ -541,17 +561,27 @@ class AiCrateTrack {
     this.spotifyUrl,
     this.appleUrl,
     this.youtubeUrl,
+    this.soundchartsUrl,
+    this.soundchartsSource,
+    this.soundchartsRegion,
     this.artworkUrl,
     this.resolved = false,
+    this.phaseLabel,
+    this.confidence,
+    this.reasons = const [],
+    this.localMatch = false,
+    this.versionTag,
   });
 
-  String get bestUrl => spotifyUrl ?? appleUrl ?? youtubeUrl ?? '';
+  String get bestUrl =>
+      spotifyUrl ?? appleUrl ?? youtubeUrl ?? soundchartsUrl ?? '';
   bool get hasUrl => bestUrl.isNotEmpty;
 
   String get platformLabel {
     if (spotifyUrl != null) return 'Spotify';
     if (appleUrl != null) return 'Apple Music';
     if (youtubeUrl != null) return 'YouTube';
+    if (soundchartsUrl != null) return 'Soundcharts';
     return '';
   }
 
@@ -563,8 +593,16 @@ class AiCrateTrack {
     'spotifyUrl': spotifyUrl,
     'appleUrl': appleUrl,
     'youtubeUrl': youtubeUrl,
+    'soundchartsUrl': soundchartsUrl,
+    'soundchartsSource': soundchartsSource,
+    'soundchartsRegion': soundchartsRegion,
     'artworkUrl': artworkUrl,
     'resolved': resolved,
+    if (phaseLabel != null) 'phaseLabel': phaseLabel,
+    if (confidence != null) 'confidence': confidence,
+    if (reasons.isNotEmpty) 'reasons': reasons,
+    'localMatch': localMatch,
+    if (versionTag != null) 'versionTag': versionTag,
   };
 
   factory AiCrateTrack.fromJson(Map<String, dynamic> m) => AiCrateTrack(
@@ -575,8 +613,16 @@ class AiCrateTrack {
     spotifyUrl: m['spotifyUrl'] as String?,
     appleUrl: m['appleUrl'] as String?,
     youtubeUrl: m['youtubeUrl'] as String?,
+    soundchartsUrl: m['soundchartsUrl'] as String?,
+    soundchartsSource: m['soundchartsSource'] as String?,
+    soundchartsRegion: m['soundchartsRegion'] as String?,
     artworkUrl: m['artworkUrl'] as String?,
     resolved: m['resolved'] as bool? ?? false,
+    phaseLabel: m['phaseLabel'] as String?,
+    confidence: (m['confidence'] as num?)?.toDouble(),
+    reasons: (m['reasons'] as List?)?.whereType<String>().toList() ?? const [],
+    localMatch: m['localMatch'] as bool? ?? false,
+    versionTag: m['versionTag'] as String?,
   );
 }
 

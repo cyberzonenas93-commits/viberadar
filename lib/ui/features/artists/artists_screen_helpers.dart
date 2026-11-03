@@ -9,7 +9,12 @@ class _FilterDropdown extends StatelessWidget {
   final String value;
   final List<String> options;
   final ValueChanged<String> onChanged;
-  const _FilterDropdown({required this.label, required this.value, required this.options, required this.onChanged});
+  const _FilterDropdown({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -23,15 +28,22 @@ class _FilterDropdown extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label: ', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+          Text(
+            '$label: ',
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+          ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: options.contains(value) ? value : options.first,
               isDense: true,
               dropdownColor: AppTheme.panelRaised,
               style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-              items: options.map((o) => DropdownMenuItem(value: o, child: Text(o))).toList(),
-              onChanged: (v) { if (v != null) onChanged(v); },
+              items: options
+                  .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+                  .toList(),
+              onChanged: (v) {
+                if (v != null) onChanged(v);
+              },
             ),
           ),
         ],
@@ -53,7 +65,16 @@ class _InfoChip extends StatelessWidget {
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(text, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis, maxLines: 1),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+        overflow: TextOverflow.ellipsis,
+        maxLines: 1,
+      ),
     );
   }
 }
@@ -72,13 +93,20 @@ class _AvatarFallback extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [AppTheme.violet.withValues(alpha: 0.3), AppTheme.pink.withValues(alpha: 0.2)],
+          colors: [
+            AppTheme.violet.withValues(alpha: 0.3),
+            AppTheme.pink.withValues(alpha: 0.2),
+          ],
         ),
       ),
       child: Center(
         child: Text(
           name.isNotEmpty ? name[0].toUpperCase() : '?',
-          style: TextStyle(color: AppTheme.violet, fontSize: large ? 48 : 36, fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: AppTheme.violet,
+            fontSize: large ? 48 : 36,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ),
     );
@@ -89,12 +117,17 @@ class _SmallArtPlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 44, height: 44,
+      width: 44,
+      height: 44,
       decoration: BoxDecoration(
         color: AppTheme.edge,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 16),
+      child: const Icon(
+        Icons.music_note_rounded,
+        color: AppTheme.textTertiary,
+        size: 16,
+      ),
     );
   }
 }
@@ -104,9 +137,19 @@ class _ArtworkPlaceholder extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [AppTheme.edge, AppTheme.panelRaised]),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppTheme.edge, AppTheme.panelRaised],
+        ),
       ),
-      child: const Center(child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 32)),
+      child: const Center(
+        child: Icon(
+          Icons.music_note_rounded,
+          color: AppTheme.textTertiary,
+          size: 32,
+        ),
+      ),
     );
   }
 }
@@ -116,7 +159,12 @@ class _ViewTab extends StatelessWidget {
   final String subtitle;
   final bool isActive;
   final VoidCallback onTap;
-  const _ViewTab({required this.label, required this.subtitle, required this.isActive, required this.onTap});
+  const _ViewTab({
+    required this.label,
+    required this.subtitle,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -125,21 +173,42 @@ class _ViewTab extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: isActive ? AppTheme.violet.withValues(alpha: 0.12) : Colors.transparent,
+          color: isActive
+              ? AppTheme.violet.withValues(alpha: 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: isActive ? AppTheme.violet.withValues(alpha: 0.3) : AppTheme.edge.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: isActive
+                ? AppTheme.violet.withValues(alpha: 0.3)
+                : AppTheme.edge.withValues(alpha: 0.3),
+          ),
         ),
         child: Row(
           children: [
-            Text(label, style: TextStyle(color: isActive ? AppTheme.violet : AppTheme.textSecondary, fontSize: 12, fontWeight: isActive ? FontWeight.w600 : FontWeight.w400)),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? AppTheme.violet : AppTheme.textSecondary,
+                fontSize: 12,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
             const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: (isActive ? AppTheme.violet : AppTheme.textTertiary).withValues(alpha: 0.15),
+                color: (isActive ? AppTheme.violet : AppTheme.textTertiary)
+                    .withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
-              child: Text(subtitle, style: TextStyle(color: isActive ? AppTheme.violet : AppTheme.textTertiary, fontSize: 9, fontWeight: FontWeight.w700)),
+              child: Text(
+                subtitle,
+                style: TextStyle(
+                  color: isActive ? AppTheme.violet : AppTheme.textTertiary,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ],
         ),
@@ -183,8 +252,8 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
           color: widget.isSelected
               ? AppTheme.violet.withValues(alpha: 0.08)
               : _hovered
-                  ? AppTheme.panelRaised
-                  : Colors.transparent,
+              ? AppTheme.panelRaised
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           border: widget.isSelected
               ? Border.all(color: AppTheme.violet.withValues(alpha: 0.3))
@@ -196,9 +265,12 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
             GestureDetector(
               onTap: widget.onToggleSelect,
               child: Container(
-                width: 22, height: 22,
+                width: 22,
+                height: 22,
                 decoration: BoxDecoration(
-                  color: widget.isSelected ? AppTheme.violet : Colors.transparent,
+                  color: widget.isSelected
+                      ? AppTheme.violet
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(6),
                   border: Border.all(
                     color: widget.isSelected ? AppTheme.violet : AppTheme.edge,
@@ -206,7 +278,11 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
                   ),
                 ),
                 child: widget.isSelected
-                    ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
+                    ? const Icon(
+                        Icons.check_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      )
                     : null,
               ),
             ),
@@ -217,8 +293,12 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
               child: Text(
                 '${widget.rank}',
                 style: TextStyle(
-                  color: widget.rank <= 3 ? AppTheme.amber : AppTheme.textTertiary,
-                  fontWeight: widget.rank <= 3 ? FontWeight.w700 : FontWeight.w500,
+                  color: widget.rank <= 3
+                      ? AppTheme.amber
+                      : AppTheme.textTertiary,
+                  fontWeight: widget.rank <= 3
+                      ? FontWeight.w700
+                      : FontWeight.w500,
                   fontSize: 12,
                 ),
               ),
@@ -227,7 +307,13 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: t.artworkUrl.isNotEmpty
-                  ? CachedNetworkImage(imageUrl: t.artworkUrl, width: 44, height: 44, fit: BoxFit.cover, errorWidget: (_, e, s) => _SmallArtPlaceholder())
+                  ? CachedNetworkImage(
+                      imageUrl: t.artworkUrl,
+                      width: 44,
+                      height: 44,
+                      fit: BoxFit.cover,
+                      errorWidget: (_, e, s) => _SmallArtPlaceholder(),
+                    )
                   : _SmallArtPlaceholder(),
             ),
             const SizedBox(width: 14),
@@ -236,46 +322,89 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(t.title, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(
+                    t.title,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   const SizedBox(height: 2),
-                  Text(t.genre, style: TextStyle(color: AppTheme.violet.withValues(alpha: 0.7), fontSize: 11)),
+                  Text(
+                    t.genre,
+                    style: TextStyle(
+                      color: AppTheme.violet.withValues(alpha: 0.7),
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
             // BPM
             SizedBox(
               width: 55,
-              child: Text('${formatBpm(t.bpm)} BPM', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right),
+              child: Text(
+                '${formatBpm(t.bpm)} BPM',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+                textAlign: TextAlign.right,
+              ),
             ),
             const SizedBox(width: 10),
             // Key
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(color: AppTheme.edge.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(5)),
-              child: Text(t.keySignature, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 10, fontWeight: FontWeight.w600)),
+              decoration: BoxDecoration(
+                color: AppTheme.edge.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Text(
+                t.keySignature,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
             const SizedBox(width: 10),
             // Region
-            Text(t.leadRegion, style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+            Text(
+              t.leadRegion,
+              style: const TextStyle(
+                color: AppTheme.textTertiary,
+                fontSize: 11,
+              ),
+            ),
             const SizedBox(width: 12),
             // Score
             SizedBox(
               width: 36,
-              child: Text('$score', style: const TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w700, fontSize: 14), textAlign: TextAlign.right),
+              child: Text(
+                '$score',
+                style: const TextStyle(
+                  color: AppTheme.cyan,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                ),
+                textAlign: TextAlign.right,
+              ),
             ),
             const SizedBox(width: 8),
-            // Play
-            if (_bestUrl(t) != null)
-              IconButton(
-                icon: const Icon(Icons.play_circle_filled_rounded, color: AppTheme.cyan, size: 22),
-                onPressed: () async {
-                  final uri = Uri.tryParse(_bestUrl(t)!);
-                  if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-                },
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                tooltip: 'Play',
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 112),
+              child: PlatformPlayActions(
+                links: t.platformLinks,
+                compact: true,
+                maxLinks: 3,
+                alignment: WrapAlignment.end,
               ),
+            ),
           ],
         ),
       ),
@@ -288,7 +417,14 @@ class _CatalogTrackRowState extends State<_CatalogTrackRow> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 String? _bestUrl(Track track) {
-  const priority = ['spotify', 'apple', 'youtube', 'deezer', 'soundcloud', 'audius'];
+  const priority = [
+    'spotify',
+    'apple',
+    'youtube',
+    'deezer',
+    'soundcloud',
+    'audius',
+  ];
   for (final key in priority) {
     final url = track.platformLinks[key];
     if (url != null && url.isNotEmpty) return url;
@@ -331,7 +467,9 @@ List<_UnifiedTrack> _mergeToUnified(
         name: existing.name,
         albumName: existing.albumName,
         artworkUrl: existing.artworkUrl ?? t.artworkUrl,
-        durationMs: existing.durationMs > 0 ? existing.durationMs : t.durationMs,
+        durationMs: existing.durationMs > 0
+            ? existing.durationMs
+            : t.durationMs,
         releaseDate: existing.releaseDate ?? t.releaseDate,
         spotifyId: existing.spotifyId,
         spotifyUrl: existing.spotifyUrl,

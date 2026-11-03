@@ -4,10 +4,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/music_genres.dart';
+import '../../../core/platform.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/library_track.dart';
 import '../../../providers/library_provider.dart';
+import '../../widgets/desktop_only_notice.dart';
 import '../../widgets/ui_kit.dart';
 import '../cues/cue_preview_sheet.dart';
 
@@ -25,10 +28,19 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isMobileForm) {
+      return const DesktopOnlyNotice(
+        icon: Icons.folder_open_rounded,
+        title: 'Library scanning lives on desktop',
+        message:
+            'Use the Mac app to scan local music folders, analyze files, and manage your DJ library. The iOS app keeps discovery, search, AI setlists, uploads, and desktop pairing.',
+      );
+    }
+
     final lib = ref.watch(libraryProvider);
     final theme = Theme.of(context);
 
-    final genres = <String>{'All', ...lib.tracks.map((t) => t.genre)}.toList();
+    final genres = mergedGenreOptions(lib.tracks.map((track) => track.genre));
     // Compute available years from library
     final availableYears =
         lib.tracks.map((t) => t.releaseYear).whereType<int>().toSet().toList()
@@ -60,7 +72,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
           style: theme.textTheme.headlineMedium?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w800,
-            letterSpacing: -0.5,
+            letterSpacing: 0,
           ),
         ),
         const SizedBox(height: 4),
@@ -269,6 +281,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   Future<void> _pickAndScan() async {
+    if (isMobileForm) return;
+
     if (kIsWeb) {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -327,7 +341,7 @@ class _EmptyState extends StatelessWidget {
             style: TextStyle(
               color: AppTheme.textPrimary,
               fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
+              letterSpacing: 0,
               fontSize: 18,
             ),
           ),
@@ -565,7 +579,7 @@ class _ErrorState extends StatelessWidget {
               style: const TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+                letterSpacing: 0,
                 fontSize: 18,
               ),
             ),
@@ -629,7 +643,7 @@ class _ZeroFilesState extends StatelessWidget {
               style: TextStyle(
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w800,
-                letterSpacing: -0.5,
+                letterSpacing: 0,
                 fontSize: 18,
               ),
             ),

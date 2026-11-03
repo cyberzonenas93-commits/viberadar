@@ -73,14 +73,17 @@ void main() {
     _track(id: "t3", title: "Azonto Forever", artist: "Kojo Beats"),
   ];
 
-  testWidgets("palette builds without error and shows search field",
-      (tester) async {
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (_) {},
-      onOpenTrack: (_) {},
-      onDismiss: () {},
-    ));
+  testWidgets("palette builds without error and shows search field", (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (_) {},
+        onOpenTrack: (_) {},
+        onDismiss: () {},
+      ),
+    );
     await tester.pump();
 
     expect(find.byType(CommandPalette), findsOneWidget);
@@ -91,12 +94,14 @@ void main() {
   });
 
   testWidgets("typing filters results", (tester) async {
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (_) {},
-      onOpenTrack: (_) {},
-      onDismiss: () {},
-    ));
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (_) {},
+        onOpenTrack: (_) {},
+        onDismiss: () {},
+      ),
+    );
     await tester.pump();
 
     await tester.enterText(find.byType(TextField), "midnight");
@@ -109,15 +114,16 @@ void main() {
     expect(find.text("Sunrise Anthem"), findsNothing);
   });
 
-  testWidgets("selecting a navigation item calls onNavigate",
-      (tester) async {
+  testWidgets("selecting a navigation item calls onNavigate", (tester) async {
     AppSection? navigated;
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (s) => navigated = s,
-      onOpenTrack: (_) {},
-      onDismiss: () {},
-    ));
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (s) => navigated = s,
+        onOpenTrack: (_) {},
+        onDismiss: () {},
+      ),
+    );
     await tester.pump();
 
     // First item is Home — tap it.
@@ -127,15 +133,18 @@ void main() {
     expect(navigated, AppSection.home);
   });
 
-  testWidgets("arrow down changes highlighted item and enter activates it",
-      (tester) async {
+  testWidgets("arrow down changes highlighted item and enter activates it", (
+    tester,
+  ) async {
     AppSection? navigated;
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (s) => navigated = s,
-      onOpenTrack: (_) {},
-      onDismiss: () {},
-    ));
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (s) => navigated = s,
+        onOpenTrack: (_) {},
+        onDismiss: () {},
+      ),
+    );
     await tester.pump();
 
     // Default highlight is item 0 (Home). Arrow-down twice → Trending (index 2).
@@ -151,12 +160,14 @@ void main() {
 
   testWidgets("escape triggers onDismiss", (tester) async {
     var dismissed = false;
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (_) {},
-      onOpenTrack: (_) {},
-      onDismiss: () => dismissed = true,
-    ));
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (_) {},
+        onOpenTrack: (_) {},
+        onDismiss: () => dismissed = true,
+      ),
+    );
     await tester.pump();
 
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
@@ -165,15 +176,18 @@ void main() {
     expect(dismissed, isTrue);
   });
 
-  testWidgets("selecting a track result calls onOpenTrack with that track",
-      (tester) async {
+  testWidgets("selecting a track result calls onOpenTrack with that track", (
+    tester,
+  ) async {
     LibraryTrack? opened;
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (_) {},
-      onOpenTrack: (t) => opened = t,
-      onDismiss: () {},
-    ));
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (_) {},
+        onOpenTrack: (t) => opened = t,
+        onDismiss: () {},
+      ),
+    );
     await tester.pump();
 
     await tester.enterText(find.byType(TextField), "azonto");
@@ -186,14 +200,15 @@ void main() {
     expect(opened!.id, "t3");
   });
 
-  testWidgets("no-results state when query matches nothing",
-      (tester) async {
-    await tester.pumpWidget(_wrap(
-      tracks: sampleTracks,
-      onNavigate: (_) {},
-      onOpenTrack: (_) {},
-      onDismiss: () {},
-    ));
+  testWidgets("no-results state when query matches nothing", (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        tracks: sampleTracks,
+        onNavigate: (_) {},
+        onOpenTrack: (_) {},
+        onDismiss: () {},
+      ),
+    );
     await tester.pump();
 
     await tester.enterText(find.byType(TextField), "zzzzz-no-match");

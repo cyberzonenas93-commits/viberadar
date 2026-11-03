@@ -15,10 +15,9 @@ class ArtistService {
   /// Returned list is sorted by [ArtistModel.trendScore] descending.
   List<ArtistModel> buildArtistCatalog(List<Track> allTracks) {
     final grouped = _groupByArtist(allTracks);
-    final models = grouped.entries
-        .map((e) => _buildModel(e.key, e.value))
-        .toList()
-      ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    final models =
+        grouped.entries.map((e) => _buildModel(e.key, e.value)).toList()
+          ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
     return models;
   }
 
@@ -63,10 +62,9 @@ class ArtistService {
         : top5.map((t) => t.trendScore).reduce((a, b) => a + b) / top5.length;
 
     // Trending = tracks above artist avg
-    final trendingTracks = tracks
-        .where((t) => t.trendScore > popularityScore)
-        .toList()
-      ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
+    final trendingTracks =
+        tracks.where((t) => t.trendScore > popularityScore).toList()
+          ..sort((a, b) => b.trendScore.compareTo(a.trendScore));
 
     // Genres — most common first
     final genreCounts = <String, int>{};
@@ -75,10 +73,11 @@ class ArtistService {
         genreCounts[t.genre] = (genreCounts[t.genre] ?? 0) + 1;
       }
     }
-    final genres = (genreCounts.entries.toList()
-          ..sort((a, b) => b.value.compareTo(a.value)))
-        .map((e) => e.key)
-        .toList();
+    final genres =
+        (genreCounts.entries.toList()
+              ..sort((a, b) => b.value.compareTo(a.value)))
+            .map((e) => e.key)
+            .toList();
 
     // Era grouping (uses effectiveReleaseYear)
     final tracksByEra = _groupByEra(tracks);
@@ -107,10 +106,11 @@ class ArtistService {
       final avgScores = regionTotals.map(
         (k, v) => MapEntry(k, v / (regionCounts[k] ?? 1)),
       );
-      leadRegion = (avgScores.entries.toList()
-            ..sort((a, b) => b.value.compareTo(a.value)))
-          .first
-          .key;
+      leadRegion =
+          (avgScores.entries.toList()
+                ..sort((a, b) => b.value.compareTo(a.value)))
+              .first
+              .key;
     }
 
     // Collaborators — extract feat., &, x, vs. from artist field
@@ -137,9 +137,9 @@ class ArtistService {
     final greatestOfScore = tracks.isEmpty
         ? 0.0
         : tracks
-                .map((t) => _greatestOf.computeGreatestScore(t))
-                .reduce((a, b) => a + b) /
-            tracks.length;
+                  .map((t) => _greatestOf.computeGreatestScore(t))
+                  .reduce((a, b) => a + b) /
+              tracks.length;
 
     // Active sources
     final activeSources = <String>{};
@@ -199,7 +199,10 @@ class ArtistService {
   /// Looks for patterns like "feat.", "ft.", "&", " x ", " vs ".
   List<String> _extractCollaborators(String primaryName, List<Track> tracks) {
     final collabs = <String>{};
-    final splitPattern = RegExp(r'\s+(?:feat\.?|ft\.?|&|x|vs\.?)\s+', caseSensitive: false);
+    final splitPattern = RegExp(
+      r'\s+(?:feat\.?|ft\.?|&|x|vs\.?)\s+',
+      caseSensitive: false,
+    );
 
     for (final t in tracks) {
       final parts = t.artist.split(splitPattern);

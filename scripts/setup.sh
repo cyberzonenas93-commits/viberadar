@@ -10,15 +10,13 @@ echo "🎧 VibeRadar Setup"
 echo "=================="
 echo ""
 
-# 1. Decrypt .env if not present
-if [ ! -f ".env" ] && [ -f ".env.encrypted" ]; then
-  echo "Decrypting .env..."
-  openssl enc -aes-256-cbc -pbkdf2 -d -salt -in .env.encrypted -out .env -pass pass:VibeRadar2026
-  echo "✅ .env decrypted"
-elif [ -f ".env" ]; then
+# 1. Create local .env from the example when needed. Production/runtime
+# secrets belong in Firebase Secret Manager, GitHub Actions secrets, and
+# App Store Connect keys; this script must not decrypt repo-stored secrets.
+if [ -f ".env" ]; then
   echo "✅ .env already exists"
 else
-  echo "⚠️  No .env or .env.encrypted found. Copy .env.example and fill in your keys."
+  echo "⚠️  No .env found. Copying .env.example; fill local-only values as needed."
   cp .env.example .env
 fi
 
@@ -37,10 +35,7 @@ echo ""
 echo "✅ Setup complete! Run the app:"
 echo "   flutter run -d macos"
 echo ""
-echo "📌 API keys status:"
-grep -q "OPENAI_API_KEY=sk-" .env 2>/dev/null && echo "   ✅ OpenAI (gpt-5.4)" || echo "   ❌ OpenAI — add to .env"
-grep -q "SPOTIFY_CLIENT_ID=" .env 2>/dev/null && echo "   ✅ Spotify" || echo "   ❌ Spotify — add to .env"
-echo "   ✅ Firebase (hardcoded)"
-echo "   ✅ Billboard, Deezer (no auth)"
-echo "   ✅ YouTube, Apple Music, SoundCloud (Firebase Secrets)"
+echo "📌 Secrets:"
+echo "   Local .env is for developer overrides only."
+echo "   Production Cloud Function secrets must be set in Firebase Secret Manager."
 echo ""

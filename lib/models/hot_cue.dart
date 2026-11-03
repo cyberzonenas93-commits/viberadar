@@ -17,31 +17,51 @@ enum CueType {
 extension CueTypeX on CueType {
   String get label {
     switch (this) {
-      case CueType.intro:     return 'Intro';
-      case CueType.mixIn:     return 'Mix In';
-      case CueType.vocalIn:   return 'Vocal In';
-      case CueType.hook:      return 'Hook';
-      case CueType.drop:      return 'Drop';
-      case CueType.breakdown: return 'Breakdown';
-      case CueType.reEntry:   return 'Re-Entry';
-      case CueType.mixOut:    return 'Mix Out';
-      case CueType.outro:     return 'Outro';
-      case CueType.marker:    return 'Marker';
+      case CueType.intro:
+        return 'Intro';
+      case CueType.mixIn:
+        return 'Mix In';
+      case CueType.vocalIn:
+        return 'Vocal In';
+      case CueType.hook:
+        return 'Hook';
+      case CueType.drop:
+        return 'Drop';
+      case CueType.breakdown:
+        return 'Breakdown';
+      case CueType.reEntry:
+        return 'Re-Entry';
+      case CueType.mixOut:
+        return 'Mix Out';
+      case CueType.outro:
+        return 'Outro';
+      case CueType.marker:
+        return 'Marker';
     }
   }
 
   String get emoji {
     switch (this) {
-      case CueType.intro:     return '🎬';
-      case CueType.mixIn:     return '🔀';
-      case CueType.vocalIn:   return '🎤';
-      case CueType.hook:      return '🎣';
-      case CueType.drop:      return '💥';
-      case CueType.breakdown: return '🌊';
-      case CueType.reEntry:   return '⚡';
-      case CueType.mixOut:    return '🔄';
-      case CueType.outro:     return '🏁';
-      case CueType.marker:    return '📍';
+      case CueType.intro:
+        return '🎬';
+      case CueType.mixIn:
+        return '🔀';
+      case CueType.vocalIn:
+        return '🎤';
+      case CueType.hook:
+        return '🎣';
+      case CueType.drop:
+        return '💥';
+      case CueType.breakdown:
+        return '🌊';
+      case CueType.reEntry:
+        return '⚡';
+      case CueType.mixOut:
+        return '🔄';
+      case CueType.outro:
+        return '🏁';
+      case CueType.marker:
+        return '📍';
     }
   }
 }
@@ -63,13 +83,20 @@ extension CueSourceX on CueSource {
       // These are ESTIMATES derived from BPM and typical song structure, not
       // detected from the audio waveform — the labels say so to avoid implying
       // real audio analysis.
-      case CueSource.bpmHeuristic:      return 'BPM grid (est.)';
-      case CueSource.durationHeuristic: return 'Structure estimate';
-      case CueSource.genreTemplate:     return 'Genre template';
-      case CueSource.metadataHint:      return 'Metadata';
-      case CueSource.aiRanking:         return 'AI ranked';
-      case CueSource.userDefined:       return 'User defined';
-      case CueSource.audioEnergy:       return 'Audio (detected)';
+      case CueSource.bpmHeuristic:
+        return 'BPM grid (est.)';
+      case CueSource.durationHeuristic:
+        return 'Structure estimate';
+      case CueSource.genreTemplate:
+        return 'Genre template';
+      case CueSource.metadataHint:
+        return 'Metadata';
+      case CueSource.aiRanking:
+        return 'AI ranked';
+      case CueSource.userDefined:
+        return 'User defined';
+      case CueSource.audioEnergy:
+        return 'Audio (detected)';
     }
   }
 }
@@ -89,8 +116,8 @@ class HotCue {
     this.isSuggested = true,
     this.isWritten = false,
     this.targetSoftware,
-  })  : id = id ?? const Uuid().v4(),
-        timeMs = (timeSeconds * 1000).round();
+  }) : id = id ?? const Uuid().v4(),
+       timeMs = (timeSeconds * 1000).round();
 
   final String id;
   final String trackId;
@@ -145,20 +172,20 @@ class HotCue {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'trackId': trackId,
-        'cueIndex': cueIndex,
-        'cueType': cueType.name,
-        'label': label,
-        'timeSeconds': timeSeconds,
-        'timeMs': timeMs,
-        'confidence': confidence,
-        'source': source.name,
-        'notes': notes,
-        'isSuggested': isSuggested,
-        'isWritten': isWritten,
-        'targetSoftware': targetSoftware,
-      };
+    'id': id,
+    'trackId': trackId,
+    'cueIndex': cueIndex,
+    'cueType': cueType.name,
+    'label': label,
+    'timeSeconds': timeSeconds,
+    'timeMs': timeMs,
+    'confidence': confidence,
+    'source': source.name,
+    'notes': notes,
+    'isSuggested': isSuggested,
+    'isWritten': isWritten,
+    'targetSoftware': targetSoftware,
+  };
 
   factory HotCue.fromJson(Map<String, dynamic> json) {
     return HotCue(
@@ -206,8 +233,9 @@ class CueGenerationResult {
   final String? localFilePath;
   final DateTime generatedAt;
 
-  List<HotCue> get strongCues => cues.where((c) => c.confidence >= 0.6).toList();
-  List<HotCue> get weakCues   => cues.where((c) => c.confidence < 0.6).toList();
+  List<HotCue> get strongCues =>
+      cues.where((c) => c.confidence >= 0.6).toList();
+  List<HotCue> get weakCues => cues.where((c) => c.confidence < 0.6).toList();
 
   CueGenerationResult copyWith({
     List<HotCue>? cues,
@@ -227,15 +255,15 @@ class CueGenerationResult {
   }
 
   Map<String, dynamic> toJson() => {
-        'trackId': trackId,
-        'trackTitle': trackTitle,
-        'trackArtist': trackArtist,
-        'cues': cues.map((c) => c.toJson()).toList(),
-        'hasWeakConfidence': hasWeakConfidence,
-        'warning': warning,
-        'localFilePath': localFilePath,
-        'generatedAt': generatedAt.toIso8601String(),
-      };
+    'trackId': trackId,
+    'trackTitle': trackTitle,
+    'trackArtist': trackArtist,
+    'cues': cues.map((c) => c.toJson()).toList(),
+    'hasWeakConfidence': hasWeakConfidence,
+    'warning': warning,
+    'localFilePath': localFilePath,
+    'generatedAt': generatedAt.toIso8601String(),
+  };
 
   factory CueGenerationResult.fromJson(Map<String, dynamic> json) {
     return CueGenerationResult(

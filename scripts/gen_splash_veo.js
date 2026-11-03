@@ -1,28 +1,38 @@
-// Generates VibeRadar's animated splash with Veo 3.1 (image-to-video) via
-// Vertex AI on the gplus-admin project — animates the app icon (the sound-bars
-// equalizer) into a short looping motion asset.
+// Generates VibeRadar's animated splash with Veo 3.1 via Vertex AI on the
+// gplus-admin project — a short looping pulse asset for the launch splash.
 //
 //   node scripts/gen_splash_veo.js
 //
-// Output: assets/splash/splash_motion.mp4
+// Outputs:
+//   assets/splash/splash_motion.mp4
+//   assets/splash/frames/f01.png ... f48.png
 //
-// Mirrors the polling/save logic of gplus-app/scripts/gen_market_splash_veo.js,
-// but adds an input image (image-to-video) so the actual icon is animated.
+// Mirrors the Vertex polling/save logic of:
+//   /Users/angelonartey/Desktop/gplus-app/scripts/gen_market_splash_veo.js
 
 const fs = require("fs");
 const path = require("path");
 const https = require("https");
-const { execSync } = require("child_process");
+const { execFileSync, execSync } = require("child_process");
 
 const PROJECT = process.env.GOOGLE_CLOUD_PROJECT || "gplus-admin";
 const LOCATION = process.env.VEO_LOCATION || "us-central1";
 const MODEL = process.env.VEO_MODEL || "veo-3.1-generate-001";
-const ICON = path.join(__dirname, "..", "assets", "icon", "app_icon.png");
 const OUT = path.join(__dirname, "..", "assets", "splash", "splash_motion.mp4");
+const FRAMES_DIR = path.join(__dirname, "..", "assets", "splash", "frames");
+const FRAME_COUNT = 48;
+const FRAME_RATE = 12;
 
-// White bars on PURE BLACK so the splash can screen-blend the black to fully
-// transparent, leaving only the animated bars over the app's brand gradient.
-const PROMPT = `Five vertical white rounded-cap bars in a row, centered, the middle bar tallest and the outer bars shorter, on a pure solid black background (#000000 only — no gradient, no other colors anywhere). The bars smoothly and rhythmically rise and fall like a music equalizer reacting to a gentle beat. Flat 2D minimal UI style, crisp clean pure-white bars, pure black everywhere else, seamless loop, smooth fluid motion, no camera movement, no text, no numbers, no logos, no people.`;
+const PROMPT = `Vertical 9:16 premium mobile app launch splash for VibeRadar.
+Deep near-black ink background (#07090D) with a centered neon radar-wave app mark:
+cyan concentric radar arcs on the left, a small center node, and a violet heartbeat
+waveform extending to the right. The mark stays centered and clean while it gently
+pulses like music through a radar: two calm beat pulses over four seconds, scale
+blooming from 96% to 104%, cyan and violet glow brightening on each beat, then
+settling. Faint circular radar ripples expand outward from the center node and fade.
+Flat premium 2D UI motion, crisp edges, no camera movement, no rotation, no extra
+objects, no readable text, no letters, no numbers, no people. Loop-safe final frame
+matches the first frame.`;
 
 function getToken() {
   for (const bin of ["gcloud", "/opt/homebrew/bin/gcloud", "/usr/local/bin/gcloud"]) {
@@ -71,13 +81,63 @@ function httpJson(method, url, token, body) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function ffmpegBin() {
+  for (const bin of ["ffmpeg", "/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]) {
+    try {
+      execFileSync(bin, ["-version"], { stdio: "ignore" });
+      return bin;
+    } catch (_) {
+      // try next path
+    }
+  }
+  throw new Error("ffmpeg not found");
+}
+
+function extractFrames() {
+  const ffmpeg = ffmpegBin();
+  const tmp = path.join(FRAMES_DIR, `.tmp-${Date.now()}`);
+  fs.mkdirSync(tmp, { recursive: true });
+
+  execFileSync(
+    ffmpeg,
+    [
+      "-y",
+      "-i",
+      OUT,
+      "-vf",
+      `fps=${FRAME_RATE},scale=360:640:force_original_aspect_ratio=increase,crop=360:640,format=rgba`,
+      "-frames:v",
+      String(FRAME_COUNT),
+      path.join(tmp, "f%02d.png"),
+    ],
+    { stdio: "pipe" },
+  );
+
+  const rendered = fs
+    .readdirSync(tmp)
+    .filter((name) => /^f\d{2}\.png$/.test(name))
+    .sort();
+  if (rendered.length !== FRAME_COUNT) {
+    throw new Error(`expected ${FRAME_COUNT} frames, got ${rendered.length}`);
+  }
+
+  for (const name of fs.readdirSync(FRAMES_DIR)) {
+    if (/^f\d{2}\.png$/.test(name)) fs.rmSync(path.join(FRAMES_DIR, name));
+  }
+  for (const name of rendered) {
+    fs.renameSync(path.join(tmp, name), path.join(FRAMES_DIR, name));
+  }
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 async function main() {
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
+  fs.mkdirSync(FRAMES_DIR, { recursive: true });
 
   let token = getToken();
   const base = `https://${LOCATION}-aiplatform.googleapis.com/v1/projects/${PROJECT}/locations/${LOCATION}/publishers/google/models/${MODEL}`;
 
-  console.log(`[splash-veo] starting text-to-video (${MODEL}, 9:16, 4s, project=${PROJECT})`);
+  console.log(`[splash-veo] starting pulse video (${MODEL}, 9:16, 4s, project=${PROJECT})`);
   const start = await httpJson("POST", `${base}:predictLongRunning`, token, {
     instances: [{ prompt: PROMPT }],
     parameters: {
@@ -127,7 +187,10 @@ async function main() {
 
   const buffer = Buffer.from(b64, "base64");
   fs.writeFileSync(OUT, buffer);
-  console.log(`\n[splash-veo] ✔ saved ${path.relative(path.join(__dirname, ".."), OUT)} (${(buffer.length / 1024 / 1024).toFixed(1)}MB)`);
+  console.log(`\n[splash-veo] saved ${path.relative(path.join(__dirname, ".."), OUT)} (${(buffer.length / 1024 / 1024).toFixed(1)}MB)`);
+
+  extractFrames();
+  console.log(`[splash-veo] ✔ extracted ${FRAME_COUNT} frames to ${path.relative(path.join(__dirname, ".."), FRAMES_DIR)}`);
 }
 
 main().catch((e) => {

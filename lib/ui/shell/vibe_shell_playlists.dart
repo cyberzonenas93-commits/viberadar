@@ -43,18 +43,7 @@ class _PlaylistsViewState extends State<_PlaylistsView> {
 
   @override
   Widget build(BuildContext context) {
-    final genreOptions = [
-      'All',
-      'Afrobeats',
-      'Amapiano',
-      'Hip-Hop',
-      'R&B',
-      'House',
-      'Dancehall',
-      'Pop',
-      'Latin',
-      'Drill',
-    ];
+    final genreOptions = kGenreFilterOptions;
     final regionOptions = ['All', 'GH', 'NG', 'ZA', 'GB', 'US', 'DE'];
 
     return Column(
@@ -274,10 +263,70 @@ class _PlaylistCard extends StatelessWidget {
 
 // ── Platform result card (for set builder) ──────────────────────────────────
 
+Track _trackFromAiCrateTrack(
+  AiCrateTrack track, {
+  required String genreFallback,
+}) {
+  final now = DateTime.now();
+  final links = <String, String>{
+    if (track.appleUrl != null && track.appleUrl!.isNotEmpty)
+      'apple': track.appleUrl!,
+    if (track.spotifyUrl != null && track.spotifyUrl!.isNotEmpty)
+      'spotify': track.spotifyUrl!,
+    if (track.youtubeUrl != null && track.youtubeUrl!.isNotEmpty)
+      'youtube': track.youtubeUrl!,
+    if (track.soundchartsUrl != null && track.soundchartsUrl!.isNotEmpty)
+      'soundcharts': track.soundchartsUrl!,
+  };
+  return Track(
+    id: 'ai:${_stableAiTrackId(track.title, track.artist)}',
+    title: track.title,
+    artist: track.artist,
+    artworkUrl: track.artworkUrl ?? '',
+    bpm: track.bpm,
+    keySignature: track.key.isEmpty ? '--' : track.key,
+    genre: isSpecificGenre(genreFallback)
+        ? canonicalGenre(genreFallback)
+        : 'Pop',
+    vibe: track.phaseLabel ?? 'set builder',
+    trendScore: track.confidence ?? 0,
+    regionScores: const {},
+    platformLinks: links,
+    createdAt: now,
+    updatedAt: now,
+    energyLevel: track.confidence ?? 0.5,
+    trendHistory: const [],
+    sources: links.keys.toList(),
+  );
+}
+
+String _stableAiTrackId(String title, String artist) {
+  return '$artist::$title'
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+}
+
 class _PlatformResultCard extends StatefulWidget {
-  const _PlatformResultCard({required this.track, required this.index});
+  const _PlatformResultCard({
+    required this.track,
+    required this.index,
+    required this.ref,
+    required this.genreFallback,
+    this.onRemove,
+    this.onMarkWrong,
+    this.onMoveUp,
+    this.onMoveDown,
+  });
+
   final AiCrateTrack track;
   final int index;
+  final WidgetRef ref;
+  final String genreFallback;
+  final VoidCallback? onRemove;
+  final VoidCallback? onMarkWrong;
+  final VoidCallback? onMoveUp;
+  final VoidCallback? onMoveDown;
 
   @override
   State<_PlatformResultCard> createState() => _PlatformResultCardState();
@@ -285,6 +334,7 @@ class _PlatformResultCard extends StatefulWidget {
 
 class _PlatformResultCardState extends State<_PlatformResultCard> {
   bool _hovered = false;
+  Offset? _tapPosition;
 
   @override
   Widget build(BuildContext context) {
@@ -294,14 +344,15 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
+        onTapDown: (details) => _tapPosition = details.globalPosition,
         onTap: () {
-          final url = t.bestUrl;
-          if (url.isNotEmpty) {
-            final uri = Uri.tryParse(url);
-            if (uri != null) {
-              launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-          }
+          showTrackActionMenu(
+            context,
+            widget.ref,
+            _trackFromAiCrateTrack(t, genreFallback: widget.genreFallback),
+            position: _tapPosition,
+            preferSyncedSetlists: true,
+          );
         },
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
@@ -368,6 +419,18 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                       right: 8,
                       child: Row(
                         children: [
+                          if (t.soundchartsUrl != null)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppTheme.cyan,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          if (t.soundchartsUrl != null &&
+                              (t.spotifyUrl != null || t.appleUrl != null))
+                            const SizedBox(width: 3),
                           if (t.spotifyUrl != null)
                             Container(
                               width: 8,
@@ -387,6 +450,40 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                                 color: Color(0xFFFF7AB5),
                                 shape: BoxShape.circle,
                               ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      right: 8,
+                      bottom: 8,
+                      child: Row(
+                        children: [
+                          if (widget.onMoveUp != null)
+                            _cardActionButton(
+                              icon: Icons.keyboard_arrow_up_rounded,
+                              tooltip: 'Move earlier',
+                              onPressed: widget.onMoveUp!,
+                            ),
+                          if (widget.onMoveDown != null)
+                            _cardActionButton(
+                              icon: Icons.keyboard_arrow_down_rounded,
+                              tooltip: 'Move later',
+                              onPressed: widget.onMoveDown!,
+                            ),
+                          const Spacer(),
+                          if (widget.onMarkWrong != null)
+                            _cardActionButton(
+                              icon: Icons.thumb_down_alt_outlined,
+                              tooltip: 'Mark wrong',
+                              onPressed: widget.onMarkWrong!,
+                            ),
+                          if (widget.onRemove != null)
+                            _cardActionButton(
+                              icon: Icons.close_rounded,
+                              tooltip: 'Remove',
+                              onPressed: widget.onRemove!,
                             ),
                         ],
                       ),
@@ -451,6 +548,39 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        if (t.phaseLabel != null)
+                          Flexible(
+                            child: _infoChip(t.phaseLabel!, AppTheme.cyan),
+                          ),
+                        if (t.confidence != null) ...[
+                          const SizedBox(width: 5),
+                          _infoChip(
+                            '${(t.confidence! * 100).round()}%',
+                            AppTheme.lime,
+                          ),
+                        ],
+                        if (t.localMatch) ...[
+                          const SizedBox(width: 5),
+                          _infoChip('Local', AppTheme.amber),
+                        ],
+                      ],
+                    ),
+                    if (t.reasons.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                        t.reasons.first,
+                        style: const TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 9.5,
+                          height: 1.2,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                     if (t.bpm > 0 || t.key.isNotEmpty) ...[
                       const SizedBox(height: 5),
                       Row(
@@ -487,6 +617,15 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
                         ],
                       ),
                     ],
+                    const SizedBox(height: 7),
+                    PlatformPlayActions.fromUrls(
+                      spotifyUrl: t.spotifyUrl,
+                      appleUrl: t.appleUrl,
+                      youtubeUrl: t.youtubeUrl,
+                      soundchartsUrl: t.soundchartsUrl,
+                      compact: true,
+                      maxLinks: 3,
+                    ),
                   ],
                 ),
               ),
@@ -496,6 +635,49 @@ class _PlatformResultCardState extends State<_PlatformResultCard> {
       ),
     );
   }
+}
+
+Widget _cardActionButton({
+  required IconData icon,
+  required String tooltip,
+  required VoidCallback onPressed,
+}) {
+  return Tooltip(
+    message: tooltip,
+    child: Padding(
+      padding: const EdgeInsets.only(right: 4),
+      child: Material(
+        color: Colors.black.withValues(alpha: 0.56),
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(6),
+          onTap: onPressed,
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: Icon(icon, size: 15, color: Colors.white),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+Widget _infoChip(String text, Color color) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(5),
+      border: Border.all(color: color.withValues(alpha: 0.26)),
+    ),
+    child: Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w800),
+    ),
+  );
 }
 
 class _PlaylistTrackCard extends StatefulWidget {
@@ -626,6 +808,15 @@ class _PlaylistTrackCardState extends State<_PlaylistTrackCard> {
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    PlatformPlayActions.fromUrls(
+                      spotifyUrl: t.spotifyUrl,
+                      appleUrl: t.appleUrl,
+                      youtubeUrl: t.youtubeUrl,
+                      soundchartsUrl: t.soundchartsUrl,
+                      compact: true,
+                      maxLinks: 3,
                     ),
                   ],
                 ),

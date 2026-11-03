@@ -15,6 +15,7 @@ KEYCHAIN_PROFILE="${APPLE_NOTARY_PROFILE:-}"
 APPLE_ID="${APPLE_ID:-}"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
 APPLE_APP_SPECIFIC_PASSWORD="${APPLE_APP_SPECIFIC_PASSWORD:-}"
+SIGNING_ENTITLEMENTS_PATH=""
 
 die() {
   echo "error: $*" >&2
@@ -106,25 +107,77 @@ submit_for_notarization() {
     --wait
 }
 
+assert_release_entitlements() {
+  local app_path="$1"
+
+  if codesign -d --entitlements :- "$app_path" 2>/dev/null \
+    | grep -q '<key>com.apple.security.get-task-allow</key>'; then
+    die "release app was signed with com.apple.security.get-task-allow; check macOS Release signing settings"
+  fi
+
+  if codesign -d --entitlements :- "$app_path" 2>/dev/null \
+    | grep -q '\$('; then
+    die "release app contains unexpanded entitlement build settings; check APPLE_TEAM_ID and entitlements"
+  fi
+}
+
+prepare_entitlements() {
+  local source_path="$1"
+  local output_path
+
+  output_path="$(mktemp "${TMPDIR:-/tmp}/viberadar-entitlements.XXXXXX")"
+  sed -e "s|\\\$(AppIdentifierPrefix)|${APPLE_TEAM_ID}.|g" "$source_path" > "$output_path"
+
+  if grep -q '\$(AppIdentifierPrefix)' "$output_path"; then
+    die "release entitlements contain \$(AppIdentifierPrefix); set APPLE_TEAM_ID so codesign receives a concrete keychain group"
+  fi
+  if grep -q '\$(' "$output_path"; then
+    die "release entitlements contain another unexpanded build setting"
+  fi
+
+  printf '%s\n' "$output_path"
+}
+
 create_dmg() {
   local app_path="$1"
   local dmg_path="$2"
   local volume_name="$3"
   local bundle_name="$4"
   local staging_dir
+  local rw_dmg_path
+  local mount_dir
+  local app_size_mb
+  local dmg_size_mb
 
   staging_dir="$(mktemp -d "${TMPDIR:-/tmp}/viberadar-dmg.XXXXXX")"
+  rw_dmg_path="${staging_dir}/rw.dmg"
+  mount_dir="${staging_dir}/mount"
+  mkdir -p "$mount_dir"
 
   rm -f "$dmg_path"
-  ditto "$app_path" "${staging_dir}/${bundle_name}"
-  ln -s /Applications "${staging_dir}/Applications"
+  app_size_mb="$(du -sm "$app_path" | awk '{print $1}')"
+  dmg_size_mb=$((app_size_mb + 100))
 
   hdiutil create \
+    -size "${dmg_size_mb}m" \
+    -fs HFS+ \
     -volname "$volume_name" \
-    -srcfolder "$staging_dir" \
     -ov \
+    "$rw_dmg_path"
+
+  hdiutil attach "$rw_dmg_path" \
+    -mountpoint "$mount_dir" \
+    -nobrowse \
+    -quiet
+
+  ditto "$app_path" "${mount_dir}/${bundle_name}"
+  ln -s /Applications "${mount_dir}/Applications"
+  hdiutil detach "$mount_dir" -quiet
+
+  hdiutil convert "$rw_dmg_path" \
     -format UDZO \
-    "$dmg_path"
+    -ov \
+    -o "$dmg_path"
 
   rm -rf "$staging_dir"
 }
@@ -150,6 +203,11 @@ fi
 APP_PATH="$(discover_app_path)"
 [[ -d "$APP_PATH" ]] || die "expected app bundle at $APP_PATH"
 [[ -f "$ENTITLEMENTS_PATH" ]] || die "missing entitlements file at $ENTITLEMENTS_PATH"
+if grep -q '\$(AppIdentifierPrefix)' "$ENTITLEMENTS_PATH" && [[ -z "$APPLE_TEAM_ID" ]]; then
+  die "set APPLE_TEAM_ID before signing; ${ENTITLEMENTS_PATH} uses \$(AppIdentifierPrefix)"
+fi
+SIGNING_ENTITLEMENTS_PATH="$(prepare_entitlements "$ENTITLEMENTS_PATH")"
+trap '[[ -z "$SIGNING_ENTITLEMENTS_PATH" ]] || rm -f "$SIGNING_ENTITLEMENTS_PATH"' EXIT
 
 APP_DISPLAY_NAME="$(bundle_display_name "$APP_PATH")"
 if [[ -n "$APP_DISPLAY_NAME_OVERRIDE" ]]; then
@@ -173,11 +231,12 @@ codesign \
   --sign "$IDENTITY" \
   --options runtime \
   --timestamp \
-  --entitlements "$ENTITLEMENTS_PATH" \
+  --entitlements "$SIGNING_ENTITLEMENTS_PATH" \
   "$APP_PATH"
 
 echo "Verifying signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+assert_release_entitlements "$APP_PATH"
 
 echo "Packaging for notarization..."
 ditto -c -k --keepParent "$APP_PATH" "$NOTARY_ZIP_PATH"
@@ -187,6 +246,7 @@ submit_for_notarization "$NOTARY_ZIP_PATH"
 
 echo "Stapling notarization ticket..."
 xcrun stapler staple "$APP_PATH"
+xcrun stapler validate "$APP_PATH"
 
 echo "Running Gatekeeper check..."
 spctl -a -vvv --type exec "$APP_PATH"
@@ -197,6 +257,10 @@ ditto -c -k --keepParent "$APP_PATH" "$FINAL_ZIP_PATH"
 
 echo "Creating DMG..."
 create_dmg "$APP_PATH" "$FINAL_DMG_PATH" "$DMG_VOLUME_NAME" "${APP_DISPLAY_NAME}.app"
+
+echo "Signing DMG..."
+codesign --force --sign "$IDENTITY" --timestamp "$FINAL_DMG_PATH"
+codesign --verify --verbose=2 "$FINAL_DMG_PATH"
 
 echo "Submitting DMG for notarization..."
 submit_for_notarization "$FINAL_DMG_PATH"

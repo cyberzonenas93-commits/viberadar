@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../providers/setlist_provider.dart';
+import '../../services/pairing_service.dart';
 import 'connect_computer_sheet.dart';
 import 'mobile_settings_sheet.dart';
 import 'setlist_editor.dart';
@@ -33,7 +34,10 @@ class SetlistsTab extends ConsumerWidget {
           // Account / settings icon — always visible.
           IconButton(
             key: const Key('account_settings_button'),
-            icon: const Icon(Icons.account_circle, color: AppTheme.textSecondary),
+            icon: const Icon(
+              Icons.account_circle,
+              color: AppTheme.textSecondary,
+            ),
             tooltip: 'Account & settings',
             onPressed: () => showModalBottomSheet<void>(
               context: context,
@@ -66,8 +70,7 @@ class SetlistsTab extends ConsumerWidget {
             Padding(
               padding: const EdgeInsets.only(right: 8),
               child: GestureDetector(
-                onTap: () =>
-                    ref.read(pairedComputerProvider.notifier).set(null),
+                onTap: () => _confirmDisconnect(context, ref, paired),
                 child: Chip(
                   key: const Key('paired_computer_chip'),
                   label: Text(
@@ -79,7 +82,9 @@ class SetlistsTab extends ConsumerWidget {
                     ),
                   ),
                   backgroundColor: AppTheme.surface,
-                  side: BorderSide(color: AppTheme.lime.withValues(alpha: 0.35)),
+                  side: BorderSide(
+                    color: AppTheme.lime.withValues(alpha: 0.35),
+                  ),
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
@@ -87,10 +92,12 @@ class SetlistsTab extends ConsumerWidget {
             ),
         ],
       ),
-      body: setlists.isEmpty ? _buildEmpty() : _buildList(context, ref, setlists),
+      body: setlists.isEmpty
+          ? _buildEmpty()
+          : _buildList(context, ref, setlists),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: AppTheme.violet,
-        foregroundColor: Colors.white,
+        backgroundColor: AppTheme.cyan,
+        foregroundColor: AppTheme.ink,
         onPressed: () => _showCreateDialog(context, ref),
         child: const Icon(Icons.add),
       ),
@@ -98,14 +105,37 @@ class SetlistsTab extends ConsumerWidget {
   }
 
   Widget _buildEmpty() {
-    return const Center(
-      child: Text(
-        'No setlists yet — tap ＋ to create one.',
-        style: TextStyle(
-          color: AppTheme.textSecondary,
-          fontSize: 15,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.queue_music_rounded,
+              color: AppTheme.textTertiary,
+              size: 52,
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Plan your set here',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Tap ＋ to start a setlist, then add tracks from Trending, '
+              'Search or AI. Signed in on your Mac too? It syncs automatically — '
+              'open it there to export to Serato, Rekordbox, VirtualDJ & more.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
         ),
-        textAlign: TextAlign.center,
       ),
     );
   }
@@ -122,7 +152,7 @@ class SetlistsTab extends ConsumerWidget {
       ),
       itemBuilder: (context, index) {
         final crate = crates[index];
-        final trackCount = crate.trackIds.length;
+        final trackCount = crate.tracks.length;
         final subtitle =
             '$trackCount tracks  ·  ${formatUpdatedAt(crate.updatedAt)}';
 
@@ -130,9 +160,7 @@ class SetlistsTab extends ConsumerWidget {
           onTap: () {
             Navigator.push<void>(
               context,
-              MaterialPageRoute(
-                builder: (_) => SetlistEditor(crate: crate),
-              ),
+              MaterialPageRoute(builder: (_) => SetlistEditor(crate: crate)),
             );
           },
           child: ListTile(
@@ -163,14 +191,68 @@ class SetlistsTab extends ConsumerWidget {
     );
   }
 
+  Future<void> _confirmDisconnect(
+    BuildContext context,
+    WidgetRef ref,
+    PairedComputer paired,
+  ) async {
+    final disconnect = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.panelRaised,
+        title: const Text(
+          'Disconnect computer?',
+          style: TextStyle(color: AppTheme.textPrimary),
+        ),
+        content: Text(
+          'Stop sending setlists to ${paired.desktopName}. '
+          'Your setlists stay on your account and still sync when signed in.',
+          style: const TextStyle(color: AppTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: AppTheme.textSecondary),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text(
+              'Disconnect',
+              style: TextStyle(color: AppTheme.pink),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (disconnect == true) {
+      try {
+        await ref.read(pairingServiceProvider).revokePairing(paired.pairingId);
+      } catch (_) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Disconnected locally. Cloud revoke failed.'),
+            ),
+          );
+        }
+      }
+      ref.read(pairedComputerProvider.notifier).set(null);
+    }
+  }
+
   Future<void> _showCreateDialog(BuildContext context, WidgetRef ref) async {
     await showDialog<void>(
       context: context,
-      builder: (ctx) => _CreateSetlistDialog(onSubmit: (name) {
-        if (name.isNotEmpty) {
-          ref.read(setlistActionsProvider).create(name);
-        }
-      }),
+      builder: (ctx) => _CreateSetlistDialog(
+        onSubmit: (name) {
+          if (name.isNotEmpty) {
+            ref.read(setlistActionsProvider).create(name);
+          }
+        },
+      ),
     );
   }
 }
@@ -238,8 +320,8 @@ class _CreateSetlistDialogState extends State<_CreateSetlistDialog> {
         ),
         ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppTheme.violet,
-            foregroundColor: Colors.white,
+            backgroundColor: AppTheme.cyan,
+            foregroundColor: AppTheme.ink,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),

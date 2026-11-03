@@ -100,11 +100,13 @@ class GlassCard extends StatelessWidget {
     );
 
     if (blur) {
-      surface = ClipRRect(
-        borderRadius: BorderRadius.circular(radius),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-          child: surface,
+      surface = RepaintBoundary(
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+            child: surface,
+          ),
         ),
       );
     }
@@ -151,13 +153,15 @@ class GradientButton extends StatelessWidget {
         child: Container(
           height: height,
           width: expand ? double.infinity : null,
-          padding: EdgeInsets.symmetric(horizontal: expand ? AppTheme.s4 : AppTheme.s6),
+          padding: EdgeInsets.symmetric(
+            horizontal: expand ? AppTheme.s4 : AppTheme.s6,
+          ),
           alignment: Alignment.center,
           decoration: BoxDecoration(
             gradient: gradient ?? AppTheme.ctaGradient,
             borderRadius: BorderRadius.circular(AppTheme.rMd),
             boxShadow: glow && enabled
-                ? AppTheme.glow(AppTheme.violet, blur: 24, opacity: 0.45)
+                ? AppTheme.glow(AppTheme.cyan, blur: 22, opacity: 0.24)
                 : null,
           ),
           child: Row(
@@ -289,7 +293,7 @@ class SectionHeader extends StatelessWidget {
               color: AppTheme.textPrimary,
               fontWeight: FontWeight.w800,
               fontSize: 16,
-              letterSpacing: -0.2,
+              letterSpacing: 0,
             ),
           ),
         ),
@@ -367,6 +371,79 @@ class _RadarLoaderState extends State<RadarLoader>
   }
 }
 
+class InlineLoadingText extends StatelessWidget {
+  const InlineLoadingText({
+    super.key,
+    required this.label,
+    this.color = AppTheme.cyan,
+    this.style,
+    this.indicatorSize = 12,
+  });
+
+  final String label;
+  final Color color;
+  final TextStyle? style;
+  final double indicatorSize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: indicatorSize,
+          height: indicatorSize,
+          child: CircularProgressIndicator(color: color, strokeWidth: 2),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style:
+                style ??
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class TrackCountText extends StatelessWidget {
+  const TrackCountText({
+    super.key,
+    required this.isLoading,
+    required this.count,
+    required this.labelBuilder,
+    this.loadingLabel = 'Loading tracks…',
+    this.style,
+    this.color = AppTheme.cyan,
+  });
+
+  final bool isLoading;
+  final int count;
+  final String Function(int count) labelBuilder;
+  final String loadingLabel;
+  final TextStyle? style;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return InlineLoadingText(label: loadingLabel, color: color, style: style);
+    }
+
+    return Text(
+      labelBuilder(count),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: style,
+    );
+  }
+}
+
 class _RadarLoaderPainter extends CustomPainter {
   _RadarLoaderPainter(this.t);
 
@@ -387,8 +464,11 @@ class _RadarLoaderPainter extends CustomPainter {
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 1.5
-          ..color = Color.lerp(AppTheme.cyan, AppTheme.violet, p)!
-              .withValues(alpha: 0.5 * fade),
+          ..color = Color.lerp(
+            AppTheme.cyan,
+            AppTheme.violet,
+            p,
+          )!.withValues(alpha: 0.5 * fade),
       );
     }
   }
@@ -462,10 +542,7 @@ class VibeEmptyState extends StatelessWidget {
             ],
             if (actionLabel != null && onAction != null) ...[
               const SizedBox(height: AppTheme.s6),
-              GradientButton(
-                label: actionLabel!,
-                onPressed: onAction,
-              ),
+              GradientButton(label: actionLabel!, onPressed: onAction),
             ],
           ],
         ),
@@ -573,7 +650,8 @@ class _RadarHeroPainter extends CustomPainter {
     for (var i = 0; i <= 80; i++) {
       final tt = i / 80;
       final x = tt * size.width;
-      final y = size.height * 0.72 +
+      final y =
+          size.height * 0.72 +
           math.sin(tt * math.pi * 5 + drift) * 8 +
           math.sin(tt * math.pi * 13 + drift * 1.6) * 3;
       i == 0 ? path.moveTo(x, y) : path.lineTo(x, y);

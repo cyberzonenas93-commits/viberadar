@@ -41,8 +41,37 @@ jobs:
           fi
 
       - name: Run tests
-        run: flutter test --reporter expanded
+        run: flutter test --coverage --reporter expanded
 
-      - name: Dart format check (advisory)
-        continue-on-error: true
+      - name: Dart format check
         run: dart format --output=none --set-exit-if-changed lib test
+
+      - name: Build Flutter Web
+        run: flutter build web --release --no-wasm-dry-run
+
+  functions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install Functions dependencies
+        run: npm --prefix functions ci
+
+      - name: Build Functions
+        run: npm --prefix functions run build
+
+      - name: Test Functions
+        run: npm --prefix functions test
+
+      - name: Audit Functions dependencies
+        run: npm --prefix functions audit --audit-level=moderate

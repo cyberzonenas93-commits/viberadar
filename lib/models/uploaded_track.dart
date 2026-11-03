@@ -19,6 +19,7 @@ class UploadedTrack {
     this.durationSeconds = 0,
     this.tags = const [],
     this.uploaderPhotoUrl = '',
+    this.moderationStatus = 'pending',
   });
 
   final String id;
@@ -38,26 +39,29 @@ class UploadedTrack {
   final double durationSeconds;
   final List<String> tags;
   final String uploaderPhotoUrl;
+  final String moderationStatus;
 
-  factory UploadedTrack.fromMap(Map<String, dynamic> map, {String? id}) => UploadedTrack(
-    id: id ?? map['id'] as String? ?? '',
-    title: map['title'] as String? ?? 'Untitled',
-    artistName: map['artistName'] as String? ?? 'Unknown',
-    audioUrl: map['audioUrl'] as String? ?? '',
-    artworkUrl: map['artworkUrl'] as String? ?? '',
-    genre: map['genre'] as String? ?? '',
-    bpm: (map['bpm'] as num?)?.toInt() ?? 0,
-    keySignature: map['keySignature'] as String? ?? '',
-    uploadedBy: map['uploadedBy'] as String? ?? '',
-    uploaderName: map['uploaderName'] as String? ?? '',
-    uploadedAt: _parseDate(map['uploadedAt']),
-    likeCount: (map['likeCount'] as num?)?.toInt() ?? 0,
-    playCount: (map['playCount'] as num?)?.toInt() ?? 0,
-    featured: map['featured'] as bool? ?? false,
-    durationSeconds: (map['durationSeconds'] as num?)?.toDouble() ?? 0,
-    tags: (map['tags'] as List?)?.cast<String>() ?? const [],
-    uploaderPhotoUrl: map['uploaderPhotoUrl'] as String? ?? '',
-  );
+  factory UploadedTrack.fromMap(Map<String, dynamic> map, {String? id}) =>
+      UploadedTrack(
+        id: id ?? map['id'] as String? ?? '',
+        title: map['title'] as String? ?? 'Untitled',
+        artistName: map['artistName'] as String? ?? 'Unknown',
+        audioUrl: map['audioUrl'] as String? ?? '',
+        artworkUrl: map['artworkUrl'] as String? ?? '',
+        genre: map['genre'] as String? ?? '',
+        bpm: (map['bpm'] as num?)?.toInt() ?? 0,
+        keySignature: map['keySignature'] as String? ?? '',
+        uploadedBy: map['uploadedBy'] as String? ?? '',
+        uploaderName: map['uploaderName'] as String? ?? '',
+        uploadedAt: _parseDate(map['uploadedAt']),
+        likeCount: (map['likeCount'] as num?)?.toInt() ?? 0,
+        playCount: (map['playCount'] as num?)?.toInt() ?? 0,
+        featured: map['featured'] as bool? ?? false,
+        durationSeconds: (map['durationSeconds'] as num?)?.toDouble() ?? 0,
+        tags: (map['tags'] as List?)?.cast<String>() ?? const [],
+        uploaderPhotoUrl: map['uploaderPhotoUrl'] as String? ?? '',
+        moderationStatus: map['moderationStatus'] as String? ?? 'pending',
+      );
 
   Map<String, dynamic> toMap() => {
     'title': title,
@@ -76,6 +80,7 @@ class UploadedTrack {
     'durationSeconds': durationSeconds,
     'tags': tags,
     'uploaderPhotoUrl': uploaderPhotoUrl,
+    'moderationStatus': moderationStatus,
   };
 
   String get durationFormatted {

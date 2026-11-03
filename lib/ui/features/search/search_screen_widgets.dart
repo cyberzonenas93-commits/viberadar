@@ -3,8 +3,13 @@ part of 'search_screen.dart';
 // ── Discovery (no query) ──────────────────────────────────────────────────────
 
 class _DiscoveryView extends StatelessWidget {
-  const _DiscoveryView({required this.topTracks, required this.onGenreSearch});
+  const _DiscoveryView({
+    required this.topTracks,
+    required this.loadingTracks,
+    required this.onGenreSearch,
+  });
   final List<Track> topTracks;
+  final bool loadingTracks;
   final void Function(String genre) onGenreSearch;
 
   @override
@@ -14,10 +19,9 @@ class _DiscoveryView extends StatelessWidget {
       ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     final recentTop = recent.take(12).toList();
 
-    final genres = <String>[
-      'Afrobeats', 'Amapiano', 'Hip-Hop', 'House', 'R&B',
-      'Dancehall', 'Drill', 'Dance', 'Latin', 'UK Garage',
-    ];
+    final genres = kCanonicalMusicGenres
+        .where((genre) => genre != 'Other')
+        .toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
@@ -29,41 +33,53 @@ class _DiscoveryView extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: genres
-                .map((g) => _GenreChip(
-                      label: g,
-                      onTap: () => onGenreSearch(g),
-                    ))
+                .map((g) => _GenreChip(label: g, onTap: () => onGenreSearch(g)))
                 .toList(),
           ),
           const SizedBox(height: 32),
 
-          if (trending.isNotEmpty) ...[
-            _SectionLabel(icon: Icons.local_fire_department_rounded, color: AppTheme.amber, label: 'Trending Now'),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 200,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: trending.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (ctx, i) => _FirestoreTrackCard(track: trending[i], rank: i + 1),
+          if (loadingTracks) ...[
+            const SizedBox(height: 80),
+            const Center(child: RadarLoader(message: 'Loading tracks…')),
+          ] else ...[
+            if (trending.isNotEmpty) ...[
+              _SectionLabel(
+                icon: Icons.local_fire_department_rounded,
+                color: AppTheme.amber,
+                label: 'Trending Now',
               ),
-            ),
-            const SizedBox(height: 32),
-          ],
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 200,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: trending.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (ctx, i) =>
+                      _FirestoreTrackCard(track: trending[i], rank: i + 1),
+                ),
+              ),
+              const SizedBox(height: 32),
+            ],
 
-          if (recentTop.isNotEmpty) ...[
-            _SectionLabel(icon: Icons.new_releases_rounded, color: AppTheme.cyan, label: 'Hot This Week'),
-            const SizedBox(height: 12),
-            SizedBox(
-              height: 200,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                itemCount: recentTop.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 12),
-                itemBuilder: (ctx, i) => _FirestoreTrackCard(track: recentTop[i]),
+            if (recentTop.isNotEmpty) ...[
+              _SectionLabel(
+                icon: Icons.new_releases_rounded,
+                color: AppTheme.cyan,
+                label: 'Hot This Week',
               ),
-            ),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 200,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: recentTop.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 12),
+                  itemBuilder: (ctx, i) =>
+                      _FirestoreTrackCard(track: recentTop[i]),
+                ),
+              ),
+            ],
           ],
         ],
       ),
@@ -72,7 +88,11 @@ class _DiscoveryView extends StatelessWidget {
 }
 
 class _SectionLabel extends StatelessWidget {
-  const _SectionLabel({required this.icon, required this.color, required this.label});
+  const _SectionLabel({
+    required this.icon,
+    required this.color,
+    required this.label,
+  });
   final IconData icon;
   final Color color;
   final String label;
@@ -83,7 +103,14 @@ class _SectionLabel extends StatelessWidget {
       children: [
         Icon(icon, color: color, size: 18),
         const SizedBox(width: 8),
-        Text(label, style: TextStyle(color: color, fontWeight: FontWeight.w700, fontSize: 15)),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.w700,
+            fontSize: 15,
+          ),
+        ),
       ],
     );
   }
@@ -108,7 +135,14 @@ class _GenreChip extends StatelessWidget {
             borderRadius: BorderRadius.circular(20),
             border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
           ),
-          child: Text(label, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ),
     );
@@ -136,30 +170,50 @@ class _FirestoreTrackCard extends StatelessWidget {
             child: Stack(
               children: [
                 ClipRRect(
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(11),
+                  ),
                   child: SizedBox.expand(
                     child: track.artworkUrl.isNotEmpty
-                        ? CachedNetworkImage(imageUrl: track.artworkUrl, fit: BoxFit.cover)
+                        ? CachedNetworkImage(
+                            imageUrl: track.artworkUrl,
+                            fit: BoxFit.cover,
+                          )
                         : Container(
                             decoration: const BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [AppTheme.edge, AppTheme.panelRaised],
                               ),
                             ),
-                            child: const Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: 28),
+                            child: const Icon(
+                              Icons.music_note_rounded,
+                              color: AppTheme.textTertiary,
+                              size: 28,
+                            ),
                           ),
                   ),
                 ),
                 if (rank != null)
                   Positioned(
-                    top: 6, left: 6,
+                    top: 6,
+                    left: 6,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(5),
                       ),
-                      child: Text('#$rank', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700)),
+                      child: Text(
+                        '#$rank',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -170,9 +224,26 @@ class _FirestoreTrackCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(track.title, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  track.title,
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
                 const SizedBox(height: 2),
-                Text(track.artist, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(
+                  track.artist,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
@@ -185,7 +256,11 @@ class _FirestoreTrackCard extends StatelessWidget {
 // ── Shared small widgets ──────────────────────────────────────────────────────
 
 class _SourceBadge extends StatelessWidget {
-  const _SourceBadge({required this.label, required this.color, required this.tooltip});
+  const _SourceBadge({
+    required this.label,
+    required this.color,
+    required this.tooltip,
+  });
   final String label;
   final Color color;
   final String tooltip;
@@ -195,14 +270,22 @@ class _SourceBadge extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Container(
-        width: 20, height: 20,
+        width: 20,
+        height: 20,
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(4),
           border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
         child: Center(
-          child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800)),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
         ),
       ),
     );
@@ -210,7 +293,12 @@ class _SourceBadge extends StatelessWidget {
 }
 
 class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.icon, required this.color, required this.tooltip, required this.onTap});
+  const _ActionButton({
+    required this.icon,
+    required this.color,
+    required this.tooltip,
+    required this.onTap,
+  });
   final IconData icon;
   final Color color;
   final String tooltip;
@@ -223,7 +311,8 @@ class _ActionButton extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          width: 31, height: 31,
+          width: 31,
+          height: 31,
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
@@ -236,7 +325,7 @@ class _ActionButton extends StatelessWidget {
   }
 }
 
-// ── Add to crate dialog ───────────────────────────────────────────────────────
+// ── Add to setlist dialog ─────────────────────────────────────────────────────
 
 class _AddToCrateDialog extends StatefulWidget {
   const _AddToCrateDialog({
@@ -278,31 +367,73 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
           children: [
             Row(
               children: [
-                const Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 20),
+                const Icon(
+                  Icons.playlist_add_rounded,
+                  color: AppTheme.violet,
+                  size: 20,
+                ),
                 const SizedBox(width: 8),
-                const Text('Add to Crate', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w700, fontSize: 15)),
+                const Text(
+                  'Add to Setlist',
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 4),
-            Text('"${widget.trackTitle}"', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
+            Text(
+              '"${widget.trackTitle}"',
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
             const SizedBox(height: 16),
 
             if (widget.crates.isEmpty && !_creatingNew)
-              const Text('No crates yet — create one below.', style: TextStyle(color: AppTheme.textTertiary, fontSize: 12)),
+              const Text(
+                'No setlists yet — create one below.',
+                style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
+              ),
 
             if (widget.crates.isNotEmpty && !_creatingNew) ...[
-              const Text('EXISTING CRATES', style: TextStyle(color: AppTheme.textTertiary, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2)),
+              const Text(
+                'EXISTING SETLISTS',
+                style: TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1.2,
+                ),
+              ),
               const SizedBox(height: 8),
-              ...widget.crates.map((name) => ListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.folder_rounded, color: AppTheme.violet, size: 18),
-                title: Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
-                onTap: () {
-                  widget.onAddToCrate(name);
-                  Navigator.of(context).pop();
-                },
-              )),
+              ...widget.crates.map(
+                (name) => ListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(
+                    Icons.folder_rounded,
+                    color: AppTheme.violet,
+                    size: 18,
+                  ),
+                  title: Text(
+                    name,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                    ),
+                  ),
+                  onTap: () {
+                    widget.onAddToCrate(name);
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ),
               const Divider(color: AppTheme.edge, height: 20),
             ],
 
@@ -310,16 +441,31 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
               TextField(
                 controller: _newCrateCtrl,
                 autofocus: true,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                ),
                 decoration: InputDecoration(
-                  hintText: 'New crate name...',
+                  hintText: 'New setlist name...',
                   hintStyle: const TextStyle(color: AppTheme.textTertiary),
                   filled: true,
                   fillColor: AppTheme.panelRaised,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.edge)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: AppTheme.edge)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: AppTheme.violet)),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppTheme.edge),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide(color: AppTheme.edge),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: const BorderSide(color: AppTheme.violet),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                 ),
                 onSubmitted: (v) {
                   if (v.trim().isEmpty) return;
@@ -333,7 +479,10 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
                 children: [
                   TextButton(
                     onPressed: () => setState(() => _creatingNew = false),
-                    child: const Text('Back', style: TextStyle(color: AppTheme.textSecondary)),
+                    child: const Text(
+                      'Back',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    ),
                   ),
                   const SizedBox(width: 8),
                   FilledButton(
@@ -343,7 +492,9 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
                       widget.onNewCrate(name);
                       Navigator.of(context).pop();
                     },
-                    style: FilledButton.styleFrom(backgroundColor: AppTheme.violet),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.violet,
+                    ),
                     child: const Text('Create & Add'),
                   ),
                 ],
@@ -351,8 +502,15 @@ class _AddToCrateDialogState extends State<_AddToCrateDialog> {
             ] else
               TextButton.icon(
                 onPressed: () => setState(() => _creatingNew = true),
-                icon: const Icon(Icons.add_rounded, size: 16, color: AppTheme.violet),
-                label: const Text('New Crate', style: TextStyle(color: AppTheme.violet)),
+                icon: const Icon(
+                  Icons.add_rounded,
+                  size: 16,
+                  color: AppTheme.violet,
+                ),
+                label: const Text(
+                  'New Setlist',
+                  style: TextStyle(color: AppTheme.violet),
+                ),
               ),
           ],
         ),

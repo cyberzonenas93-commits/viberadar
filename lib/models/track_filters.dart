@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/config/music_genres.dart';
 import 'track.dart';
 
 class TrackFilters {
@@ -42,7 +43,7 @@ class TrackFilters {
     return (bpm == 0 || (bpm >= bpmRange.start && bpm <= bpmRange.end)) &&
         track.energyLevel >= energyRange.start &&
         track.energyLevel <= energyRange.end &&
-        (genre == 'All' || track.genre == genre) &&
+        genreMatches(track.genre, genre) &&
         (vibe == 'All' || track.vibe == vibe) &&
         (region == 'Global' || regionScore > 0);
   }

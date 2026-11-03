@@ -22,7 +22,14 @@ class _MetaPill extends StatelessWidget {
         children: [
           Icon(icon, color: Colors.white70, size: 12),
           const SizedBox(width: 4),
-          Text(text, style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w500)),
+          Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
@@ -43,14 +50,15 @@ class _ArtPlaceholder extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            AppTheme.edge,
-            AppTheme.panelRaised,
-          ],
+          colors: [AppTheme.edge, AppTheme.panelRaised],
         ),
         borderRadius: rounded ? BorderRadius.circular(size * 0.16) : null,
       ),
-      child: Icon(Icons.music_note_rounded, color: AppTheme.textTertiary, size: size * 0.35),
+      child: Icon(
+        Icons.music_note_rounded,
+        color: AppTheme.textTertiary,
+        size: size * 0.35,
+      ),
     );
   }
 }
@@ -63,32 +71,47 @@ class _ScoreBar extends StatelessWidget {
   final String label;
   final double value;
   final Color color;
-  const _ScoreBar({required this.label, required this.value, required this.color});
+  const _ScoreBar({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w700)),
+        Text(
+          label,
+          style: TextStyle(
+            color: color,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const SizedBox(width: 4),
         SizedBox(
           width: 48,
           height: 4,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
-            child: Stack(children: [
-              Container(color: color.withValues(alpha: 0.15)),
-              FractionallySizedBox(
-                widthFactor: value.clamp(0.0, 1.0),
-                child: Container(color: color),
-              ),
-            ]),
+            child: Stack(
+              children: [
+                Container(color: color.withValues(alpha: 0.15)),
+                FractionallySizedBox(
+                  widthFactor: value.clamp(0.0, 1.0),
+                  child: Container(color: color),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(width: 4),
-        Text('${(value * 100).toInt()}',
-            style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 9)),
+        Text(
+          '${(value * 100).toInt()}',
+          style: TextStyle(color: color.withValues(alpha: 0.8), fontSize: 9),
+        ),
       ],
     );
   }
@@ -99,7 +122,11 @@ class _ScoreBadge extends StatelessWidget {
   final double value;
   final Color color;
   final String prefix;
-  const _ScoreBadge({required this.value, required this.color, required this.prefix});
+  const _ScoreBadge({
+    required this.value,
+    required this.color,
+    required this.prefix,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -111,7 +138,11 @@ class _ScoreBadge extends StatelessWidget {
       ),
       child: Text(
         '$prefix${(value * 100).toInt()}',
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 9),
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w800,
+          fontSize: 9,
+        ),
       ),
     );
   }
@@ -125,7 +156,11 @@ class _ToggleChip extends StatelessWidget {
   final String label;
   final bool active;
   final VoidCallback onTap;
-  const _ToggleChip({required this.label, required this.active, required this.onTap});
+  const _ToggleChip({
+    required this.label,
+    required this.active,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -135,23 +170,35 @@ class _ToggleChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: active ? AppTheme.violet.withValues(alpha: 0.2) : AppTheme.panelRaised,
+          color: active
+              ? AppTheme.violet.withValues(alpha: 0.2)
+              : AppTheme.panelRaised,
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
-            color: active ? AppTheme.violet.withValues(alpha: 0.6) : AppTheme.edge.withValues(alpha: 0.5),
+            color: active
+                ? AppTheme.violet.withValues(alpha: 0.6)
+                : AppTheme.edge.withValues(alpha: 0.5),
           ),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.timeline_rounded,
-              size: 13, color: active ? AppTheme.violet : AppTheme.textSecondary),
-          const SizedBox(width: 5),
-          Text(label,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.timeline_rounded,
+              size: 13,
+              color: active ? AppTheme.violet : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
               style: TextStyle(
                 color: active ? AppTheme.violet : AppTheme.textSecondary,
                 fontSize: 11,
                 fontWeight: active ? FontWeight.w600 : FontWeight.normal,
-              )),
-        ]),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -182,7 +229,10 @@ class _FilterChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label: ', style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+          Text(
+            '$label: ',
+            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+          ),
           DropdownButtonHideUnderline(
             child: DropdownButton<String>(
               value: options.contains(value) ? value : options.first,
@@ -208,7 +258,14 @@ class _FilterChip extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 
 String? _bestUrl(Track track) {
-  const priority = ['spotify', 'apple', 'youtube', 'deezer', 'soundcloud', 'audius'];
+  const priority = [
+    'spotify',
+    'apple',
+    'youtube',
+    'deezer',
+    'soundcloud',
+    'audius',
+  ];
   for (final key in priority) {
     final url = track.platformLinks[key];
     if (url != null && url.isNotEmpty) return url;

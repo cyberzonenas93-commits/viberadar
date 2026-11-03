@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/config/music_genres.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/artist_model.dart';
@@ -13,7 +14,9 @@ import '../../../services/artist_service.dart';
 import '../../../services/set_builder_service.dart';
 import '../../../services/apple_music_artist_service.dart';
 import '../../../services/spotify_artist_service.dart';
+import '../../widgets/platform_play_actions.dart';
 import '../../widgets/source_badges.dart';
+import '../../widgets/ui_kit.dart';
 
 part 'artists_screen_grid.dart';
 part 'artists_screen_cards.dart';
@@ -115,15 +118,30 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
 
   Future<void> _searchSpotify(String query) async {
     if (query.length < 2) {
-      if (mounted) setState(() { _spotifyResults = []; _searchingSpotify = false; });
+      if (mounted) {
+        setState(() {
+          _spotifyResults = [];
+          _searchingSpotify = false;
+        });
+      }
       return;
     }
     if (mounted) setState(() => _searchingSpotify = true);
     try {
       final results = await _spotifyService.searchArtistsByName(query);
-      if (mounted) setState(() { _spotifyResults = results; _searchingSpotify = false; });
+      if (mounted) {
+        setState(() {
+          _spotifyResults = results;
+          _searchingSpotify = false;
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() { _spotifyResults = []; _searchingSpotify = false; });
+      if (mounted) {
+        setState(() {
+          _spotifyResults = [];
+          _searchingSpotify = false;
+        });
+      }
     }
   }
 
@@ -131,6 +149,7 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
   Widget build(BuildContext context) {
     final tracksAsync = ref.watch(trackStreamProvider);
     final allTracks = tracksAsync.value ?? const <Track>[];
+    final loadingTracks = tracksAsync.isLoading && allTracks.isEmpty;
 
     // Build artist list
     final artistMap = <String, List<Track>>{};
@@ -147,10 +166,17 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
         genreCounts[t.genre] = (genreCounts[t.genre] ?? 0) + 1;
       }
       final topGenre = genreCounts.entries.isNotEmpty
-          ? (genreCounts.entries.toList()..sort((a, b) => b.value.compareTo(a.value))).first.key
-          : 'Open Format';
-      final avgScore = tracks.map((t) => t.trendScore).reduce((a, b) => a + b) / tracks.length;
-      final bestTrack = tracks.reduce((a, b) => a.trendScore > b.trendScore ? a : b);
+          ? (genreCounts.entries.toList()
+                  ..sort((a, b) => b.value.compareTo(a.value)))
+                .first
+                .key
+          : 'Other';
+      final avgScore =
+          tracks.map((t) => t.trendScore).reduce((a, b) => a + b) /
+          tracks.length;
+      final bestTrack = tracks.reduce(
+        (a, b) => a.trendScore > b.trendScore ? a : b,
+      );
 
       return _ArtistInfo(
         name: entry.key,
@@ -158,19 +184,23 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
         topRegion: bestTrack.leadRegion,
         avgTrendScore: avgScore,
         trackCount: tracks.length,
-        artworkUrl: bestTrack.artworkUrl.isNotEmpty ? bestTrack.artworkUrl : null,
+        artworkUrl: bestTrack.artworkUrl.isNotEmpty
+            ? bestTrack.artworkUrl
+            : null,
         spotifyUrl: bestTrack.platformLinks['spotify'],
         tracks: tracks..sort((a, b) => b.trendScore.compareTo(a.trendScore)),
       );
     }).toList();
 
     // Default: alphabetical order
-    artists.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    artists.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
 
     // Get unique genres/regions for filter dropdowns
-    final genreSet = {for (final a in artists) a.topGenre}.toList()..sort();
+    final genreSet = artists.map((artist) => artist.topGenre);
     final regionSet = {for (final a in artists) a.topRegion}.toList()..sort();
-    final allGenres = ['All', ...genreSet];
+    final allGenres = mergedGenreOptions(genreSet);
     final allRegions = ['All', ...regionSet];
 
     // Apply filters
@@ -182,11 +212,14 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
     }
     if (_search.isNotEmpty) {
       final q = _search.toLowerCase();
-      artists = artists.where((a) =>
-        a.name.toLowerCase().contains(q) ||
-        a.topGenre.toLowerCase().contains(q) ||
-        a.topRegion.toLowerCase().contains(q)
-      ).toList();
+      artists = artists
+          .where(
+            (a) =>
+                a.name.toLowerCase().contains(q) ||
+                a.topGenre.toLowerCase().contains(q) ||
+                a.topRegion.toLowerCase().contains(q),
+          )
+          .toList();
     }
 
     // If an artist is opened, show the detail child screen
@@ -211,6 +244,7 @@ class _ArtistsScreenState extends ConsumerState<ArtistsScreen> {
       allRegions: allRegions,
       spotifyResults: _spotifyResults,
       searchingSpotify: _searchingSpotify,
+      loadingTracks: loadingTracks,
       onSearchChanged: (v) {
         setState(() => _search = v);
         _searchSpotify(v);

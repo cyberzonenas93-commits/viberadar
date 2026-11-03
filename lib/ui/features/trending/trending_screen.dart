@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/config/music_genres.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../widgets/source_badges.dart';
 import '../../widgets/track_action_menu.dart';
+import '../../widgets/ui_kit.dart';
 
 class TrendingScreen extends ConsumerStatefulWidget {
   const TrendingScreen({super.key});
@@ -17,39 +19,38 @@ class TrendingScreen extends ConsumerStatefulWidget {
 }
 
 class _TrendingScreenState extends ConsumerState<TrendingScreen> {
-  String _selectedGenre = 'All';
-  String _selectedRegion = 'All';
   String _search = '';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final liveAccess = ref.watch(liveCatalogAccessProvider);
+    final selectedRegion = ref.watch(selectedRegionProvider) ?? 'Global';
+    final selectedRegionLabel = selectedRegion == 'Global'
+        ? 'All'
+        : selectedRegion;
+    final selectedGenre = ref.watch(selectedGenreProvider);
+    final selectedGenreLabel = selectedGenre ?? 'All';
     final tracksAsync = ref.watch(trackStreamProvider);
     final allTracks = tracksAsync.value ?? const <Track>[];
+    final loadingTracks = tracksAsync.isLoading && allTracks.isEmpty;
 
-    final genres = [
+    final genres = ref.watch(availableGenresProvider);
+    final regions = <String>[
       'All',
-      ...{
-        for (final t in allTracks)
-          if (t.genre.isNotEmpty) t.genre,
-      }.toList()..sort(),
-    ];
-    final regions = [
-      'All',
-      ...{
-        for (final t in allTracks)
-          if (t.leadRegion.isNotEmpty) t.leadRegion,
-      }.toList()..sort(),
+      ...ref.watch(availableRegionsProvider).where((r) => r != 'Global'),
     ];
 
     var filtered = allTracks.toList();
-    if (_selectedGenre != 'All') {
-      filtered = filtered.where((t) => t.genre == _selectedGenre).toList();
+    if (!liveAccess.hasLiveAccess && selectedGenre != null) {
+      filtered = filtered
+          .where((t) => genreMatches(t.genre, selectedGenre))
+          .toList();
     }
-    if (_selectedRegion != 'All') {
+    if (!liveAccess.hasLiveAccess && selectedRegionLabel != 'All') {
       // Keep tracks that have ANY score in the selected region, sort by regional score
       filtered = filtered
-          .where((t) => (t.regionScores[_selectedRegion] ?? 0) > 0)
+          .where((t) => (t.regionScores[selectedRegionLabel] ?? 0) > 0)
           .toList();
     }
     if (_search.isNotEmpty) {
@@ -63,15 +64,18 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
           .toList();
     }
     // Sort by regional score when a region is selected, otherwise by global trendScore
-    if (_selectedRegion != 'All') {
+    if (selectedRegionLabel != 'All') {
       filtered.sort(
-        (a, b) => (b.regionScores[_selectedRegion] ?? 0).compareTo(
-          a.regionScores[_selectedRegion] ?? 0,
+        (a, b) => (b.regionScores[selectedRegionLabel] ?? 0).compareTo(
+          a.regionScores[selectedRegionLabel] ?? 0,
         ),
       );
     } else {
       filtered.sort((a, b) => b.trendScore.compareTo(a.trendScore));
     }
+
+    final compact = MediaQuery.sizeOf(context).width < 700;
+    final horizontalPadding = compact ? 16.0 : 28.0;
 
     return Stack(
       children: [
@@ -80,14 +84,22 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
           children: [
             // Header
             Padding(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Column(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                compact ? 16 : 24,
+                horizontalPadding,
+                0,
+              ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final chipWidth = compact
+                      ? (constraints.maxWidth - 8) / 2
+                      : 152.0;
+                  final titleCluster = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(
                             Icons.local_fire_department_rounded,
@@ -104,100 +116,92 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        '${filtered.length} tracks sorted by momentum score',
+                      TrackCountText(
+                        isLoading: loadingTracks,
+                        count: filtered.length,
+                        labelBuilder: (count) =>
+                            '$count tracks sorted by momentum score',
                         style: const TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 12,
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(width: 16),
-                  // Filter cluster — shrinks the search field first, then the
-                  // chips, as the window narrows. Previously this used
-                  // `Spacer() + Flexible(Row(mainAxisSize.min, [chips, 160px search]))`
-                  // which would overflow when chips + 160px exceeded Flexible's
-                  // remaining width (~48px overflow at ~1100px window).
-                  Expanded(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                  );
+
+                  final filterCluster = Wrap(
+                    alignment: compact
+                        ? WrapAlignment.start
+                        : WrapAlignment.end,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      SizedBox(
+                        width: chipWidth,
+                        child: _FilterChip(
+                          label: 'Genre',
+                          value: selectedGenreLabel,
+                          options: genres,
+                          onChanged: (v) {
+                            // Drive genre-aware live retrieval, not just a
+                            // post-fetch filter over a genre-blind feed.
+                            ref
+                                .read(selectedGenreProvider.notifier)
+                                .set(v == 'All' ? null : v);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: chipWidth,
+                        child: _FilterChip(
+                          label: 'Region',
+                          value: selectedRegionLabel,
+                          options: regions,
+                          onChanged: (v) {
+                            ref
+                                .read(selectedRegionProvider.notifier)
+                                .set(v == 'All' ? 'Global' : v);
+                          },
+                        ),
+                      ),
+                      SizedBox(
+                        width: compact ? constraints.maxWidth : 160,
+                        child: _TrendingSearchField(
+                          onChanged: (v) => setState(() => _search = v),
+                        ),
+                      ),
+                    ],
+                  );
+
+                  if (compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Flexible(
-                          child: _FilterChip(
-                            label: 'Genre',
-                            value: _selectedGenre,
-                            options: genres,
-                            onChanged: (v) =>
-                                setState(() => _selectedGenre = v),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: _FilterChip(
-                            label: 'Region',
-                            value: _selectedRegion,
-                            options: regions,
-                            onChanged: (v) =>
-                                setState(() => _selectedRegion = v),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Flexible(
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 160),
-                            child: TextField(
-                              onChanged: (v) => setState(() => _search = v),
-                              style: const TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 12,
-                              ),
-                              decoration: InputDecoration(
-                                hintText: 'Search...',
-                                hintStyle: const TextStyle(
-                                  color: AppTheme.textTertiary,
-                                ),
-                                prefixIcon: const Icon(
-                                  Icons.search_rounded,
-                                  size: 16,
-                                  color: AppTheme.textTertiary,
-                                ),
-                                isDense: true,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 8,
-                                ),
-                                filled: true,
-                                fillColor: AppTheme.panelRaised,
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppTheme.rMd,
-                                  ),
-                                  borderSide: const BorderSide(
-                                    color: AppTheme.hairline,
-                                  ),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(
-                                    AppTheme.rMd,
-                                  ),
-                                  borderSide: const BorderSide(
-                                    color: AppTheme.hairline,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
+                        titleCluster,
+                        const SizedBox(height: 12),
+                        filterCluster,
                       ],
-                    ),
-                  ),
-                ],
+                    );
+                  }
+
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(child: titleCluster),
+                      const SizedBox(width: 16),
+                      Expanded(flex: 2, child: filterCluster),
+                    ],
+                  );
+                },
               ),
             ),
             const SizedBox(height: 16),
             // Grid
             Expanded(
-              child: filtered.isEmpty
+              child: loadingTracks
+                  ? const Center(child: RadarLoader(message: 'Loading tracks…'))
+                  : filtered.isEmpty
                   ? const Center(
                       child: Text(
                         'No tracks match your filters',
@@ -205,14 +209,18 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
                       ),
                     )
                   : GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 0.72,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
+                      padding: EdgeInsets.fromLTRB(
+                        horizontalPadding,
+                        0,
+                        horizontalPadding,
+                        28,
+                      ),
+                      gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: compact ? 180 : 200,
+                        childAspectRatio: compact ? 0.68 : 0.72,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                      ),
                       itemCount: filtered.length,
                       itemBuilder: (context, i) =>
                           _TrackCard(track: filtered[i], rank: i + 1, ref: ref),
@@ -220,7 +228,7 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
             ),
           ],
         ),
-        // Floating "Add All to Crate" button
+        // Floating "Add All to Setlist" button
         if (filtered.isNotEmpty)
           Positioned(
             bottom: 20,
@@ -228,10 +236,13 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
             child: FloatingActionButton.extended(
               heroTag: 'trending_crate',
               onPressed: () => showBulkAddToCrate(context, ref, filtered),
-              backgroundColor: AppTheme.violet,
+              backgroundColor: AppTheme.cyan,
+              foregroundColor: AppTheme.ink,
               icon: const Icon(Icons.playlist_add_rounded, size: 18),
               label: Text(
-                'Add ${filtered.length} to Crate',
+                compact
+                    ? 'Add ${filtered.length}'
+                    : 'Add ${filtered.length} to Setlist',
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -240,6 +251,41 @@ class _TrendingScreenState extends ConsumerState<TrendingScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+class _TrendingSearchField extends StatelessWidget {
+  const _TrendingSearchField({required this.onChanged});
+
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      onChanged: onChanged,
+      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+      decoration: InputDecoration(
+        hintText: 'Search...',
+        hintStyle: const TextStyle(color: AppTheme.textTertiary),
+        prefixIcon: const Icon(
+          Icons.search_rounded,
+          size: 16,
+          color: AppTheme.textTertiary,
+        ),
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        filled: true,
+        fillColor: AppTheme.panelRaised,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.rMd),
+          borderSide: const BorderSide(color: AppTheme.hairline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppTheme.rMd),
+          borderSide: const BorderSide(color: AppTheme.hairline),
+        ),
+      ),
     );
   }
 }
@@ -441,7 +487,10 @@ class _TrackCardState extends State<_TrackCard> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 6),
-                    Row(
+                    Wrap(
+                      spacing: 5,
+                      runSpacing: 5,
+                      crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
                           formatBpm(t.bpm),
@@ -450,7 +499,6 @@ class _TrackCardState extends State<_TrackCard> {
                             fontSize: 10,
                           ),
                         ),
-                        const SizedBox(width: 4),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 5,
@@ -469,7 +517,6 @@ class _TrackCardState extends State<_TrackCard> {
                             ),
                           ),
                         ),
-                        const Spacer(),
                         SourceBadges(
                           sources: t.effectiveSources,
                           compact: true,
@@ -531,24 +578,45 @@ class _FilterChip extends StatelessWidget {
         border: Border.all(color: AppTheme.hairline),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            '$label: ',
+            '$label:',
             style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
           ),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: options.contains(value) ? value : options.first,
-              isDense: true,
-              dropdownColor: AppTheme.panelRaised,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
-              items: options
-                  .map((o) => DropdownMenuItem(value: o, child: Text(o)))
-                  .toList(),
-              onChanged: (v) {
-                if (v != null) onChanged(v);
-              },
+          const SizedBox(width: 4),
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: options.contains(value) ? value : options.first,
+                isDense: true,
+                isExpanded: true,
+                dropdownColor: AppTheme.panelRaised,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 12,
+                ),
+                selectedItemBuilder: (context) => options
+                    .map(
+                      (o) =>
+                          Text(o, maxLines: 1, overflow: TextOverflow.ellipsis),
+                    )
+                    .toList(),
+                items: options
+                    .map(
+                      (o) => DropdownMenuItem(
+                        value: o,
+                        child: Text(
+                          o,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (v) {
+                  if (v != null) onChanged(v);
+                },
+              ),
             ),
           ),
         ],

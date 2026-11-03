@@ -30,7 +30,11 @@ class VirtualDjExportService {
     bool useTidal = false,
     Map<String, String> tidalIds = const {},
   }) async {
-    final exportTracks = _resolve(matches, useTidal: useTidal, tidalIds: tidalIds);
+    final exportTracks = _resolve(
+      matches,
+      useTidal: useTidal,
+      tidalIds: tidalIds,
+    );
 
     // Build XML
     final xml = buildVdjFolderXml(exportTracks);
@@ -51,7 +55,8 @@ class VirtualDjExportService {
       outputPath: outputPath,
       djRoot: vdjRoot,
       tracks: exportTracks,
-      warning: 'Refresh the VirtualDJ browser or restart the app to see your'
+      warning:
+          'Refresh the VirtualDJ browser or restart the app to see your'
           ' new playlist.',
     );
   }

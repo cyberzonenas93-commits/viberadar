@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/platform.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../models/library_track.dart';
@@ -12,6 +13,7 @@ import '../../../providers/library_provider.dart';
 import '../../../services/export_service.dart';
 import '../../../services/local_match_service.dart';
 import '../../../models/dj_export_models.dart';
+import '../../widgets/desktop_only_notice.dart';
 import 'dj_export_sheet.dart';
 import '../cues/cue_preview_sheet.dart';
 
@@ -79,8 +81,12 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
       );
     }
 
-    // 3. Encoded search-screen ID `spotify:Title:Artist` or `apple:Title:Artist`.
-    if (id.startsWith('spotify:') || id.startsWith('apple:')) {
+    // 3. Encoded ID `spotify:Title:Artist`, `apple:Title:Artist` (search screen)
+    //    or `vibe:Title:Artist` (a setlist synced from the phone) — match the
+    //    title/artist against the local library.
+    if (id.startsWith('spotify:') ||
+        id.startsWith('apple:') ||
+        id.startsWith('vibe:')) {
       final parts = id.split(':');
       if (parts.length >= 3) {
         return _matchByTitleArtist(parts[1], parts[2], library);
@@ -149,6 +155,8 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
   // ── Physical crate helpers ───────────────────────────────────────────────
 
   Future<void> _pickDestDir() async {
+    if (isMobileForm) return;
+
     final result = await FilePicker.platform.getDirectoryPath(
       dialogTitle: 'Choose destination folder for physical crate',
     );
@@ -216,6 +224,15 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (isMobileForm) {
+      return const DesktopOnlyNotice(
+        icon: Icons.ios_share_rounded,
+        title: 'DJ exports live on desktop',
+        message:
+            'Use the Mac app to write Rekordbox, Serato, Traktor, VirtualDJ, M3U, and physical crate exports where VibeRadar can access your local files.',
+      );
+    }
+
     final crateState = ref.watch(crateProvider);
     final lib = ref.watch(libraryProvider);
     final theme = Theme.of(context);
@@ -231,439 +248,348 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
         .toList();
 
     // Phones can't fit the two-pane layout; below this width we show a single
-    // pane (crate list, or the selected crate's detail with a back button).
+    // pane (setlist list, or the selected setlist's detail with a back button).
     final narrow = MediaQuery.sizeOf(context).width < 640;
 
-    // ── Left: crate list panel ─────────────────────────────────────────────
+    // ── Left: setlist list panel ───────────────────────────────────────────
     final crateListColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Crates',
-                      style: theme.textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _crateNameController,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 12,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'New crate name…',
-                              hintStyle: const TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 12,
-                              ),
-                              filled: true,
-                              fillColor: AppTheme.panelRaised,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.edge,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(6),
-                                borderSide: const BorderSide(
-                                  color: AppTheme.edge,
-                                ),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 8,
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        GestureDetector(
-                          onTap: () {
-                            final name = _crateNameController.text.trim();
-                            if (name.isNotEmpty) {
-                              ref
-                                  .read(crateProvider.notifier)
-                                  .createCrate(name);
-                              setState(() => _selectedCrate = name);
-                              _crateNameController.clear();
-                            }
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: AppTheme.violet,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Icon(
-                              Icons.add,
-                              color: AppTheme.textPrimary,
-                              size: 16,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Setlists',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: Colors.white,
                 ),
               ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: crateState.crateNames.isEmpty
-                    ? const Center(
-                        child: Text(
-                          'No crates yet',
-                          style: TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 12,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: crateState.crateNames.length,
-                        itemBuilder: (ctx, i) {
-                          final name = crateState.crateNames[i];
-                          final count = crateState.crates[name]?.length ?? 0;
-                          final selected = _selectedCrate == name;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedCrate = name;
-                                _physResult = null;
-                              });
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.fromLTRB(12, 2, 12, 2),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 10,
-                              ),
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? AppTheme.violet.withValues(alpha: 0.15)
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: selected
-                                      ? AppTheme.violet.withValues(alpha: 0.5)
-                                      : Colors.transparent,
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.playlist_play_rounded,
-                                    color: AppTheme.violet,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: Text(
-                                      name,
-                                      style: const TextStyle(
-                                        color: AppTheme.textPrimary,
-                                        fontSize: 13,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    '$count',
-                                    style: const TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 11,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () {
-                                      ref
-                                          .read(crateProvider.notifier)
-                                          .deleteCrate(name);
-                                      if (_selectedCrate == name) {
-                                        setState(() => _selectedCrate = null);
-                                      }
-                                    },
-                                    child: const Icon(
-                                      Icons.close,
-                                      color: AppTheme.textSecondary,
-                                      size: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _crateNameController,
+                      style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12,
                       ),
+                      decoration: InputDecoration(
+                        hintText: 'New setlist name…',
+                        hintStyle: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
+                        filled: true,
+                        fillColor: AppTheme.panelRaised,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: AppTheme.edge),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: const BorderSide(color: AppTheme.edge),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  GestureDetector(
+                    onTap: () {
+                      final name = _crateNameController.text.trim();
+                      if (name.isNotEmpty) {
+                        ref.read(crateProvider.notifier).createCrate(name);
+                        setState(() => _selectedCrate = name);
+                        _crateNameController.clear();
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.violet,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.add,
+                        color: AppTheme.textPrimary,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
-          );
+          ),
+        ),
+        const SizedBox(height: 12),
+        Expanded(
+          child: crateState.crateNames.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No setlists yet',
+                    style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                )
+              : ListView.builder(
+                  itemCount: crateState.crateNames.length,
+                  itemBuilder: (ctx, i) {
+                    final name = crateState.crateNames[i];
+                    final count = crateState.crates[name]?.length ?? 0;
+                    final selected = _selectedCrate == name;
+                    return GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _selectedCrate = name;
+                          _physResult = null;
+                        });
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.fromLTRB(12, 2, 12, 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: selected
+                              ? AppTheme.violet.withValues(alpha: 0.15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: selected
+                                ? AppTheme.violet.withValues(alpha: 0.5)
+                                : Colors.transparent,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.playlist_play_rounded,
+                              color: AppTheme.violet,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: const TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 13,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            Text(
+                              '$count',
+                              style: const TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            GestureDetector(
+                              onTap: () {
+                                ref
+                                    .read(crateProvider.notifier)
+                                    .deleteCrate(name);
+                                if (_selectedCrate == name) {
+                                  setState(() => _selectedCrate = null);
+                                }
+                              },
+                              child: const Icon(
+                                Icons.close,
+                                color: AppTheme.textSecondary,
+                                size: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
 
-    // ── Right: crate content + export ───────────────────────────────────────
+    // ── Right: setlist content + export ─────────────────────────────────────
     final detailChild = _selectedCrate == null
         ? const Center(
             child: Text(
-              'Select or create a crate',
-              style: TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 14,
-              ),
+              'Select or create a setlist',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
           )
         : Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
-                      child: Row(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _selectedCrate!,
-                                  style: theme.textTheme.titleLarge?.copyWith(
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                Text(
-                                  '${crateLibTracks.length} tracks',
-                                  style: const TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                              ],
+                          Text(
+                            _selectedCrate!,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: Colors.white,
                             ),
                           ),
-                          if (lib.hasLibrary && vibeTracks.isNotEmpty) ...[
-                            GestureDetector(
-                              onTap: _isMatching
-                                  ? null
-                                  : () => unawaited(
-                                      _runMatch(vibeTracks, lib.tracks),
-                                    ),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _matchResults != null
-                                      ? AppTheme.violet.withValues(alpha: 0.15)
-                                      : AppTheme.panelRaised,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(
-                                    color: AppTheme.violet.withValues(
-                                      alpha: 0.4,
+                          Text(
+                            '${crateLibTracks.length} tracks',
+                            style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (lib.hasLibrary && vibeTracks.isNotEmpty) ...[
+                      GestureDetector(
+                        onTap: _isMatching
+                            ? null
+                            : () =>
+                                  unawaited(_runMatch(vibeTracks, lib.tracks)),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _matchResults != null
+                                ? AppTheme.violet.withValues(alpha: 0.15)
+                                : AppTheme.panelRaised,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppTheme.violet.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: _isMatching
+                              ? const SizedBox(
+                                  width: 80,
+                                  height: 16,
+                                  child: Center(
+                                    child: SizedBox(
+                                      width: 12,
+                                      height: 12,
+                                      child: CircularProgressIndicator(
+                                        color: AppTheme.violet,
+                                        strokeWidth: 2,
+                                      ),
                                     ),
                                   ),
-                                ),
-                                child: _isMatching
-                                    ? const SizedBox(
-                                        width: 80,
-                                        height: 16,
-                                        child: Center(
-                                          child: SizedBox(
-                                            width: 12,
-                                            height: 12,
-                                            child: CircularProgressIndicator(
-                                              color: AppTheme.violet,
-                                              strokeWidth: 2,
-                                            ),
-                                          ),
-                                        ),
-                                      )
-                                    : Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(
-                                            Icons.library_music_rounded,
-                                            color: AppTheme.violet,
-                                            size: 13,
-                                          ),
-                                          const SizedBox(width: 6),
-                                          const Text(
-                                            'Match to Library',
-                                            style: TextStyle(
-                                              color: AppTheme.violet,
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                          ],
-                          if (crateLibTracks.isNotEmpty)
-                            Flexible(
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    _ExportBtn(
-                                      label: 'Rekordbox',
-                                      icon: Icons.music_note_rounded,
-                                      loading: _exportingFormat == 'rekordbox',
-                                      onTap: () => unawaited(
-                                        _export('rekordbox', crateLibTracks),
-                                      ),
+                                    Icon(
+                                      Icons.library_music_rounded,
+                                      color: AppTheme.violet,
+                                      size: 13,
                                     ),
-                                    const SizedBox(width: 8),
-                                    _ExportBtn(
-                                      label: 'Serato CSV',
-                                      icon: Icons.table_chart_rounded,
-                                      loading: _exportingFormat == 'serato',
-                                      onTap: () => unawaited(
-                                        _export('serato', crateLibTracks),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _ExportBtn(
-                                      label: 'M3U',
-                                      icon: Icons.queue_music_rounded,
-                                      loading: _exportingFormat == 'm3u',
-                                      onTap: () => unawaited(
-                                        _export('m3u', crateLibTracks),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _ExportBtn(
-                                      label: 'Traktor',
-                                      icon: Icons.folder_zip_rounded,
-                                      loading: _exportingFormat == 'traktor',
-                                      onTap: () => unawaited(
-                                        _export('traktor', crateLibTracks),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _ExportBtn(
-                                      label: 'VirtualDJ',
-                                      icon: Icons.queue_music_rounded,
-                                      loading: false,
-                                      onTap: () => unawaited(
-                                        _exportDj(
-                                          DjTarget.virtualDj,
-                                          _selectedCrate!,
-                                          crateLibTracks,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _ExportBtn(
-                                      label: 'Serato',
-                                      icon: Icons.album_rounded,
-                                      loading: false,
-                                      onTap: () => unawaited(
-                                        _exportDj(
-                                          DjTarget.serato,
-                                          _selectedCrate!,
-                                          crateLibTracks,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    _ExportBtn(
-                                      label: 'Auto Cue Crate',
-                                      icon: Icons.piano_rounded,
-                                      loading: false,
-                                      onTap: () => unawaited(
-                                        showCueCrateSheet(
-                                          context: context,
-                                          ref: ref,
-                                          tracks: crateLibTracks,
-                                          crateName: _selectedCrate,
-                                        ),
+                                    const SizedBox(width: 6),
+                                    const Text(
+                                      'Match to Library',
+                                      style: TextStyle(
+                                        color: AppTheme.violet,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
                                       ),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-                        ],
+                        ),
                       ),
-                    ),
-                    if (_lastExportPath != null)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(28, 10, 28, 0),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.lime.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: AppTheme.lime.withValues(alpha: 0.4),
-                            ),
-                          ),
+                      const SizedBox(width: 8),
+                    ],
+                    if (crateLibTracks.isNotEmpty)
+                      Flexible(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.check_circle_rounded,
-                                color: AppTheme.lime,
-                                size: 14,
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  'Exported: $_lastExportPath',
-                                  style: const TextStyle(
-                                    color: AppTheme.lime,
-                                    fontSize: 11,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
+                              _ExportBtn(
+                                label: 'Rekordbox',
+                                icon: Icons.music_note_rounded,
+                                loading: _exportingFormat == 'rekordbox',
+                                onTap: () => unawaited(
+                                  _export('rekordbox', crateLibTracks),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              InkWell(
-                                onTap: () => Process.run('open', [
-                                  '-R',
-                                  _lastExportPath!,
-                                ]),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                              _ExportBtn(
+                                label: 'Serato CSV',
+                                icon: Icons.table_chart_rounded,
+                                loading: _exportingFormat == 'serato',
+                                onTap: () => unawaited(
+                                  _export('serato', crateLibTracks),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _ExportBtn(
+                                label: 'M3U',
+                                icon: Icons.queue_music_rounded,
+                                loading: _exportingFormat == 'm3u',
+                                onTap: () =>
+                                    unawaited(_export('m3u', crateLibTracks)),
+                              ),
+                              const SizedBox(width: 8),
+                              _ExportBtn(
+                                label: 'Traktor',
+                                icon: Icons.folder_zip_rounded,
+                                loading: _exportingFormat == 'traktor',
+                                onTap: () => unawaited(
+                                  _export('traktor', crateLibTracks),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _ExportBtn(
+                                label: 'VirtualDJ',
+                                icon: Icons.queue_music_rounded,
+                                loading: false,
+                                onTap: () => unawaited(
+                                  _exportDj(
+                                    DjTarget.virtualDj,
+                                    _selectedCrate!,
+                                    crateLibTracks,
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.cyan.withValues(
-                                      alpha: 0.15,
-                                    ),
-                                    borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _ExportBtn(
+                                label: 'Serato',
+                                icon: Icons.album_rounded,
+                                loading: false,
+                                onTap: () => unawaited(
+                                  _exportDj(
+                                    DjTarget.serato,
+                                    _selectedCrate!,
+                                    crateLibTracks,
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.folder_open_rounded,
-                                        color: AppTheme.cyan,
-                                        size: 12,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Show in Finder',
-                                        style: TextStyle(
-                                          color: AppTheme.cyan,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              _ExportBtn(
+                                label: 'Auto Cue Setlist',
+                                icon: Icons.piano_rounded,
+                                loading: false,
+                                onTap: () => unawaited(
+                                  showCueCrateSheet(
+                                    context: context,
+                                    ref: ref,
+                                    tracks: crateLibTracks,
+                                    crateName: _selectedCrate,
                                   ),
                                 ),
                               ),
@@ -671,26 +597,279 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                           ),
                         ),
                       ),
-                    const SizedBox(height: 16),
-                    const Divider(color: AppTheme.edge, height: 1),
+                  ],
+                ),
+              ),
+              if (_lastExportPath != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(28, 10, 28, 0),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.lime.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.lime.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppTheme.lime,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Exported: $_lastExportPath',
+                            style: const TextStyle(
+                              color: AppTheme.lime,
+                              fontSize: 11,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        InkWell(
+                          onTap: () =>
+                              Process.run('open', ['-R', _lastExportPath!]),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.cyan.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.folder_open_rounded,
+                                  color: AppTheme.cyan,
+                                  size: 12,
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Show in Finder',
+                                  style: TextStyle(
+                                    color: AppTheme.cyan,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              const Divider(color: AppTheme.edge, height: 1),
+              Expanded(
+                child: Row(
+                  children: [
+                    // Setlist tracks
                     Expanded(
-                      child: Row(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Crate tracks
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(28, 16, 28, 8),
+                            child: Text(
+                              'Setlist Tracks',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textSecondary,
+                                letterSpacing: 1,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
                           Expanded(
-                            flex: 2,
-                            child: Column(
+                            child: crateLibTracks.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Add tracks from library →',
+                                      style: TextStyle(
+                                        color: AppTheme.textSecondary,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.fromLTRB(
+                                      28,
+                                      0,
+                                      28,
+                                      20,
+                                    ),
+                                    itemCount: crateLibTracks.length,
+                                    itemBuilder: (ctx, i) {
+                                      final t = crateLibTracks[i];
+                                      return Container(
+                                        margin: const EdgeInsets.only(
+                                          bottom: 2,
+                                        ),
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.panel,
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          border: Border.all(
+                                            color: AppTheme.edge,
+                                          ),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 20,
+                                              child: Text(
+                                                '${i + 1}',
+                                                style: const TextStyle(
+                                                  color: AppTheme.textSecondary,
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    t.title,
+                                                    style: const TextStyle(
+                                                      color:
+                                                          AppTheme.textPrimary,
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                  Text(
+                                                    t.artist,
+                                                    style: const TextStyle(
+                                                      color: AppTheme
+                                                          .textSecondary,
+                                                      fontSize: 11,
+                                                    ),
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Text(
+                                              '${formatBpm(t.bpm)} BPM',
+                                              style: const TextStyle(
+                                                color: AppTheme.textSecondary,
+                                                fontSize: 10,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              t.key,
+                                              style: const TextStyle(
+                                                color: AppTheme.cyan,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            InkWell(
+                                              onTap: () => ref
+                                                  .read(crateProvider.notifier)
+                                                  .removeTrackFromCrate(
+                                                    _selectedCrate!,
+                                                    t.id,
+                                                  ),
+                                              child: const Icon(
+                                                Icons
+                                                    .remove_circle_outline_rounded,
+                                                color: AppTheme.pink,
+                                                size: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+
+                          // ── Physical Crate Creation panel ────────────
+                          if (crateLibTracks.isNotEmpty)
+                            _PhysicalCratePanel(
+                              crateType: _physCrateType,
+                              destDir: _physDestDir,
+                              creating: _physCreating,
+                              progress: _physProgress,
+                              result: _physResult,
+                              onTypeChanged: (t) => setState(() {
+                                _physCrateType = t;
+                                _physResult = null;
+                              }),
+                              onPickDir: () => unawaited(_pickDestDir()),
+                              onCreate: () => unawaited(
+                                _createPhysicalCrate(
+                                  _selectedCrate!,
+                                  crateLibTracks,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Container(width: 1, color: AppTheme.edge),
+                    // Right panel: match results OR library picker
+                    Expanded(
+                      flex: 1,
+                      child: _matchResults != null
+                          ? _MatchPanel(
+                              results: _matchResults!,
+                              exportMatchedOnly: _exportMatchedOnly,
+                              expandedId: _expandedMatchId,
+                              onToggleExportFilter: (v) =>
+                                  setState(() => _exportMatchedOnly = v),
+                              onToggleExpand: (id) => setState(
+                                () => _expandedMatchId = _expandedMatchId == id
+                                    ? null
+                                    : id,
+                              ),
+                              onClear: () => setState(() {
+                                _matchResults = null;
+                                _expandedMatchId = null;
+                              }),
+                            )
+                          : Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.fromLTRB(
-                                    28,
                                     16,
-                                    28,
+                                    16,
+                                    16,
                                     8,
                                   ),
                                   child: Text(
-                                    'Crate Tracks',
+                                    'Add from Library',
                                     style: theme.textTheme.bodySmall?.copyWith(
                                       color: AppTheme.textSecondary,
                                       letterSpacing: 1,
@@ -699,332 +878,128 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                                   ),
                                 ),
                                 Expanded(
-                                  child: crateLibTracks.isEmpty
+                                  child: lib.tracks.isEmpty
                                       ? const Center(
                                           child: Text(
-                                            'Add tracks from library →',
+                                            'Scan library first',
                                             style: TextStyle(
                                               color: AppTheme.textSecondary,
-                                              fontSize: 12,
+                                              fontSize: 11,
                                             ),
                                           ),
                                         )
                                       : ListView.builder(
                                           padding: const EdgeInsets.fromLTRB(
-                                            28,
+                                            16,
                                             0,
-                                            28,
+                                            16,
                                             20,
                                           ),
-                                          itemCount: crateLibTracks.length,
+                                          itemCount: lib.tracks.length,
                                           itemBuilder: (ctx, i) {
-                                            final t = crateLibTracks[i];
-                                            return Container(
-                                              margin: const EdgeInsets.only(
-                                                bottom: 2,
-                                              ),
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                    horizontal: 12,
-                                                    vertical: 8,
-                                                  ),
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.panel,
-                                                borderRadius:
-                                                    BorderRadius.circular(8),
-                                                border: Border.all(
-                                                  color: AppTheme.edge,
-                                                ),
-                                              ),
-                                              child: Row(
-                                                children: [
-                                                  SizedBox(
-                                                    width: 20,
-                                                    child: Text(
-                                                      '${i + 1}',
-                                                      style: const TextStyle(
-                                                        color: AppTheme
-                                                            .textSecondary,
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.w700,
-                                                      ),
-                                                      textAlign:
-                                                          TextAlign.center,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 10),
-                                                  Expanded(
-                                                    child: Column(
-                                                      crossAxisAlignment:
-                                                          CrossAxisAlignment
-                                                              .start,
-                                                      children: [
-                                                        Text(
-                                                          t.title,
-                                                          style: const TextStyle(
-                                                            color: AppTheme
-                                                                .textPrimary,
-                                                            fontSize: 12,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                          ),
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                        Text(
-                                                          t.artist,
-                                                          style: const TextStyle(
-                                                            color: AppTheme
-                                                                .textSecondary,
-                                                            fontSize: 11,
-                                                          ),
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    '${formatBpm(t.bpm)} BPM',
-                                                    style: const TextStyle(
-                                                      color: AppTheme
-                                                          .textSecondary,
-                                                      fontSize: 10,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  Text(
-                                                    t.key,
-                                                    style: const TextStyle(
-                                                      color: AppTheme.cyan,
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 8),
-                                                  InkWell(
-                                                    onTap: () => ref
+                                            final t = lib.tracks[i];
+                                            final inCrate = crateTrackIds
+                                                .contains(t.id);
+                                            return GestureDetector(
+                                              onTap: inCrate
+                                                  ? null
+                                                  : () => ref
                                                         .read(
                                                           crateProvider
                                                               .notifier,
                                                         )
-                                                        .removeTrackFromCrate(
+                                                        .addTrackToCrate(
                                                           _selectedCrate!,
                                                           t.id,
                                                         ),
-                                                    child: const Icon(
-                                                      Icons
-                                                          .remove_circle_outline_rounded,
-                                                      color: AppTheme.pink,
-                                                      size: 14,
+                                              child: Container(
+                                                margin: const EdgeInsets.only(
+                                                  bottom: 2,
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 10,
+                                                      vertical: 7,
                                                     ),
-                                                  ),
-                                                ],
+                                                decoration: BoxDecoration(
+                                                  color: inCrate
+                                                      ? AppTheme.violet
+                                                            .withValues(
+                                                              alpha: 0.08,
+                                                            )
+                                                      : AppTheme.panelRaised,
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                ),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Column(
+                                                        crossAxisAlignment:
+                                                            CrossAxisAlignment
+                                                                .start,
+                                                        children: [
+                                                          Text(
+                                                            t.title,
+                                                            style: TextStyle(
+                                                              color: inCrate
+                                                                  ? AppTheme
+                                                                        .violet
+                                                                  : Colors
+                                                                        .white,
+                                                              fontSize: 11,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w500,
+                                                            ),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                          Text(
+                                                            t.artist,
+                                                            style: const TextStyle(
+                                                              color: AppTheme
+                                                                  .textSecondary,
+                                                              fontSize: 10,
+                                                            ),
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    Icon(
+                                                      inCrate
+                                                          ? Icons
+                                                                .check_circle_rounded
+                                                          : Icons
+                                                                .add_circle_outline_rounded,
+                                                      color: inCrate
+                                                          ? AppTheme.violet
+                                                          : AppTheme
+                                                                .textSecondary,
+                                                      size: 12,
+                                                    ),
+                                                  ],
+                                                ),
                                               ),
                                             );
                                           },
                                         ),
                                 ),
-
-                                // ── Physical Crate Creation panel ────────────
-                                if (crateLibTracks.isNotEmpty)
-                                  _PhysicalCratePanel(
-                                    crateType: _physCrateType,
-                                    destDir: _physDestDir,
-                                    creating: _physCreating,
-                                    progress: _physProgress,
-                                    result: _physResult,
-                                    onTypeChanged: (t) => setState(() {
-                                      _physCrateType = t;
-                                      _physResult = null;
-                                    }),
-                                    onPickDir: () => unawaited(_pickDestDir()),
-                                    onCreate: () => unawaited(
-                                      _createPhysicalCrate(
-                                        _selectedCrate!,
-                                        crateLibTracks,
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
-                          ),
-                          Container(width: 1, color: AppTheme.edge),
-                          // Right panel: match results OR library picker
-                          Expanded(
-                            flex: 1,
-                            child: _matchResults != null
-                                ? _MatchPanel(
-                                    results: _matchResults!,
-                                    exportMatchedOnly: _exportMatchedOnly,
-                                    expandedId: _expandedMatchId,
-                                    onToggleExportFilter: (v) =>
-                                        setState(() => _exportMatchedOnly = v),
-                                    onToggleExpand: (id) => setState(
-                                      () => _expandedMatchId =
-                                          _expandedMatchId == id ? null : id,
-                                    ),
-                                    onClear: () => setState(() {
-                                      _matchResults = null;
-                                      _expandedMatchId = null;
-                                    }),
-                                  )
-                                : Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Padding(
-                                        padding: const EdgeInsets.fromLTRB(
-                                          16,
-                                          16,
-                                          16,
-                                          8,
-                                        ),
-                                        child: Text(
-                                          'Add from Library',
-                                          style: theme.textTheme.bodySmall
-                                              ?.copyWith(
-                                                color: AppTheme.textSecondary,
-                                                letterSpacing: 1,
-                                                fontWeight: FontWeight.w700,
-                                              ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: lib.tracks.isEmpty
-                                            ? const Center(
-                                                child: Text(
-                                                  'Scan library first',
-                                                  style: TextStyle(
-                                                    color:
-                                                        AppTheme.textSecondary,
-                                                    fontSize: 11,
-                                                  ),
-                                                ),
-                                              )
-                                            : ListView.builder(
-                                                padding:
-                                                    const EdgeInsets.fromLTRB(
-                                                      16,
-                                                      0,
-                                                      16,
-                                                      20,
-                                                    ),
-                                                itemCount: lib.tracks.length,
-                                                itemBuilder: (ctx, i) {
-                                                  final t = lib.tracks[i];
-                                                  final inCrate = crateTrackIds
-                                                      .contains(t.id);
-                                                  return GestureDetector(
-                                                    onTap: inCrate
-                                                        ? null
-                                                        : () => ref
-                                                              .read(
-                                                                crateProvider
-                                                                    .notifier,
-                                                              )
-                                                              .addTrackToCrate(
-                                                                _selectedCrate!,
-                                                                t.id,
-                                                              ),
-                                                    child: Container(
-                                                      margin:
-                                                          const EdgeInsets.only(
-                                                            bottom: 2,
-                                                          ),
-                                                      padding:
-                                                          const EdgeInsets.symmetric(
-                                                            horizontal: 10,
-                                                            vertical: 7,
-                                                          ),
-                                                      decoration: BoxDecoration(
-                                                        color: inCrate
-                                                            ? AppTheme.violet
-                                                                  .withValues(
-                                                                    alpha: 0.08,
-                                                                  )
-                                                            : AppTheme
-                                                                  .panelRaised,
-                                                        borderRadius:
-                                                            BorderRadius.circular(
-                                                              6,
-                                                            ),
-                                                      ),
-                                                      child: Row(
-                                                        children: [
-                                                          Expanded(
-                                                            child: Column(
-                                                              crossAxisAlignment:
-                                                                  CrossAxisAlignment
-                                                                      .start,
-                                                              children: [
-                                                                Text(
-                                                                  t.title,
-                                                                  style: TextStyle(
-                                                                    color:
-                                                                        inCrate
-                                                                        ? AppTheme
-                                                                              .violet
-                                                                        : Colors
-                                                                              .white,
-                                                                    fontSize:
-                                                                        11,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                  ),
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                ),
-                                                                Text(
-                                                                  t.artist,
-                                                                  style: const TextStyle(
-                                                                    color: AppTheme
-                                                                        .textSecondary,
-                                                                    fontSize:
-                                                                        10,
-                                                                  ),
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                ),
-                                                              ],
-                                                            ),
-                                                          ),
-                                                          Icon(
-                                                            inCrate
-                                                                ? Icons
-                                                                      .check_circle_rounded
-                                                                : Icons
-                                                                      .add_circle_outline_rounded,
-                                                            color: inCrate
-                                                                ? AppTheme
-                                                                      .violet
-                                                                : AppTheme
-                                                                      .textSecondary,
-                                                            size: 12,
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                  );
-                                                },
-                                              ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
-                );
+                ),
+              ),
+            ],
+          );
 
     if (narrow) {
-      // Single-pane: crate list, or the selected crate's detail with a back bar.
+      // Single-pane: setlist list, or the selected setlist's detail with a back bar.
       if (_selectedCrate == null) return crateListColumn;
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1038,7 +1013,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
                     Icons.arrow_back_rounded,
                     color: AppTheme.textPrimary,
                   ),
-                  tooltip: 'Back to crates',
+                  tooltip: 'Back to setlists',
                   onPressed: () => setState(() {
                     _selectedCrate = null;
                     _physResult = null;
@@ -1061,7 +1036,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
       );
     }
 
-    // Two-pane (desktop / wide): fixed crate list + detail.
+    // Two-pane (desktop / wide): fixed setlist list + detail.
     return Row(
       children: [
         Container(
@@ -1118,6 +1093,7 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
     String crateName,
     List<LibraryTrack> libTracks,
   ) async {
+    if (isMobileForm) return;
     if (crateName.isEmpty) return;
     final matches = _buildMatchList(libTracks);
     await showDjExportSheet(
@@ -1130,6 +1106,8 @@ class _ExportsScreenState extends ConsumerState<ExportsScreen> {
   }
 
   Future<void> _export(String format, List<LibraryTrack> tracks) async {
+    if (isMobileForm) return;
+
     setState(() => _exportingFormat = format);
     final crate = ExportCrate(name: _selectedCrate!, tracks: tracks);
     try {

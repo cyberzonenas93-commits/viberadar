@@ -9,19 +9,19 @@ import 'package:google_fonts/google_fonts.dart';
 /// the look stays consistent and is tunable from one place.
 class AppTheme {
   // ---- Base palette ----
-  static const Color ink = Color(0xFF06070B);
-  static const Color panel = Color(0xFF101722);
-  static const Color panelRaised = Color(0xFF172033);
-  static const Color surface = Color(0xFF202A3D);
-  static const Color edge = Color(0xFF2B394E);
+  static const Color ink = Color(0xFF07090D);
+  static const Color panel = Color(0xFF11161C);
+  static const Color panelRaised = Color(0xFF182028);
+  static const Color surface = Color(0xFF202934);
+  static const Color edge = Color(0xFF33404B);
 
   // ---- Accent palette ----
-  static const Color cyan = Color(0xFF24C8DB);
-  static const Color violet = Color(0xFF8B5CF6);
-  static const Color pink = Color(0xFFE84A7D);
-  static const Color lime = Color(0xFF5EE89E);
-  static const Color amber = Color(0xFFF7C948);
-  static const Color orange = Color(0xFFFF8A3D);
+  static const Color cyan = Color(0xFF34D8D0);
+  static const Color violet = Color(0xFF7C8CFF);
+  static const Color pink = Color(0xFFFF6F8F);
+  static const Color lime = Color(0xFF92F2B4);
+  static const Color amber = Color(0xFFFFCA5C);
+  static const Color orange = Color(0xFFFF9B57);
 
   // ---- Text colors ----
   static const Color textPrimary = Color(0xFFF3F6FB);
@@ -49,58 +49,57 @@ class AppTheme {
   static const double s12 = 48;
 
   // ---- Hairline borders (thin luminous edges on dark glass) ----
-  static const Color hairline = Color(0x12FFFFFF); // white @ ~7%
-  static const Color hairlineStrong = Color(0x24FFFFFF); // white @ ~14%
+  static const Color hairline = Color(0x0FFFFFFF); // white @ ~6%
+  static const Color hairlineStrong = Color(0x1FFFFFFF); // white @ ~12%
 
   // ---- Gradients ----
   static const LinearGradient brandGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [cyan, violet, pink, amber],
+    colors: [cyan, lime, amber],
   );
 
-  /// Primary call-to-action gradient — matches the radar logo's cyan→violet.
+  /// Primary call-to-action gradient — signal green for the production UI.
   static const LinearGradient ctaGradient = LinearGradient(
     begin: Alignment.centerLeft,
     end: Alignment.centerRight,
-    colors: [cyan, violet],
+    colors: [cyan, lime],
   );
 
   /// Default frosted surface gradient for cards/sheets.
   static const LinearGradient surfaceGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF18222F), Color(0xFF0E141D)],
+    colors: [Color(0xFF172029), Color(0xFF0C1015)],
   );
 
   /// Backdrop wash for hero sections.
   static const LinearGradient heroGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFF111B2C), ink],
+    colors: [Color(0xFF121D24), ink],
   );
 
   // ---- Shadows & glow ----
   /// Soft ambient drop shadow that lifts surfaces off the near-black canvas.
   static List<BoxShadow> get ambientShadow => const [
-        BoxShadow(color: Color(0x66000000), blurRadius: 24, offset: Offset(0, 10)),
-        BoxShadow(color: Color(0x2B000000), blurRadius: 6, offset: Offset(0, 2)),
-      ];
+    BoxShadow(color: Color(0x40000000), blurRadius: 16, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x22000000), blurRadius: 5, offset: Offset(0, 2)),
+  ];
 
   /// Colored neon glow — use on active/primary elements.
   static List<BoxShadow> glow(
     Color color, {
     double blur = 28,
     double spread = 0,
-    double opacity = 0.38,
-  }) =>
-      [
-        BoxShadow(
-          color: color.withValues(alpha: opacity),
-          blurRadius: blur,
-          spreadRadius: spread,
-        ),
-      ];
+    double opacity = 0.22,
+  }) => [
+    BoxShadow(
+      color: color.withValues(alpha: opacity),
+      blurRadius: blur,
+      spreadRadius: spread,
+    ),
+  ];
 
   static List<BoxShadow> get cyanGlow => glow(cyan);
   static List<BoxShadow> get violetGlow => glow(violet);
@@ -124,9 +123,9 @@ class AppTheme {
               colors: [
                 Color.alphaBlend(
                   tint.withValues(alpha: 0.12),
-                  const Color(0xFF18222F),
+                  const Color(0xFF172029),
                 ),
-                const Color(0xFF0E141D),
+                const Color(0xFF0C1015),
               ],
             ),
       borderRadius: BorderRadius.circular(radius),
@@ -144,13 +143,13 @@ class AppTheme {
     );
 
     final colorScheme = const ColorScheme.dark(
-      primary: violet,
-      secondary: cyan,
-      tertiary: pink,
+      primary: cyan,
+      secondary: lime,
+      tertiary: amber,
       surface: panel,
       surfaceContainerHighest: panelRaised,
       error: Color(0xFFFF6B6B),
-      onPrimary: Colors.white,
+      onPrimary: ink,
       onSurface: textPrimary,
     );
 
@@ -163,27 +162,27 @@ class AppTheme {
       textTheme: baseTextTheme.copyWith(
         displayLarge: baseTextTheme.displayLarge?.copyWith(
           fontWeight: FontWeight.w900,
-          letterSpacing: -1,
+          letterSpacing: 0,
           color: textPrimary,
         ),
         displayMedium: baseTextTheme.displayMedium?.copyWith(
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
           color: textPrimary,
         ),
         displaySmall: baseTextTheme.displaySmall?.copyWith(
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
           color: textPrimary,
         ),
         headlineLarge: baseTextTheme.headlineLarge?.copyWith(
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
           color: textPrimary,
         ),
         headlineMedium: baseTextTheme.headlineMedium?.copyWith(
           fontWeight: FontWeight.w700,
-          letterSpacing: -0.25,
+          letterSpacing: 0,
           color: textPrimary,
         ),
         headlineSmall: baseTextTheme.headlineSmall?.copyWith(
@@ -258,7 +257,7 @@ class AppTheme {
       ),
       chipTheme: ChipThemeData(
         backgroundColor: panelRaised,
-        selectedColor: violet.withValues(alpha: 0.22),
+        selectedColor: cyan.withValues(alpha: 0.18),
         disabledColor: panelRaised.withValues(alpha: 0.75),
         padding: const EdgeInsets.symmetric(horizontal: s3, vertical: s2),
         side: const BorderSide(color: hairline),
@@ -279,7 +278,7 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: panel.withValues(alpha: 0.86),
-        indicatorColor: cyan.withValues(alpha: 0.18),
+        indicatorColor: lime.withValues(alpha: 0.16),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         labelTextStyle: WidgetStateProperty.resolveWith(
@@ -295,15 +294,15 @@ class AppTheme {
         ),
         iconTheme: WidgetStateProperty.resolveWith(
           (states) => IconThemeData(
-            color: states.contains(WidgetState.selected) ? cyan : textSecondary,
+            color: states.contains(WidgetState.selected) ? lime : textSecondary,
             size: 21,
           ),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: violet,
-          foregroundColor: Colors.white,
+          backgroundColor: cyan,
+          foregroundColor: ink,
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: s5, vertical: s3 + 2),
           shape: RoundedRectangleBorder(
@@ -314,8 +313,8 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: violet,
-          foregroundColor: Colors.white,
+          backgroundColor: cyan,
+          foregroundColor: ink,
           padding: const EdgeInsets.symmetric(horizontal: s5, vertical: s3 + 2),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(rMd),
@@ -336,7 +335,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: violet,
+          foregroundColor: cyan,
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
         ),
       ),

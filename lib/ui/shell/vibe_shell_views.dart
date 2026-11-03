@@ -3,6 +3,7 @@ part of 'vibe_shell.dart';
 class _RegionsView extends StatefulWidget {
   const _RegionsView({
     required this.tracks,
+    required this.loadingTracks,
     required this.activeRegion,
     required this.ref,
     required this.onSelectRegion,
@@ -11,6 +12,7 @@ class _RegionsView extends StatefulWidget {
   });
 
   final List<Track> tracks;
+  final bool loadingTracks;
   final String activeRegion;
   final WidgetRef ref;
   final ValueChanged<String> onSelectRegion;
@@ -26,17 +28,16 @@ class _RegionsViewState extends State<_RegionsView> {
 
   @override
   Widget build(BuildContext context) {
-    // Build genre list from tracks
-    final genreSet = <String>{};
-    for (final t in widget.tracks) {
-      if (t.genre.isNotEmpty) genreSet.add(t.genre);
-    }
-    final genres = ['All', ...genreSet.toList()..sort()];
+    final genres = mergedGenreOptions(
+      widget.tracks.map((track) => track.genre),
+    );
 
     // Apply genre filter
     final tracks = _selectedGenre == 'All'
         ? widget.tracks
-        : widget.tracks.where((t) => t.genre == _selectedGenre).toList();
+        : widget.tracks
+              .where((t) => genreMatches(t.genre, _selectedGenre))
+              .toList();
 
     final regionStats = <String, double>{};
     for (final track in tracks) {
@@ -51,9 +52,8 @@ class _RegionsViewState extends State<_RegionsView> {
 
     final regions = regionStats.entries.toList()
       ..sort((a, b) => b.value.compareTo(a.value));
-    final fallbackRegion = regions.firstOrNull?.key ?? 'Global';
-    final selectedRegion = widget.activeRegion == 'Global'
-        ? fallbackRegion
+    final selectedRegion = widget.activeRegion.trim().isEmpty
+        ? 'Global'
         : widget.activeRegion;
     final focusedTracks = [...tracks]
       ..sort(
@@ -62,9 +62,11 @@ class _RegionsViewState extends State<_RegionsView> {
           selectedRegion,
         ).compareTo(regionScoreForTrack(a, selectedRegion)),
       );
-    final regionalLeaders = focusedTracks
-        .where((track) => regionScoreForTrack(track, selectedRegion) > 0)
-        .toList();
+    final regionalLeaders = selectedRegion == 'Global'
+        ? focusedTracks.where((track) => track.trendScore > 0).toList()
+        : focusedTracks
+              .where((track) => regionScoreForTrack(track, selectedRegion) > 0)
+              .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -93,8 +95,11 @@ class _RegionsViewState extends State<_RegionsView> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${regionalLeaders.length} tracks in ${formatRegionLabel(selectedRegion)}${_selectedGenre != 'All' ? ' · $_selectedGenre' : ''}',
+                  TrackCountText(
+                    isLoading: widget.loadingTracks,
+                    count: regionalLeaders.length,
+                    labelBuilder: (count) =>
+                        '$count tracks in ${formatRegionLabel(selectedRegion)}${_selectedGenre != 'All' ? ' · $_selectedGenre' : ''}',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
@@ -181,7 +186,9 @@ class _RegionsViewState extends State<_RegionsView> {
         const SizedBox(height: 16),
         // Artwork grid
         Expanded(
-          child: regionalLeaders.isEmpty
+          child: widget.loadingTracks
+              ? const Center(child: RadarLoader(message: 'Loading tracks…'))
+              : regionalLeaders.isEmpty
               ? const Center(
                   child: Text(
                     'No tracks match this region',
@@ -219,11 +226,13 @@ class _RegionsViewState extends State<_RegionsView> {
 class _GenresView extends StatefulWidget {
   const _GenresView({
     required this.tracks,
+    required this.loadingTracks,
     required this.ref,
     required this.onSelectGenre,
   });
 
   final List<Track> tracks;
+  final bool loadingTracks;
   final WidgetRef ref;
   final ValueChanged<String> onSelectGenre;
 
@@ -238,11 +247,13 @@ class _GenresViewState extends State<_GenresView> {
   Widget build(BuildContext context) {
     final genreStats = <String, List<Track>>{};
     for (final track in widget.tracks) {
-      if (track.genre.isNotEmpty) {
-        genreStats.putIfAbsent(track.genre, () => []).add(track);
+      final genre = canonicalGenre(track.genre);
+      if (isSpecificGenre(genre)) {
+        genreStats.putIfAbsent(genre, () => []).add(track);
       }
     }
-    final genreNames = genreStats.keys.toList()..sort();
+    final genreNames = genreStats.keys.toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     final displayTracks = _selectedGenre == 'All'
         ? ([...widget.tracks]
@@ -277,8 +288,11 @@ class _GenresViewState extends State<_GenresView> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${displayTracks.length} tracks${_selectedGenre != 'All' ? ' in $_selectedGenre' : ' across ${genreNames.length} genres'}',
+                  TrackCountText(
+                    isLoading: widget.loadingTracks,
+                    count: displayTracks.length,
+                    labelBuilder: (count) =>
+                        '$count tracks${_selectedGenre != 'All' ? ' in $_selectedGenre' : ' across ${genreStats.length} active genres'}',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 12,
@@ -324,7 +338,7 @@ class _GenresViewState extends State<_GenresView> {
                     padding: const EdgeInsets.only(right: 8),
                     child: FilterChip(
                       selected: selected,
-                      label: Text('$genre (${genreStats[genre]!.length})'),
+                      label: Text('$genre (${genreStats[genre]?.length ?? 0})'),
                       labelStyle: TextStyle(
                         color: selected ? Colors.white : AppTheme.textSecondary,
                         fontSize: 12,
@@ -347,7 +361,9 @@ class _GenresViewState extends State<_GenresView> {
         const SizedBox(height: 16),
         // Artwork grid
         Expanded(
-          child: displayTracks.isEmpty
+          child: widget.loadingTracks
+              ? const Center(child: RadarLoader(message: 'Loading tracks…'))
+              : displayTracks.isEmpty
               ? const Center(
                   child: Text(
                     'No tracks in this genre',
@@ -381,9 +397,14 @@ class _GenresViewState extends State<_GenresView> {
 }
 
 class _WatchlistView extends StatelessWidget {
-  const _WatchlistView({required this.tracks, required this.onRemove});
+  const _WatchlistView({
+    required this.tracks,
+    required this.loadingTracks,
+    required this.onRemove,
+  });
 
   final List<Track> tracks;
+  final bool loadingTracks;
   final ValueChanged<String> onRemove;
 
   @override
@@ -398,7 +419,9 @@ class _WatchlistView extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         Expanded(
-          child: tracks.isEmpty
+          child: loadingTracks
+              ? const Center(child: RadarLoader(message: 'Loading tracks…'))
+              : tracks.isEmpty
               ? Center(
                   child: Text(
                     'No watched tracks yet. Hit Watch in the detail panel to track movement.',
@@ -514,7 +537,7 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
         const _TitleBlock(
           title: 'Settings & Auth',
           subtitle:
-              'Configure your preferred market and switch between demo mode, email auth, or Google login once Firebase keys are wired in.',
+              'Manage your account, subscription, and preferred DJ market.',
         ),
         const SizedBox(height: 18),
         Expanded(
@@ -578,12 +601,31 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                           icon: const Icon(Icons.logout_rounded),
                           label: const Text('Sign Out'),
                         ),
+                        // App Store Guideline 5.1.1(v): account creation must
+                        // be matched by in-app account deletion on every
+                        // platform, including macOS.
+                        if (widget.session.isAuthenticated &&
+                            !widget.session.isDemo)
+                          OutlinedButton.icon(
+                            key: const Key('desktop_delete_account_button'),
+                            onPressed: _confirmDeleteAccount,
+                            icon: const Icon(Icons.delete_forever, size: 18),
+                            label: const Text('Delete Account'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.red.shade300,
+                              side: BorderSide(
+                                color: Colors.red.shade300.withValues(
+                                  alpha: 0.5,
+                                ),
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Text(
                       widget.session.isDemo
-                          ? 'You are in demo mode right now. Email and Google actions will work once Firebase and platform keys are present.'
+                          ? 'You are in Demo Mode. The catalog uses mock songs only; sign in for real account data and live features.'
                           : 'Signed in as ${widget.session.displayName} via ${widget.session.providerLabel}.',
                       style: Theme.of(
                         context,
@@ -595,12 +637,18 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
               const SizedBox(height: 14),
               _settingsCard(
                 context,
+                title: 'Subscription',
+                child: const SubscriptionSection(),
+              ),
+              const SizedBox(height: 14),
+              _settingsCard(
+                context,
                 title: 'DJ defaults',
                 child: Consumer(
                   builder: (context, ref, _) {
                     final effectiveRegion =
                         ref.watch(selectedRegionProvider) ??
-                            widget.userProfile.preferredRegion;
+                        widget.userProfile.preferredRegion;
                     return DropdownButtonFormField<String>(
                       initialValue: widget.regions.contains(effectiveRegion)
                           ? effectiveRegion
@@ -657,10 +705,9 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
                   children: [
                     Text(
                       'Pair your phone to share setlists wirelessly between the VibeRadar mobile app and this desktop.',
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Colors.white70),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodyMedium?.copyWith(color: Colors.white70),
                     ),
                     const SizedBox(height: 16),
                     FilledButton.icon(
@@ -717,6 +764,65 @@ class _SettingsViewState extends ConsumerState<_SettingsView> {
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text('Auth request failed: $error')));
+      }
+    }
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Account?'),
+        content: const Text(
+          'This permanently deletes your account and all associated data, '
+          'including profile, uploads, setlists, and subscription bindings. '
+          'This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('desktop_confirm_delete_button'),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade600),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await ref.read(accountDeletionServiceProvider).deleteAccount();
+      try {
+        await ref.read(sessionRepositoryProvider).signOut();
+      } catch (_) {
+        // Account is already deleted; a sign-out failure is harmless.
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Your account has been deleted.')),
+        );
+      }
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'unauthenticated'
+                  ? 'Please sign in again, then retry deletion.'
+                  : 'Account deletion failed: ${e.message ?? e.code}',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Account deletion failed: $e')));
       }
     }
   }
