@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +14,10 @@ import 'blocked_users_sheet.dart';
 import 'moderation_actions.dart';
 
 class CommunityScreen extends ConsumerStatefulWidget {
-  const CommunityScreen({super.key});
+  const CommunityScreen({super.key, this.onUploadPressed});
+
+  final VoidCallback? onUploadPressed;
+
   @override
   ConsumerState<CommunityScreen> createState() => _CommunityScreenState();
 }
@@ -55,7 +60,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen>
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
+                  letterSpacing: 0,
                 ),
               ),
               const Spacer(),
@@ -73,9 +78,7 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen>
                 label: 'Upload Track',
                 icon: Icons.cloud_upload_rounded,
                 height: 40,
-                onPressed: () => ref
-                    .read(workspaceControllerProvider.notifier)
-                    .setSection(AppSection.upload),
+                onPressed: _openUpload,
               ),
             ],
           ),
@@ -110,6 +113,17 @@ class _CommunityScreenState extends ConsumerState<CommunityScreen>
       ],
     );
   }
+
+  void _openUpload() {
+    final handler = widget.onUploadPressed;
+    if (handler != null) {
+      handler();
+      return;
+    }
+    ref
+        .read(workspaceControllerProvider.notifier)
+        .setSection(AppSection.upload);
+  }
 }
 
 class _FeedTab extends ConsumerWidget {
@@ -121,10 +135,7 @@ class _FeedTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
       error: (e, _) => Center(
-        child: Text(
-          'Error: $e',
-          style: const TextStyle(color: AppTheme.textTertiary),
-        ),
+        child: _CommunityUnavailable(error: e, source: 'feed'),
       ),
       data: (all) {
         final uploads = all
@@ -157,10 +168,7 @@ class _FeaturedTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
       error: (e, _) => Center(
-        child: Text(
-          'Error: $e',
-          style: const TextStyle(color: AppTheme.textTertiary),
-        ),
+        child: _CommunityUnavailable(error: e, source: 'featured uploads'),
       ),
       data: (all) {
         final uploads = all
@@ -198,10 +206,7 @@ class _TrendingTab extends ConsumerWidget {
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
       error: (e, _) => Center(
-        child: Text(
-          'Error: $e',
-          style: const TextStyle(color: AppTheme.textTertiary),
-        ),
+        child: _CommunityUnavailable(error: e, source: 'trending uploads'),
       ),
       data: (uploads) {
         final sorted =
@@ -251,11 +256,12 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
       onExit: (_) => setState(() => _hovered = false),
       cursor: SystemMouseCursors.click,
       child: GestureDetector(
-        onTap: () {
+        onTap: () async {
           if (t.audioUrl.isNotEmpty) {
-            final uri = Uri.tryParse(t.audioUrl);
+            final url = await resolveCommunityMediaUrl(t.audioUrl);
+            final uri = Uri.tryParse(url);
             if (uri != null) {
-              launchUrl(uri, mode: LaunchMode.externalApplication);
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
             }
           }
         },
@@ -284,11 +290,7 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
                       ),
                       child: SizedBox.expand(
                         child: t.artworkUrl.isNotEmpty
-                            ? CachedNetworkImage(
-                                imageUrl: t.artworkUrl,
-                                fit: BoxFit.cover,
-                                errorWidget: (_, _, _) => _artPlaceholder(),
-                              )
+                            ? _CommunityArtwork(reference: t.artworkUrl)
                             : _artPlaceholder(),
                       ),
                     ),
@@ -483,28 +485,52 @@ class _UploadCardState extends ConsumerState<_UploadCard> {
     );
     if (value != null && context.mounted) _onModerationSelected(context, value);
   }
-
-  Widget _artPlaceholder() => Container(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          AppTheme.pink.withValues(alpha: 0.15),
-          AppTheme.violet.withValues(alpha: 0.08),
-          AppTheme.edge,
-        ],
-      ),
-    ),
-    child: const Center(
-      child: Icon(
-        Icons.headphones_rounded,
-        color: AppTheme.textTertiary,
-        size: 36,
-      ),
-    ),
-  );
 }
+
+class _CommunityArtwork extends StatelessWidget {
+  const _CommunityArtwork({required this.reference});
+
+  final String reference;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<String>(
+      future: resolveCommunityMediaUrl(reference),
+      builder: (context, snapshot) {
+        final url = snapshot.data;
+        if (url == null || url.isEmpty) {
+          return _artPlaceholder();
+        }
+        return CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.cover,
+          errorWidget: (_, _, _) => _artPlaceholder(),
+        );
+      },
+    );
+  }
+}
+
+Widget _artPlaceholder() => Container(
+  decoration: BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        AppTheme.pink.withValues(alpha: 0.15),
+        AppTheme.violet.withValues(alpha: 0.08),
+        AppTheme.edge,
+      ],
+    ),
+  ),
+  child: const Center(
+    child: Icon(
+      Icons.headphones_rounded,
+      color: AppTheme.textTertiary,
+      size: 36,
+    ),
+  ),
+);
 
 List<PopupMenuEntry<String>> _moderationMenuItems() => const [
   PopupMenuItem(
@@ -586,4 +612,25 @@ class _EmptyFeed extends StatelessWidget {
     title: 'No uploads yet',
     subtitle: 'Be the first to share a track with the community!',
   );
+}
+
+class _CommunityUnavailable extends StatelessWidget {
+  const _CommunityUnavailable({required this.error, required this.source});
+
+  final Object error;
+  final String source;
+
+  @override
+  Widget build(BuildContext context) {
+    developer.log(
+      'Failed to load community $source',
+      name: 'CommunityScreen',
+      error: error,
+    );
+    return const VibeEmptyState(
+      icon: Icons.cloud_off_rounded,
+      title: 'No uploads yet',
+      subtitle: 'Check back soon for new community tracks.',
+    );
+  }
 }

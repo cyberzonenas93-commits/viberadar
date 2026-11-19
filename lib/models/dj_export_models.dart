@@ -7,9 +7,9 @@ enum DjTarget { virtualDj, serato }
 
 extension DjTargetLabel on DjTarget {
   String get label => switch (this) {
-        DjTarget.virtualDj => 'VirtualDJ',
-        DjTarget.serato => 'Serato',
-      };
+    DjTarget.virtualDj => 'VirtualDJ',
+    DjTarget.serato => 'Serato',
+  };
 }
 
 // ── Per-track resolution result ───────────────────────────────────────────────
@@ -69,10 +69,10 @@ class DjExportTrack {
   ///   • TIDAL path for [DjTrackResolution.tidalFallback]
   ///   • null for [DjTrackResolution.skipped]
   String? get exportPath => switch (resolution) {
-        DjTrackResolution.localMatch => localFilePath,
-        DjTrackResolution.tidalFallback => tidalPath,
-        DjTrackResolution.skipped => null,
-      };
+    DjTrackResolution.localMatch => localFilePath,
+    DjTrackResolution.tidalFallback => tidalPath,
+    DjTrackResolution.skipped => null,
+  };
 
   bool get isLocalMatch => resolution == DjTrackResolution.localMatch;
   bool get isTidalFallback => resolution == DjTrackResolution.tidalFallback;

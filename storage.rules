@@ -1,23 +1,61 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /uploads/{userId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.size < 50 * 1024 * 1024;
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
     }
-    match /artwork/{userId}/{fileName} {
-      allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024;
+
+    function fullAccount() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function isAudioUpload() {
+      return request.resource.contentType.matches('audio/.*');
+    }
+
+    function isImageUpload() {
+      return request.resource.contentType.matches('image/.*');
+    }
+
+    function approvedUpload(uploadId) {
+      return firestore.get(/databases/(default)/documents/uploads/$(uploadId)).data.moderationStatus == 'approved';
+    }
+
+    match /uploads/{userId}/{uploadId}/{fileName} {
+      allow read: if isOwner(userId) || approvedUpload(uploadId);
+      allow create: if fullAccount()
+        && isOwner(userId)
+        && request.resource.size < 50 * 1024 * 1024
+        && isAudioUpload();
+      allow update: if false;
+      allow delete: if isOwner(userId);
+    }
+    match /uploads/{userId}/{legacyFileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if false;
+    }
+    match /artwork/{userId}/{uploadId}/{fileName} {
+      allow read: if isOwner(userId) || approvedUpload(uploadId);
+      allow create: if fullAccount()
+        && isOwner(userId)
+        && request.resource.size < 5 * 1024 * 1024
+        && isImageUpload();
+      allow update: if false;
+      allow delete: if isOwner(userId);
+    }
+    match /artwork/{userId}/{legacyFileName} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if false;
     }
     match /profile_photos/{userId}/{fileName} {
       allow read: if true;
-      allow write: if request.auth != null
-                   && request.auth.uid == userId
-                   && request.resource.size < 5 * 1024 * 1024;
+      allow create: if fullAccount()
+        && isOwner(userId)
+        && request.resource.size < 5 * 1024 * 1024
+        && isImageUpload();
+      allow update: if false;
+      allow delete: if isOwner(userId);
     }
   }
 }

@@ -94,8 +94,9 @@ void main() {
     });
 
     test('ignores stale persisted root', () async {
-      SharedPreferences.setMockInitialValues(
-          {'vdj_root_path': '/tmp/deleted_vdj_abc'});
+      SharedPreferences.setMockInitialValues({
+        'vdj_root_path': '/tmp/deleted_vdj_abc',
+      });
       svc = DjRootDetectionService();
       final result = await svc.resolveVirtualDjRoot();
       expect(result, isNot(equals('/tmp/deleted_vdj_abc')));

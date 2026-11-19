@@ -50,16 +50,30 @@ class LibraryTrack {
   }
 
   String get fileSizeFormatted {
-    if (fileSizeBytes < 1024 * 1024) return '${(fileSizeBytes / 1024).toStringAsFixed(0)} KB';
+    if (fileSizeBytes < 1024 * 1024) {
+      return '${(fileSizeBytes / 1024).toStringAsFixed(0)} KB';
+    }
     return '${(fileSizeBytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   LibraryTrack copyWith({String? md5Hash, String? artworkUrl}) => LibraryTrack(
-    id: id, filePath: filePath, fileName: fileName, title: title, artist: artist,
-    album: album, genre: genre, bpm: bpm, key: key, durationSeconds: durationSeconds,
-    fileSizeBytes: fileSizeBytes, fileExtension: fileExtension,
-    md5Hash: md5Hash ?? this.md5Hash, bitrate: bitrate, sampleRate: sampleRate,
-    year: year, artworkUrl: artworkUrl ?? this.artworkUrl,
+    id: id,
+    filePath: filePath,
+    fileName: fileName,
+    title: title,
+    artist: artist,
+    album: album,
+    genre: genre,
+    bpm: bpm,
+    key: key,
+    durationSeconds: durationSeconds,
+    fileSizeBytes: fileSizeBytes,
+    fileExtension: fileExtension,
+    md5Hash: md5Hash ?? this.md5Hash,
+    bitrate: bitrate,
+    sampleRate: sampleRate,
+    year: year,
+    artworkUrl: artworkUrl ?? this.artworkUrl,
   );
 }
 
@@ -71,8 +85,8 @@ class DuplicateGroup {
     required this.reason,
     LibraryTrack? recommended,
     double? confidence,
-  })  : recommended = recommended ?? _pickRecommended(tracks),
-        confidence = confidence ?? _computeConfidence(tracks, reason);
+  }) : recommended = recommended ?? _pickRecommended(tracks),
+       confidence = confidence ?? _computeConfidence(tracks, reason);
 
   final List<LibraryTrack> tracks;
   final String reason;

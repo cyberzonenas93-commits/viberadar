@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/track.dart';
 import '../../providers/app_state.dart';
+import 'platform_play_actions.dart';
 import 'source_badges.dart';
 
 class TrackTable extends StatefulWidget {
@@ -84,75 +84,71 @@ class _TrackTableState extends State<TrackTable> {
             dividerColor: AppTheme.edge,
           ),
           child: PaginatedDataTable(
-          header: Text(
-            'Track intelligence table',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: Colors.white,
+            header: Text(
+              'Track intelligence table',
+              style: theme.textTheme.titleMedium?.copyWith(color: Colors.white),
             ),
-          ),
-          rowsPerPage: rowsPerPage,
-          availableRowsPerPage: availableRowsPerPage,
-          onRowsPerPageChanged: (value) {
-            if (value != null) {
-              setState(() => _rowsPerPage = value);
-            }
-          },
-          sortColumnIndex: _columnIndexFor(widget.sortColumn),
-          sortAscending: widget.sortAscending,
-          checkboxHorizontalMargin: 14,
-          columnSpacing: 16,
-          showCheckboxColumn: true,
-          columns: [
-            DataColumn(
-              label: const Text('Track Name'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.title, ascending),
-            ),
-            DataColumn(
-              label: const Text('Artist'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.artist, ascending),
-            ),
-            DataColumn(
-              numeric: true,
-              label: const Text('BPM'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.bpm, ascending),
-            ),
-            DataColumn(
-              label: const Text('Key'),
-              onSort: (_, ascending) => widget.onSort(
-                TrackSortColumn.keySignature,
-                ascending,
+            rowsPerPage: rowsPerPage,
+            availableRowsPerPage: availableRowsPerPage,
+            onRowsPerPageChanged: (value) {
+              if (value != null) {
+                setState(() => _rowsPerPage = value);
+              }
+            },
+            sortColumnIndex: _columnIndexFor(widget.sortColumn),
+            sortAscending: widget.sortAscending,
+            checkboxHorizontalMargin: 14,
+            columnSpacing: 16,
+            showCheckboxColumn: true,
+            columns: [
+              DataColumn(
+                label: const Text('Track Name'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.title, ascending),
               ),
-            ),
-            DataColumn(
-              label: const Text('Genre'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.genre, ascending),
-            ),
-            DataColumn(
-              label: const Text('Vibe'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.vibe, ascending),
-            ),
-            DataColumn(
-              numeric: true,
-              label: const Text('Trend Score'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.trendScore, ascending),
-            ),
-            DataColumn(
-              label: const Text('Region'),
-              onSort: (_, ascending) =>
-                  widget.onSort(TrackSortColumn.region, ascending),
-            ),
-            const DataColumn(label: Text('Sources')),
-            const DataColumn(label: Text('')),
-          ],
-          source: source,
+              DataColumn(
+                label: const Text('Artist'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.artist, ascending),
+              ),
+              DataColumn(
+                numeric: true,
+                label: const Text('BPM'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.bpm, ascending),
+              ),
+              DataColumn(
+                label: const Text('Key'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.keySignature, ascending),
+              ),
+              DataColumn(
+                label: const Text('Genre'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.genre, ascending),
+              ),
+              DataColumn(
+                label: const Text('Vibe'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.vibe, ascending),
+              ),
+              DataColumn(
+                numeric: true,
+                label: const Text('Trend Score'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.trendScore, ascending),
+              ),
+              DataColumn(
+                label: const Text('Region'),
+                onSort: (_, ascending) =>
+                    widget.onSort(TrackSortColumn.region, ascending),
+              ),
+              const DataColumn(label: Text('Sources')),
+              const DataColumn(label: Text('Play')),
+            ],
+            source: source,
+          ),
         ),
-      ),
       ),
     );
   }
@@ -273,7 +269,14 @@ class _TrackDataSource extends DataTableSource {
           SourceBadges(sources: track.effectiveSources, compact: true),
           onTap: () => onActivateTrack(track.id),
         ),
-        DataCell(_PlayButton(platformLinks: track.platformLinks)),
+        DataCell(
+          PlatformPlayActions(
+            links: track.platformLinks,
+            compact: true,
+            maxLinks: 3,
+            alignment: WrapAlignment.end,
+          ),
+        ),
       ],
     );
   }
@@ -286,50 +289,4 @@ class _TrackDataSource extends DataTableSource {
 
   @override
   int get selectedRowCount => selectedTrackIds.length;
-}
-
-String? _bestPlatformUrl(Map<String, String> platformLinks) {
-  const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
-  for (final key in priority) {
-    final url = platformLinks[key];
-    if (url != null && url.isNotEmpty) return url;
-  }
-  return platformLinks.values.firstOrNull;
-}
-
-class _PlayButton extends StatelessWidget {
-  const _PlayButton({required this.platformLinks});
-
-  final Map<String, String> platformLinks;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = _bestPlatformUrl(platformLinks);
-    if (url == null) return const SizedBox.shrink();
-
-    return IconButton(
-      onPressed: () async {
-        final uri = Uri.tryParse(url);
-        if (uri != null) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      },
-      icon: const Icon(Icons.play_circle_filled_rounded),
-      color: AppTheme.cyan,
-      iconSize: 28,
-      tooltip: 'Play in ${_platformLabel(platformLinks)}',
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-    );
-  }
-
-  String _platformLabel(Map<String, String> links) {
-    const priority = ['spotify', 'apple', 'youtube', 'soundcloud', 'audius', 'beatport'];
-    for (final key in priority) {
-      if (links.containsKey(key)) {
-        return key[0].toUpperCase() + key.substring(1);
-      }
-    }
-    return 'browser';
-  }
 }

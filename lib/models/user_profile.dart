@@ -13,7 +13,7 @@ class UserProfile {
   factory UserProfile.empty({
     required String id,
     required String displayName,
-    String preferredRegion = 'US',
+    String preferredRegion = 'Global',
     List<String> followedArtists = const <String>[],
   }) {
     return UserProfile(
@@ -65,7 +65,7 @@ class UserProfile {
       preferredRegion:
           (map['preferences'] as Map<Object?, Object?>?)?['region']
               as String? ??
-          'US',
+          'Global',
       watchlist: Set<String>.from(map['watchlist'] as List? ?? const []),
       savedCrates: (map['saved_crates'] as List? ?? const [])
           .whereType<Map<Object?, Object?>>()

@@ -35,7 +35,14 @@ class _ScanCacheEntry {
 
 class LibraryScannerService {
   static const _supportedExtensions = {
-    '.mp3', '.flac', '.wav', '.aac', '.m4a', '.ogg', '.opus', '.aiff',
+    '.mp3',
+    '.flac',
+    '.wav',
+    '.aac',
+    '.m4a',
+    '.ogg',
+    '.opus',
+    '.aiff',
   };
 
   final Map<String, _ScanCacheEntry> _scanCache = {};
@@ -67,7 +74,10 @@ class LibraryScannerService {
     // ── Phase 1: Enumerate audio files ─────────────────────────────────────
     final audioFiles = <File>[];
     try {
-      await for (final entity in dir.list(recursive: true, followLinks: false)) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) {
           final ext = p.extension(entity.path).toLowerCase();
           if (_supportedExtensions.contains(ext)) {
@@ -104,13 +114,20 @@ class LibraryScannerService {
           newFiles.add(file);
         }
       } catch (e, st) {
-        dev.log('Failed to stat file during scan: ${file.path}', name: 'LibraryScanner', error: e, stackTrace: st);
+        dev.log(
+          'Failed to stat file during scan: ${file.path}',
+          name: 'LibraryScanner',
+          error: e,
+          stackTrace: st,
+        );
       }
     }
 
     final cachedCount = tracks.length;
-    dev.log('${audioFiles.length} files found, $cachedCount cached, ${newFiles.length} new',
-        name: 'LibraryScanner');
+    dev.log(
+      '${audioFiles.length} files found, $cachedCount cached, ${newFiles.length} new',
+      name: 'LibraryScanner',
+    );
     onProgress?.call(cachedCount, audioFiles.length);
 
     // ── Phase 3: Batch mdls for new files ──────────────────────────────────
@@ -118,18 +135,26 @@ class LibraryScannerService {
     const mdlsBatchSize = 50;
     int processed = cachedCount;
 
-    for (var batchStart = 0; batchStart < newFiles.length; batchStart += mdlsBatchSize) {
+    for (
+      var batchStart = 0;
+      batchStart < newFiles.length;
+      batchStart += mdlsBatchSize
+    ) {
       final batchEnd = (batchStart + mdlsBatchSize).clamp(0, newFiles.length);
       final batch = newFiles.sublist(batchStart, batchEnd);
 
       // Get metadata for all files in this batch with one mdls call
-      final metaBatch = await _batchMdlsMetadata(batch.map((f) => f.path).toList());
+      final metaBatch = await _batchMdlsMetadata(
+        batch.map((f) => f.path).toList(),
+      );
 
       for (var i = 0; i < batch.length; i++) {
         try {
           final file = batch[i];
           final stat = await file.stat();
-          final meta = i < metaBatch.length ? metaBatch[i] : <String, String?>{};
+          final meta = i < metaBatch.length
+              ? metaBatch[i]
+              : <String, String?>{};
           final track = _buildTrack(file, stat, meta);
           tracks.add(track);
 
@@ -139,7 +164,10 @@ class LibraryScannerService {
             track: track,
           );
         } catch (e) {
-          dev.log('Error processing ${batch[i].path}: $e', name: 'LibraryScanner');
+          dev.log(
+            'Error processing ${batch[i].path}: $e',
+            name: 'LibraryScanner',
+          );
         }
       }
 
@@ -153,7 +181,11 @@ class LibraryScannerService {
 
   /// Build a LibraryTrack from file + stat + metadata.
   /// Uses a fast path+size hash instead of MD5 to avoid heavy I/O.
-  LibraryTrack _buildTrack(File file, FileStat stat, Map<String, String?> meta) {
+  LibraryTrack _buildTrack(
+    File file,
+    FileStat stat,
+    Map<String, String?> meta,
+  ) {
     final ext = p.extension(file.path).toLowerCase();
     final fileName = p.basenameWithoutExtension(file.path);
 
@@ -172,7 +204,9 @@ class LibraryScannerService {
     // rather than an invented one. Likewise bitrate is 0 ("unknown") when the
     // file carries no bitrate tag, instead of assuming 320 kbps.
     final realBpm = double.tryParse(meta['bpm'] ?? '') ?? 0.0;
-    final double bpm = realBpm > 0 ? realBpm.clamp(60.0, 200.0).toDouble() : 0.0;
+    final double bpm = realBpm > 0
+        ? realBpm.clamp(60.0, 200.0).toDouble()
+        : 0.0;
     final key = meta['key'] ?? '';
     final duration = double.tryParse(meta['duration'] ?? '') ?? 0.0;
     // mdls reports bitrate in bits/sec (e.g. 320000); store kbps.
@@ -203,7 +237,9 @@ class LibraryScannerService {
 
   /// Batch metadata extraction — calls mdls once for many files.
   /// Returns a list of metadata maps in the same order as [paths].
-  Future<List<Map<String, String?>>> _batchMdlsMetadata(List<String> paths) async {
+  Future<List<Map<String, String?>>> _batchMdlsMetadata(
+    List<String> paths,
+  ) async {
     if (paths.isEmpty) return [];
 
     // mdls doesn't support batch output cleanly, but we can call it once per file
@@ -214,28 +250,45 @@ class LibraryScannerService {
     // simultaneous `mdls` subprocesses per batch, which on large libraries
     // can hit the OS file-descriptor ceiling.
     return runLimited<Map<String, String?>>(
-      paths.map((path) => () => _getMdlsMetadata(path)),
+      paths.map(
+        (path) =>
+            () => _getMdlsMetadata(path),
+      ),
       maxConcurrent: _scanConcurrency,
     );
   }
 
   Future<Map<String, String?>> _getMdlsMetadata(String path) async {
     try {
-      final result = await Process.run('mdls', [
-        '-name', 'kMDItemTitle',
-        '-name', 'kMDItemAuthors',
-        '-name', 'kMDItemAlbum',
-        '-name', 'kMDItemMusicalGenre',
-        '-name', 'kMDItemTempo',
-        '-name', 'kMDItemMusicalKey',
-        '-name', 'kMDItemDurationSeconds',
-        '-name', 'kMDItemAudioBitRate',
-        '-name', 'kMDItemAudioSampleRate',
-        '-name', 'kMDItemRecordingYear',
-        path,
-      ]).timeout(_mdlsTimeout, onTimeout: () {
-        return ProcessResult(0, 1, '', 'timeout');
-      });
+      final result =
+          await Process.run('mdls', [
+            '-name',
+            'kMDItemTitle',
+            '-name',
+            'kMDItemAuthors',
+            '-name',
+            'kMDItemAlbum',
+            '-name',
+            'kMDItemMusicalGenre',
+            '-name',
+            'kMDItemTempo',
+            '-name',
+            'kMDItemMusicalKey',
+            '-name',
+            'kMDItemDurationSeconds',
+            '-name',
+            'kMDItemAudioBitRate',
+            '-name',
+            'kMDItemAudioSampleRate',
+            '-name',
+            'kMDItemRecordingYear',
+            path,
+          ]).timeout(
+            _mdlsTimeout,
+            onTimeout: () {
+              return ProcessResult(0, 1, '', 'timeout');
+            },
+          );
       if (result.exitCode == 0) {
         // Parse mdls' default "key = value" output BY KEY (not by position).
         // Positional parsing of `-raw` output is fragile: null fields and the
@@ -244,15 +297,16 @@ class LibraryScannerService {
         // each attribute name explicitly is robust to missing/array values.
         final out = result.stdout as String;
         String? attr(String key) {
-          final m = RegExp('^$key\\s*=\\s*(.*?)\\s*\$', multiLine: true)
-              .firstMatch(out);
+          final m = RegExp(
+            '^$key\\s*=\\s*(.*?)\\s*\$',
+            multiLine: true,
+          ).firstMatch(out);
           if (m == null) return null;
           var v = m.group(1)!.trim();
           if (v.isEmpty || v == '(null)') return null;
           if (v == '(') {
             // Array form, e.g. kMDItemAuthors = (\n  "Name"\n). Take first item.
-            final arr =
-                RegExp('$key\\s*=\\s*\\(\\s*"([^"]*)"').firstMatch(out);
+            final arr = RegExp('$key\\s*=\\s*\\(\\s*"([^"]*)"').firstMatch(out);
             return arr?.group(1)?.trim();
           }
           if (v.length >= 2 && v.startsWith('"') && v.endsWith('"')) {
@@ -293,14 +347,22 @@ class LibraryScannerService {
 
   String _guessGenre(String name) {
     final lower = name.toLowerCase();
-    if (lower.contains('afrobeat') || lower.contains('burna') || lower.contains('wizkid')) return 'Afrobeats';
-    if (lower.contains('amapiano') || lower.contains('kabza')) return 'Amapiano';
+    if (lower.contains('afrobeat') ||
+        lower.contains('burna') ||
+        lower.contains('wizkid')) {
+      return 'Afrobeats';
+    }
+    if (lower.contains('amapiano') || lower.contains('kabza')) {
+      return 'Amapiano';
+    }
     if (lower.contains('house')) return 'House';
     if (lower.contains('rnb') || lower.contains('r&b')) return 'R&B';
     if (lower.contains('hip') || lower.contains('rap')) return 'Hip-Hop';
     if (lower.contains('pop')) return 'Pop';
     if (lower.contains('jazz')) return 'Jazz';
-    if (lower.contains('reggae') || lower.contains('dancehall')) return 'Dancehall';
+    if (lower.contains('reggae') || lower.contains('dancehall')) {
+      return 'Dancehall';
+    }
     return 'Unknown';
   }
 }

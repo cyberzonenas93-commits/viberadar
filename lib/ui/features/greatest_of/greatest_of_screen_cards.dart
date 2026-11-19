@@ -788,57 +788,18 @@ class _PlatformTrackRowState extends State<_PlatformTrackRow> {
                   ),
                 ),
               ),
-            if (t.spotifyUrl != null)
-              _PlayBtn(
-                icon: Icons.graphic_eq_rounded,
-                color: const Color(0xFF1ED760),
-                url: t.spotifyUrl!,
-                tip: 'Spotify',
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 112),
+              child: PlatformPlayActions.fromUrls(
+                spotifyUrl: t.spotifyUrl,
+                appleUrl: t.appleUrl,
+                youtubeUrl: t.youtubeUrl,
+                compact: true,
+                maxLinks: 3,
+                alignment: WrapAlignment.end,
               ),
-            if (t.appleUrl != null)
-              _PlayBtn(
-                icon: Icons.music_note_rounded,
-                color: const Color(0xFFFF7AB5),
-                url: t.appleUrl!,
-                tip: 'Apple Music',
-              ),
+            ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PlayBtn extends StatelessWidget {
-  const _PlayBtn({
-    required this.icon,
-    required this.color,
-    required this.url,
-    required this.tip,
-  });
-  final IconData icon;
-  final Color color;
-  final String url;
-  final String tip;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Play on $tip',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: () {
-            final uri = Uri.tryParse(url);
-            if (uri != null) {
-              launchUrl(uri, mode: LaunchMode.externalApplication);
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: Icon(icon, color: color, size: 18),
-          ),
         ),
       ),
     );

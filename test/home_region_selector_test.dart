@@ -14,8 +14,9 @@ import 'package:viberadar/ui/features/home/home_screen.dart';
 /// rejects). So changing the region had no effect. The region must instead be
 /// driven by a reactive local override that works for everyone.
 void main() {
-  testWidgets('Home region reacts to the local override (guest session)',
-      (tester) async {
+  testWidgets('Home region reacts to the local override (guest session)', (
+    tester,
+  ) async {
     const guestSession = SessionState(
       userId: '',
       displayName: 'Guest DJ',
@@ -30,10 +31,16 @@ void main() {
       preferredRegion: 'GH',
     );
 
-    final container = ProviderContainer(overrides: [
-      sessionProvider.overrideWith((ref) => Stream.value(guestSession)),
-      availableRegionsProvider.overrideWithValue(const ['Global', 'GH', 'US']),
-    ]);
+    final container = ProviderContainer(
+      overrides: [
+        sessionProvider.overrideWith((ref) => Stream.value(guestSession)),
+        availableRegionsProvider.overrideWithValue(const [
+          'Global',
+          'GH',
+          'US',
+        ]),
+      ],
+    );
     addTearDown(container.dispose);
 
     await tester.pumpWidget(
@@ -48,8 +55,9 @@ void main() {
     );
     await tester.pump();
 
-    // The region badge initially shows the profile fallback.
-    expect(find.textContaining('Region: GH'), findsWidgets);
+    // The region badge initially shows the global live-catalog default instead
+    // of silently inheriting a stale profile market.
+    expect(find.textContaining('Region: Global'), findsWidgets);
 
     // Guest picks a new region — the picker sets this local override.
     container.read(selectedRegionProvider.notifier).set('US');

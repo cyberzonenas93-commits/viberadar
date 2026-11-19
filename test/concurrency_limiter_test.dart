@@ -15,7 +15,11 @@ void main() {
       // the returned list still matches input order.
       final completers = List.generate(5, (_) => Completer<int>());
       final future = runLimited<int>(
-        List.generate(5, (i) => () => completers[i].future),
+        List.generate(
+          5,
+          (i) =>
+              () => completers[i].future,
+        ),
         maxConcurrent: 5,
       );
 
@@ -33,17 +37,20 @@ void main() {
       const totalTasks = 12;
 
       var active = 0;
-      var peak   = 0;
+      var peak = 0;
       final gates = List.generate(totalTasks, (_) => Completer<void>());
 
       final future = runLimited<int>(
-        List.generate(totalTasks, (i) => () async {
-          active++;
-          if (active > peak) peak = active;
-          await gates[i].future;
-          active--;
-          return i;
-        }),
+        List.generate(
+          totalTasks,
+          (i) => () async {
+            active++;
+            if (active > peak) peak = active;
+            await gates[i].future;
+            active--;
+            return i;
+          },
+        ),
         maxConcurrent: maxConcurrent,
       );
 
@@ -68,20 +75,19 @@ void main() {
       expect(peak, maxConcurrent);
     });
 
-    test('first exception propagates (matching Future.wait semantics)',
-        () async {
-      final error = Exception('task 1 failed');
-      final future = runLimited<int>(
-        [
+    test(
+      'first exception propagates (matching Future.wait semantics)',
+      () async {
+        final error = Exception('task 1 failed');
+        final future = runLimited<int>([
           () async => 0,
           () async => throw error,
           () async => 2,
-        ],
-        maxConcurrent: 2,
-      );
+        ], maxConcurrent: 2);
 
-      await expectLater(future, throwsA(same(error)));
-    });
+        await expectLater(future, throwsA(same(error)));
+      },
+    );
 
     test('rejects maxConcurrent < 1', () {
       expect(
@@ -91,17 +97,16 @@ void main() {
     });
 
     test('works when task count is smaller than maxConcurrent', () async {
-      final result = await runLimited<int>(
-        [() async => 1, () async => 2],
-        maxConcurrent: 10,
-      );
+      final result = await runLimited<int>([
+        () async => 1,
+        () async => 2,
+      ], maxConcurrent: 10);
       expect(result, <int>[1, 2]);
     });
   });
 
   group('ConcurrencyLimiter', () {
-    test('never exceeds maxConcurrent across concurrent run() calls',
-        () async {
+    test('never exceeds maxConcurrent across concurrent run() calls', () async {
       const maxConcurrent = 2;
       const totalTasks = 8;
 
@@ -109,16 +114,18 @@ void main() {
       final gates = List.generate(totalTasks, (_) => Completer<void>());
 
       var active = 0;
-      var peak   = 0;
+      var peak = 0;
       final futures = <Future<int>>[];
       for (var i = 0; i < totalTasks; i++) {
-        futures.add(limiter.run<int>(() async {
-          active++;
-          if (active > peak) peak = active;
-          await gates[i].future;
-          active--;
-          return i;
-        }));
+        futures.add(
+          limiter.run<int>(() async {
+            active++;
+            if (active > peak) peak = active;
+            await gates[i].future;
+            active--;
+            return i;
+          }),
+        );
       }
 
       // Drain the event loop so the first batch gets scheduled.
@@ -170,7 +177,7 @@ void main() {
 
       // Queue two more submissions while the first holds the slot.
       final second = limiter.run<void>(() async => order.add(1));
-      final third  = limiter.run<void>(() async => order.add(2));
+      final third = limiter.run<void>(() async => order.add(2));
 
       await Future<void>.delayed(Duration.zero);
       expect(limiter.active, 1);
@@ -183,10 +190,7 @@ void main() {
     });
 
     test('rejects maxConcurrent < 1', () {
-      expect(
-        () => ConcurrencyLimiter(maxConcurrent: 0),
-        throwsArgumentError,
-      );
+      expect(() => ConcurrencyLimiter(maxConcurrent: 0), throwsArgumentError);
     });
   });
 }

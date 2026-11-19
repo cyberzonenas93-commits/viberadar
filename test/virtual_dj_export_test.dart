@@ -9,32 +9,30 @@ import 'package:viberadar/services/virtual_dj_export_service.dart';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 LibraryTrack _lt(String path) => LibraryTrack(
-      id: 'id_${path.hashCode}',
-      filePath: path,
-      fileName: path.split('/').last,
-      title: 'Track',
-      artist: 'Artist',
-      album: 'Album',
-      genre: 'House',
-      bpm: 128.0,
-      key: '8A',
-      durationSeconds: 240,
-      fileSizeBytes: 10000000,
-      fileExtension: '.mp3',
-      md5Hash: '',
-      bitrate: 320,
-      sampleRate: 44100,
-    );
+  id: 'id_${path.hashCode}',
+  filePath: path,
+  fileName: path.split('/').last,
+  title: 'Track',
+  artist: 'Artist',
+  album: 'Album',
+  genre: 'House',
+  bpm: 128.0,
+  key: '8A',
+  durationSeconds: 240,
+  fileSizeBytes: 10000000,
+  fileExtension: '.mp3',
+  md5Hash: '',
+  bitrate: 320,
+  sampleRate: 44100,
+);
 
 DjExportTrack _local(String path) => DjExportTrack(
-      localTrack: _lt(path),
-      resolution: DjTrackResolution.localMatch,
-    );
+  localTrack: _lt(path),
+  resolution: DjTrackResolution.localMatch,
+);
 
-DjExportTrack _tidal(String id) => DjExportTrack(
-      resolution: DjTrackResolution.tidalFallback,
-      tidalId: id,
-    );
+DjExportTrack _tidal(String id) =>
+    DjExportTrack(resolution: DjTrackResolution.tidalFallback, tidalId: id);
 
 DjExportTrack _skipped() =>
     const DjExportTrack(resolution: DjTrackResolution.skipped);
@@ -62,7 +60,9 @@ void main() {
 
     test('sequential zero-based idx on each song', () {
       final xml = svc.buildVdjFolderXml([
-        _local('/a.mp3'), _local('/b.mp3'), _local('/c.mp3'),
+        _local('/a.mp3'),
+        _local('/b.mp3'),
+        _local('/c.mp3'),
       ]);
       expect(xml, contains('idx="0"'));
       expect(xml, contains('idx="1"'));
@@ -77,7 +77,9 @@ void main() {
 
     test('skipped tracks are omitted; idx remains sequential', () {
       final xml = svc.buildVdjFolderXml([
-        _local('/a.mp3'), _skipped(), _local('/c.mp3'),
+        _local('/a.mp3'),
+        _skipped(),
+        _local('/c.mp3'),
       ]);
       expect(RegExp(r'<song ').allMatches(xml).length, equals(2));
       expect(xml, contains('idx="0"'));
@@ -108,8 +110,9 @@ void main() {
     late Directory vdjRoot;
     setUp(() async {
       vdjRoot = await Directory.systemTemp.createTemp('vr_vdj_order_');
-      await Directory('${vdjRoot.path}/Folders/LocalMusic')
-          .create(recursive: true);
+      await Directory(
+        '${vdjRoot.path}/Folders/LocalMusic',
+      ).create(recursive: true);
     });
     tearDown(() => vdjRoot.delete(recursive: true));
 
@@ -146,8 +149,9 @@ void main() {
 
     setUp(() async {
       vdjRoot = await Directory.systemTemp.createTemp('vr_vdj_root_');
-      await Directory('${vdjRoot.path}/Folders/LocalMusic')
-          .create(recursive: true);
+      await Directory(
+        '${vdjRoot.path}/Folders/LocalMusic',
+      ).create(recursive: true);
       musicDir = await Directory.systemTemp.createTemp('vr_music_');
     });
     tearDown(() async {
@@ -159,7 +163,7 @@ void main() {
       await File('${musicDir.path}/track.mp3').create();
       final result = await svc.export(
         playlistName: 'TestSet',
-        matches: [],   // empty → zero tracks
+        matches: [], // empty → zero tracks
         vdjRoot: vdjRoot.path,
       );
       expect(File(result.outputPath).existsSync(), isTrue);

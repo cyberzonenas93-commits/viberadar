@@ -11,24 +11,23 @@ Track _track({
   String genre = 'Afrobeats',
   String vibe = 'club',
   int bpm = 102,
-}) =>
-    Track(
-      id: id,
-      title: 'Test Track',
-      artist: 'Test Artist',
-      artworkUrl: '',
-      bpm: bpm,
-      keySignature: '5A',
-      genre: genre,
-      vibe: vibe,
-      trendScore: trendScore,
-      regionScores: regionScores,
-      platformLinks: const {},
-      createdAt: DateTime(2025),
-      updatedAt: DateTime(2025),
-      energyLevel: energyLevel,
-      trendHistory: trendHistory,
-    );
+}) => Track(
+  id: id,
+  title: 'Test Track',
+  artist: 'Test Artist',
+  artworkUrl: '',
+  bpm: bpm,
+  keySignature: '5A',
+  genre: genre,
+  vibe: vibe,
+  trendScore: trendScore,
+  regionScores: regionScores,
+  platformLinks: const {},
+  createdAt: DateTime(2025),
+  updatedAt: DateTime(2025),
+  energyLevel: energyLevel,
+  trendHistory: trendHistory,
+);
 
 TrendPoint _pt(String label, double score) =>
     TrendPoint(label: label, score: score);
@@ -96,11 +95,14 @@ void main() {
       expect(t.leadRegion, 'GH');
     });
 
-    test('handles tied scores by returning whichever comes first in sorted order', () {
-      final t = _track(regionScores: {'US': 0.8, 'ZA': 0.8});
-      // Both have 0.8 — leadRegion should be one of them (not crash)
-      expect(['US', 'ZA'], contains(t.leadRegion));
-    });
+    test(
+      'handles tied scores by returning whichever comes first in sorted order',
+      () {
+        final t = _track(regionScores: {'US': 0.8, 'ZA': 0.8});
+        // Both have 0.8 — leadRegion should be one of them (not crash)
+        expect(['US', 'ZA'], contains(t.leadRegion));
+      },
+    );
   });
 
   group('Trend score range validation', () {

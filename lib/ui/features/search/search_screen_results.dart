@@ -29,10 +29,10 @@ class _ResultsList extends ConsumerWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(28, 0, 28, 40),
             children: [
-              // Spotify + Apple Music results
+              // Cross-platform music results
               if (results.isNotEmpty) ...[
                 _ResultSectionLabel(
-                  label: 'Spotify & Apple Music',
+                  label: 'Music Platforms',
                   count: results.length,
                 ),
                 ...results.asMap().entries.map(
@@ -43,7 +43,7 @@ class _ResultsList extends ConsumerWidget {
               if (youtubeResults.isNotEmpty) ...[
                 if (results.isNotEmpty) const SizedBox(height: 12),
                 _ResultSectionLabel(
-                  label: 'YouTube',
+                  label: 'YouTube Music',
                   count: youtubeResults.length,
                 ),
                 ...youtubeResults.map((v) => _YoutubeVideoCard(video: v)),
@@ -178,24 +178,15 @@ class _YoutubeVideoCardState extends State<_YoutubeVideoCard> {
             _SourceBadge(
               label: 'Y',
               color: const Color(0xFFFF0000),
-              tooltip: 'YouTube',
+              tooltip: 'YouTube Music',
             ),
             const SizedBox(width: 12),
-            // Play button
-            if (_hovered)
-              _ActionButton(
-                icon: Icons.play_circle_rounded,
-                color: const Color(0xFFFF0000),
-                tooltip: 'Open on YouTube',
-                onTap: () async {
-                  final uri = Uri.tryParse(v.youtubeUrl);
-                  if (uri != null) {
-                    await launchUrl(uri, mode: LaunchMode.externalApplication);
-                  }
-                },
-              )
-            else
-              const SizedBox(width: 31),
+            PlatformPlayActions.fromUrls(
+              youtubeUrl: v.youtubeUrl,
+              labelStyle: PlatformPlayLabelStyle.platform,
+              compact: true,
+              alignment: WrapAlignment.end,
+            ),
           ],
         ),
       ),
@@ -347,32 +338,43 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
                   _SourceBadge(
                     label: 'Y',
                     color: const Color(0xFFFF0000),
-                    tooltip: 'YouTube',
+                    tooltip: 'YouTube Music',
+                  ),
+                if ((r.hasSpotify || r.hasApple || r.hasYoutube) && r.hasDeezer)
+                  const SizedBox(width: 4),
+                if (r.hasDeezer)
+                  _SourceBadge(
+                    label: 'D',
+                    color: const Color(0xFFA238FF),
+                    tooltip: 'Deezer',
                   ),
               ],
             ),
             const SizedBox(width: 12),
-            // Action buttons
-            if (_hovered) ...[
-              // Play
-              _ActionButton(
-                icon: Icons.play_circle_rounded,
-                color: AppTheme.cyan,
-                tooltip: r.hasSpotify
-                    ? 'Open in Spotify'
-                    : 'Open in Apple Music',
-                onTap: () => _play(r),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 340),
+              child: PlatformPlayActions.fromUrls(
+                spotifyUrl: r.spotifyUrl,
+                appleUrl: r.appleUrl,
+                youtubeUrl: r.youtubeUrl,
+                deezerUrl: r.deezerUrl,
+                labelStyle: PlatformPlayLabelStyle.platform,
+                compact: true,
+                alignment: WrapAlignment.end,
+                runAlignment: WrapAlignment.end,
               ),
-              const SizedBox(width: 6),
-              // Add to crate
-              _ActionButton(
+            ),
+            const SizedBox(width: 8),
+            AnimatedOpacity(
+              opacity: _hovered ? 1 : 0.78,
+              duration: const Duration(milliseconds: 120),
+              child: _ActionButton(
                 icon: Icons.playlist_add_rounded,
                 color: AppTheme.violet,
-                tooltip: 'Add to Crate',
+                tooltip: 'Add to Setlist',
                 onTap: () => _showAddToCrate(r),
               ),
-            ] else
-              const SizedBox(width: 68),
+            ),
           ],
         ),
       ),
@@ -390,19 +392,19 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
     ),
   );
 
-  void _play(_SearchResult r) async {
-    final url = r.bestUrl;
-    if (url.isEmpty) return;
-    final uri = Uri.tryParse(url);
-    if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   void _showAddToCrate(_SearchResult r) {
     final crateState = ref.read(crateProvider);
     final crates = crateState.crates.keys.toList();
-    final trackId = r.hasSpotify
-        ? 'spotify:${r.title}:${r.artist}'
-        : 'apple:${r.title}:${r.artist}';
+    final source = r.hasSpotify
+        ? 'spotify'
+        : r.hasApple
+        ? 'apple'
+        : r.hasYoutube
+        ? 'youtube'
+        : r.hasDeezer
+        ? 'deezer'
+        : 'external';
+    final trackId = '$source:${r.title}:${r.artist}';
 
     showDialog(
       context: context,
@@ -424,7 +426,7 @@ class _ResultRowState extends ConsumerState<_ResultRow> {
           ref.read(crateProvider.notifier).addTrackToCrate(name, trackId);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Created crate "$name" and added "${r.title}"'),
+              content: Text('Created setlist "$name" and added "${r.title}"'),
               backgroundColor: AppTheme.violet,
               duration: const Duration(seconds: 2),
             ),

@@ -4,20 +4,32 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/platform.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../models/track.dart';
 import '../../providers/library_provider.dart';
+import 'add_to_setlist_sheet.dart';
+import 'platform_play_actions.dart';
 
 /// Shows a context menu when a track card is tapped.
-/// Options: Play (opens in Spotify/Apple/YouTube), Add to Crate, Track Info.
+/// Options: Play (opens in Spotify/Apple/YouTube), Add to Setlist, Track Info.
 void showTrackActionMenu(
   BuildContext context,
   WidgetRef ref,
   Track track, {
   Offset? position,
+  bool preferSyncedSetlists = false,
 }) {
-  unawaited(_showTrackActionMenu(context, ref, track, position: position));
+  unawaited(
+    _showTrackActionMenu(
+      context,
+      ref,
+      track,
+      position: position,
+      preferSyncedSetlists: preferSyncedSetlists,
+    ),
+  );
 }
 
 Future<void> _showTrackActionMenu(
@@ -25,11 +37,14 @@ Future<void> _showTrackActionMenu(
   WidgetRef ref,
   Track track, {
   Offset? position,
+  bool preferSyncedSetlists = false,
 }) async {
   final RenderBox overlay =
       Overlay.of(context).context.findRenderObject() as RenderBox;
   final pos =
       position ?? Offset(overlay.size.width / 2, overlay.size.height / 2);
+
+  final platformLinks = orderedPlatformLinks(track.platformLinks);
 
   final value = await showMenu<String>(
     context: context,
@@ -39,19 +54,19 @@ Future<void> _showTrackActionMenu(
     elevation: 8,
     items: [
       // Individual platform play options
-      for (final entry in track.platformLinks.entries)
+      for (final entry in platformLinks.entries)
         PopupMenuItem(
           value: 'play:${entry.key}',
           child: Row(
             children: [
               Icon(
-                _iconForPlatform(entry.key),
-                color: _colorForPlatform(entry.key),
+                platformIcon(entry.key),
+                color: platformColor(entry.key),
                 size: 18,
               ),
               const SizedBox(width: 10),
               Text(
-                'Play on ${_capitalize(entry.key)}',
+                platformActionLabel(entry.key),
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 13,
@@ -61,17 +76,18 @@ Future<void> _showTrackActionMenu(
           ),
         ),
       // Divider between play and actions
-      if (track.platformLinks.isNotEmpty) const PopupMenuDivider(),
-      // Add to crate
+      if (platformLinks.isNotEmpty) const PopupMenuDivider(),
+      // Add to setlist (phone) / crate bench (desktop) — same gesture, routed to
+      // the store that's correct for the form factor so nothing dead-ends.
       PopupMenuItem(
         value: 'crate',
         child: Row(
           children: [
             Icon(Icons.playlist_add_rounded, color: AppTheme.violet, size: 18),
             const SizedBox(width: 10),
-            const Text(
-              'Add to Crate',
-              style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+            Text(
+              'Add to Setlist',
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
             ),
           ],
         ),
@@ -99,10 +115,16 @@ Future<void> _showTrackActionMenu(
   if (!context.mounted || value == null) return;
   if (value.startsWith('play:')) {
     final platform = value.substring(5);
-    final url = track.platformLinks[platform];
+    final url = platformLinks[platform];
     if (url != null) _openUrl(url);
   } else if (value == 'crate') {
-    _showAddToCrateSheet(context, ref, track);
+    // Phone → synced Setlists (shows in the Setlists tab, syncs to desktop).
+    // Desktop → the local crate bench the Export Studio works from.
+    if (preferSyncedSetlists || isMobileForm) {
+      await showAddToSetlistSheet(context, ref, track);
+    } else {
+      _showAddToCrateSheet(context, ref, track);
+    }
   } else if (value == 'info') {
     _showTrackInfoSheet(context, track);
   }
@@ -122,55 +144,6 @@ void _openUrl(String url) async {
   final uri = Uri.tryParse(url);
   if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
 }
-
-IconData _iconForPlatform(String platform) {
-  switch (platform.toLowerCase()) {
-    case 'spotify':
-      return Icons.graphic_eq_rounded;
-    case 'apple':
-      return Icons.music_note_rounded;
-    case 'youtube':
-      return Icons.play_circle_fill_rounded;
-    case 'deezer':
-      return Icons.headphones_rounded;
-    case 'soundcloud':
-      return Icons.cloud_rounded;
-    case 'beatport':
-      return Icons.equalizer_rounded;
-    case 'audius':
-      return Icons.podcasts_rounded;
-    case 'billboard':
-      return Icons.bar_chart_rounded;
-    default:
-      return Icons.open_in_new_rounded;
-  }
-}
-
-Color _colorForPlatform(String platform) {
-  switch (platform.toLowerCase()) {
-    case 'spotify':
-      return const Color(0xFF1ED760);
-    case 'apple':
-      return const Color(0xFFFF7AB5);
-    case 'youtube':
-      return const Color(0xFFFF4B4B);
-    case 'deezer':
-      return const Color(0xFFA238FF);
-    case 'soundcloud':
-      return const Color(0xFFFFA237);
-    case 'beatport':
-      return const Color(0xFF32FF7E);
-    case 'audius':
-      return const Color(0xFF7C5CFF);
-    case 'billboard':
-      return const Color(0xFFFFD700);
-    default:
-      return AppTheme.cyan;
-  }
-}
-
-String _capitalize(String s) =>
-    s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
 void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
   final crateState = ref.read(crateProvider);
@@ -197,7 +170,7 @@ void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
               ),
               const SizedBox(width: 10),
               Text(
-                'Add to Crate',
+                'Add to Setlist',
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 16,
@@ -216,7 +189,7 @@ void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
             ],
           ),
           const SizedBox(height: 16),
-          // Existing crates
+          // Existing setlists
           if (crates.isNotEmpty)
             ...crates.map(
               (name) => ListTile(
@@ -255,7 +228,7 @@ void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
               ),
             ),
           const Divider(color: AppTheme.edge),
-          // New crate
+          // New setlist
           ListTile(
             contentPadding: EdgeInsets.zero,
             leading: const Icon(
@@ -264,7 +237,7 @@ void _showAddToCrateSheet(BuildContext context, WidgetRef ref, Track track) {
               size: 20,
             ),
             title: const Text(
-              'New Crate...',
+              'New Setlist...',
               style: TextStyle(
                 color: AppTheme.cyan,
                 fontSize: 13,
@@ -291,14 +264,14 @@ void _showNewCrateDialog(BuildContext context, WidgetRef ref, Track track) {
       backgroundColor: AppTheme.panel,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: const Text(
-        'New Crate',
+        'New Setlist',
         style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
       ),
       content: TextField(
         controller: controller,
         autofocus: true,
         style: const TextStyle(color: AppTheme.textPrimary),
-        decoration: const InputDecoration(hintText: 'Crate name...'),
+        decoration: const InputDecoration(hintText: 'Setlist name...'),
         onSubmitted: (value) {
           if (value.trim().isNotEmpty) {
             ref.read(crateProvider.notifier).createCrate(value.trim());
@@ -402,28 +375,10 @@ void _showTrackInfoSheet(BuildContext context, Track track) {
               style: TextStyle(color: AppTheme.textTertiary, fontSize: 11),
             ),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: track.platformLinks.entries
-                  .map(
-                    (e) => ActionChip(
-                      label: Text(
-                        e.key[0].toUpperCase() + e.key.substring(1),
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      avatar: const Icon(Icons.play_arrow_rounded, size: 14),
-                      onPressed: () async {
-                        final uri = Uri.tryParse(e.value);
-                        if (uri != null) {
-                          await launchUrl(
-                            uri,
-                            mode: LaunchMode.externalApplication,
-                          );
-                        }
-                      },
-                    ),
-                  )
-                  .toList(),
+            PlatformPlayActions(
+              links: track.platformLinks,
+              labelStyle: PlatformPlayLabelStyle.playOnPlatform,
+              compact: true,
             ),
           ],
           const SizedBox(height: 12),
@@ -462,9 +417,9 @@ class _InfoTag extends StatelessWidget {
   }
 }
 
-// ── Bulk add to crate ─────────────────────────────────────────────────────────
+// ── Bulk add to setlist ───────────────────────────────────────────────────────
 
-/// Shows a sheet to add multiple tracks to a crate at once.
+/// Shows a sheet to add multiple tracks to a setlist at once.
 void showBulkAddToCrate(
   BuildContext context,
   WidgetRef ref,
@@ -495,7 +450,7 @@ void showBulkAddToCrate(
               ),
               const SizedBox(width: 10),
               Text(
-                'Add ${tracks.length} tracks to Crate',
+                'Add ${tracks.length} tracks to Setlist',
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 16,
@@ -553,7 +508,7 @@ void showBulkAddToCrate(
               size: 20,
             ),
             title: const Text(
-              'New Crate...',
+              'New Setlist...',
               style: TextStyle(
                 color: AppTheme.cyan,
                 fontSize: 13,
@@ -583,14 +538,14 @@ void _showNewBulkCrateDialog(
       backgroundColor: AppTheme.panel,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       title: const Text(
-        'New Crate',
+        'New Setlist',
         style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
       ),
       content: TextField(
         controller: controller,
         autofocus: true,
         style: const TextStyle(color: AppTheme.textPrimary),
-        decoration: const InputDecoration(hintText: 'Crate name...'),
+        decoration: const InputDecoration(hintText: 'Setlist name...'),
       ),
       actions: [
         TextButton(

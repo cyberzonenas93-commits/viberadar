@@ -50,9 +50,16 @@ class FilterBar extends StatelessWidget {
                   focusNode: searchFocusNode,
                   onChanged: onSearchChanged,
                   maxLength: 100,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                  style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                  ),
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search_rounded, color: AppTheme.textTertiary, size: 18),
+                    prefixIcon: const Icon(
+                      Icons.search_rounded,
+                      color: AppTheme.textTertiary,
+                      size: 18,
+                    ),
                     hintText: 'Search tracks, artists, genres, vibes',
                     hintStyle: const TextStyle(color: AppTheme.textTertiary),
                     counterText: '',
@@ -60,13 +67,20 @@ class FilterBar extends StatelessWidget {
                     fillColor: AppTheme.panelRaised,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                      borderSide: BorderSide(
+                        color: AppTheme.edge.withValues(alpha: 0.5),
+                      ),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
+                      borderSide: BorderSide(
+                        color: AppTheme.edge.withValues(alpha: 0.5),
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                   ),
                 ),
               ),
@@ -78,11 +92,16 @@ class FilterBar extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppTheme.panelRaised,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.edge.withValues(alpha: 0.4)),
+                  border: Border.all(
+                    color: AppTheme.edge.withValues(alpha: 0.4),
+                  ),
                 ),
                 child: Text(
                   '⌘K search  ·  ⌘F filters',
@@ -235,7 +254,10 @@ class _SelectField extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           borderSide: BorderSide(color: AppTheme.edge.withValues(alpha: 0.5)),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
       dropdownColor: AppTheme.panelRaised,
       style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
@@ -316,7 +338,9 @@ class _SliderField extends StatelessWidget {
               inactiveTrackColor: AppTheme.edge,
               thumbColor: accentColor,
               overlayColor: accentColor.withValues(alpha: 0.1),
-              rangeThumbShape: const RoundRangeSliderThumbShape(enabledThumbRadius: 6),
+              rangeThumbShape: const RoundRangeSliderThumbShape(
+                enabledThumbRadius: 6,
+              ),
               trackHeight: 3,
             ),
             child: RangeSlider(

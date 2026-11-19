@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
@@ -11,14 +12,17 @@ import '../../core/platform.dart';
 import '../../core/theme/app_theme.dart';
 import '../../models/session_state.dart';
 import '../../providers/app_state.dart';
+import '../../providers/onboarding_state.dart';
 import '../../providers/repositories.dart';
+import '../../services/messaging_service.dart';
 import '../mobile/mobile_shell.dart';
+import '../onboarding/intro_carousel.dart';
 import '../shell/vibe_shell.dart';
 import '../widgets/ui_kit.dart';
 import 'onboarding_screen.dart';
 import 'splash_screen.dart';
 
-enum _AuthPhase { splash, onboarding, login }
+enum _AuthPhase { splash, intro, onboarding, login }
 
 enum _LoginMode { main, emailSignIn, emailCreate }
 
@@ -27,9 +31,13 @@ class AuthGate extends ConsumerStatefulWidget {
     super.key,
     required this.statusMessage,
     this.isDemoMode = false,
+    this.artistSearch,
+    this.artistImageLookup,
   });
   final String statusMessage;
   final bool isDemoMode;
+  final ArtistSearch? artistSearch;
+  final ArtistImageLookup? artistImageLookup;
 
   @override
   ConsumerState<AuthGate> createState() => _AuthGateState();
@@ -38,6 +46,32 @@ class AuthGate extends ConsumerStatefulWidget {
 class _AuthGateState extends ConsumerState<AuthGate> {
   _AuthPhase _phase = _AuthPhase.splash;
   bool _checkedOnboarding = false;
+  bool _featureOnboardingCompleted = false;
+  bool _introSeen = false;
+  String? _artistPreferencesUid;
+  bool _artistPreferencesReady = false;
+  bool _artistPreferencesCompleted = false;
+  bool _savingArtistPreferences = false;
+  String? _artistPreferencesError;
+
+  /// UID currently registered for push, so we register/unregister only on real
+  /// sign-in / sign-out transitions rather than every rebuild.
+  String? _messagingUid;
+
+  /// Registers (or drops) this device's push token as the session changes.
+  void _syncMessaging(SessionState? session) {
+    final authed = session?.isAuthenticated == true && session?.isDemo != true;
+    final uid = authed ? session!.userId : null;
+    if (uid == _messagingUid) return;
+    final previous = _messagingUid;
+    _messagingUid = uid;
+    final service = ref.read(messagingServiceProvider);
+    if (uid != null) {
+      unawaited(service.register(uid));
+    } else if (previous != null) {
+      unawaited(service.unregister());
+    }
+  }
 
   @override
   void initState() {
@@ -47,34 +81,82 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   Future<void> _checkOnboardingStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    final completed = prefs.getBool('onboarding_completed') ?? false;
+    final completed =
+        prefs.getBool('feature_onboarding_completed_v1') ??
+        prefs.getBool('onboarding_completed') ??
+        false;
+    final introSeen = await ref.read(onboardingStateProvider).isIntroSeen();
     if (mounted) {
       setState(() {
         _checkedOnboarding = true;
-        _phase = completed ? _AuthPhase.login : _AuthPhase.splash;
+        _featureOnboardingCompleted = completed;
+        _introSeen = introSeen;
+        _phase = _AuthPhase.splash;
       });
     }
   }
 
-  Future<void> _completeOnboarding(List<String> artists) async {
+  Future<void> _completeFeatureOnboarding(List<String> _) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('onboarding_completed', true);
-    if (artists.isNotEmpty) {
-      await prefs.setStringList('pending_followed_artists', artists);
+    await prefs.setBool('feature_onboarding_completed_v1', true);
+    if (mounted) {
+      setState(() {
+        _featureOnboardingCompleted = true;
+        _phase = _AuthPhase.login;
+      });
     }
-    if (mounted) setState(() => _phase = _AuthPhase.login);
   }
 
-  bool _syncedArtists = false;
+  void _finishSplash() {
+    setState(() {
+      _phase = !_introSeen
+          ? _AuthPhase.intro
+          : (_featureOnboardingCompleted
+                ? _AuthPhase.login
+                : _AuthPhase.onboarding);
+    });
+  }
 
-  Future<void> _syncPendingArtists(SessionState session) async {
-    if (_syncedArtists) return;
-    _syncedArtists = true;
+  Future<void> _finishIntro() async {
+    await ref.read(onboardingStateProvider).markIntroSeen();
+    if (!mounted) return;
+    setState(() {
+      _introSeen = true;
+      _phase = _featureOnboardingCompleted
+          ? _AuthPhase.login
+          : _AuthPhase.onboarding;
+    });
+  }
+
+  String _artistPreferencesKey(String uid) =>
+      'artist_preferences_completed_v1_$uid';
+
+  bool _shouldCollectArtistPreferences(SessionState session) {
+    return session.isAuthenticated &&
+        !session.isDemo &&
+        session.providerLabel != 'Guest';
+  }
+
+  void _prepareArtistPreferences(SessionState session) {
+    if (!_shouldCollectArtistPreferences(session)) return;
+    if (_artistPreferencesUid == session.userId && _artistPreferencesReady) {
+      return;
+    }
+    _artistPreferencesUid = session.userId;
+    _artistPreferencesReady = false;
+    _artistPreferencesCompleted = false;
+    _artistPreferencesError = null;
+    unawaited(_loadArtistPreferencesStatus(session));
+  }
+
+  Future<void> _loadArtistPreferencesStatus(SessionState session) async {
     try {
       final prefs = await SharedPreferences.getInstance();
+      final key = _artistPreferencesKey(session.userId);
+      var completed = prefs.getBool(key) ?? false;
       final pending = prefs.getStringList('pending_followed_artists');
-      if (pending != null && pending.isNotEmpty) {
-        await prefs.remove('pending_followed_artists');
+
+      if (!completed && pending != null && pending.isNotEmpty) {
         await ref
             .read(userRepositoryProvider)
             .setFollowedArtists(
@@ -82,15 +164,142 @@ class _AuthGateState extends ConsumerState<AuthGate> {
               fallbackName: session.displayName,
               artists: pending,
             );
+        await prefs.remove('pending_followed_artists');
+        await prefs.setBool(key, true);
+        await prefs.setBool('onboarding_completed', true);
+        completed = true;
       }
+
+      if (!completed) {
+        final profile = await ref
+            .read(userRepositoryProvider)
+            .watchUser(
+              userId: session.userId,
+              fallbackName: session.displayName,
+            )
+            .first;
+        if (profile.followedArtists.isNotEmpty) {
+          await prefs.setBool(key, true);
+          await prefs.setBool('onboarding_completed', true);
+          completed = true;
+        }
+      }
+
+      if (!mounted || _artistPreferencesUid != session.userId) return;
+      setState(() {
+        _artistPreferencesReady = true;
+        _artistPreferencesCompleted = completed;
+      });
     } catch (e, st) {
       developer.log(
-        'Failed to sync pending followed artists',
+        'Failed to load artist preference onboarding status',
         name: 'AuthGate',
         error: e,
         stackTrace: st,
       );
+      if (!mounted || _artistPreferencesUid != session.userId) return;
+      setState(() {
+        _artistPreferencesReady = true;
+        _artistPreferencesCompleted = true;
+        _artistPreferencesError = null;
+      });
     }
+  }
+
+  Future<void> _completeArtistPreferences(
+    SessionState session,
+    List<String> artists,
+  ) async {
+    if (_savingArtistPreferences) return;
+    setState(() {
+      _savingArtistPreferences = true;
+      _artistPreferencesError = null;
+    });
+
+    var remoteSaveFailed = false;
+    if (artists.isNotEmpty) {
+      try {
+        await ref
+            .read(userRepositoryProvider)
+            .setFollowedArtists(
+              userId: session.userId,
+              fallbackName: session.displayName,
+              artists: artists,
+            );
+      } catch (e, st) {
+        remoteSaveFailed = true;
+        developer.log(
+          'Failed to save followed artists remotely',
+          name: 'AuthGate',
+          error: e,
+          stackTrace: st,
+        );
+      }
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_artistPreferencesKey(session.userId), true);
+      await prefs.setBool('onboarding_completed', true);
+      if (remoteSaveFailed && artists.isNotEmpty) {
+        await prefs.setStringList('pending_followed_artists', artists);
+      } else {
+        await prefs.remove('pending_followed_artists');
+      }
+
+      if (!mounted || _artistPreferencesUid != session.userId) return;
+      setState(() {
+        _artistPreferencesReady = true;
+        _artistPreferencesCompleted = true;
+        _savingArtistPreferences = false;
+      });
+    } catch (e, st) {
+      developer.log(
+        'Failed to save followed artists',
+        name: 'AuthGate',
+        error: e,
+        stackTrace: st,
+      );
+      if (!mounted || _artistPreferencesUid != session.userId) return;
+      setState(() {
+        _artistPreferencesReady = true;
+        _artistPreferencesCompleted = true;
+        _savingArtistPreferences = false;
+        _artistPreferencesError = null;
+      });
+    }
+  }
+
+  Widget _artistPreferenceSetup(SessionState session) {
+    return Scaffold(
+      backgroundColor: AppTheme.ink,
+      body: Stack(
+        children: [
+          OnboardingArtistPicker(
+            onComplete: (artists) =>
+                unawaited(_completeArtistPreferences(session, artists)),
+            onSkip: () =>
+                unawaited(_completeArtistPreferences(session, const [])),
+            artistSearch: widget.artistSearch,
+            artistImageLookup: widget.artistImageLookup,
+          ),
+          if (_savingArtistPreferences)
+            Container(
+              color: AppTheme.ink.withValues(alpha: 0.62),
+              child: const Center(
+                child: CircularProgressIndicator(color: AppTheme.cyan),
+              ),
+            ),
+          if (_artistPreferencesError != null)
+            Positioned(
+              left: 20,
+              right: 20,
+              bottom: 20,
+              child: _SetupErrorBanner(message: _artistPreferencesError!),
+            ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -104,13 +313,11 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
     switch (_phase) {
       case _AuthPhase.splash:
-        return SplashScreen(
-          onFinished: () => setState(() => _phase = _AuthPhase.onboarding),
-        );
+        return SplashScreen(onFinished: _finishSplash);
+      case _AuthPhase.intro:
+        return IntroCarousel(onFinish: _finishIntro);
       case _AuthPhase.onboarding:
-        return OnboardingScreen(
-          onComplete: (artists) => _completeOnboarding(artists),
-        );
+        return OnboardingScreen(onComplete: _completeFeatureOnboarding);
       case _AuthPhase.login:
         break;
     }
@@ -126,25 +333,79 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     }
 
     if (sessionAsync.hasValue) {
-      if (session?.isAuthenticated == true) {
-        _syncPendingArtists(session!);
-      }
+      _syncMessaging(session);
       // Require a signed-in session (real account or explicit guest) before the
       // app on every platform — this surfaces onboarding + sign-in / account
       // creation instead of silently admitting an anonymous session. Demo mode
       // (Firebase unavailable) bypasses the gate so the app still works offline.
-      if (!widget.isDemoMode && session?.isAuthenticated != true) {
+      if (!widget.isDemoMode &&
+          session?.isAuthenticated != true &&
+          session?.isDemo != true) {
         return _LoginScreen(statusMessage: widget.statusMessage);
       }
+
+      if (session != null && _shouldCollectArtistPreferences(session)) {
+        _prepareArtistPreferences(session);
+        if (!_artistPreferencesReady) {
+          return const Scaffold(
+            backgroundColor: AppTheme.ink,
+            body: Center(
+              child: CircularProgressIndicator(color: AppTheme.cyan),
+            ),
+          );
+        }
+        if (!_artistPreferencesCompleted) {
+          return _artistPreferenceSetup(session);
+        }
+      }
+
       return isMobileForm
           ? const MobileShell()
           : VibeShell(
               statusMessage: widget.statusMessage,
-              isDemoMode: widget.isDemoMode,
+              isDemoMode: widget.isDemoMode || session?.isDemo == true,
             );
     }
 
     return _LoginScreen(statusMessage: widget.statusMessage);
+  }
+}
+
+class _SetupErrorBanner extends StatelessWidget {
+  const _SetupErrorBanner({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3A1720).withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.45)),
+          boxShadow: AppTheme.glow(Colors.redAccent, blur: 22, opacity: 0.18),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Colors.redAccent,
+              size: 18,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 
@@ -262,7 +523,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
           style: theme.textTheme.headlineMedium?.copyWith(
             color: Colors.white,
             fontWeight: FontWeight.w900,
-            letterSpacing: -0.5,
+            letterSpacing: 0,
           ),
         ),
       ),
@@ -353,10 +614,11 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       ),
       const SizedBox(height: 12),
 
-      // Sign in with Apple — iOS only (native flow, works). Web/Android need a
-      // real Sign-in-with-Apple key in Firebase; the one configured is an ASC
-      // API key, not a Sign-in key — so they're gated off until that's swapped.
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.iOS) ...[
+      // Sign in with Apple — native on Apple platforms. Web/Android need a real
+      // Sign-in-with-Apple Services ID in Firebase before this button can ship.
+      if (!kIsWeb &&
+          (defaultTargetPlatform == TargetPlatform.iOS ||
+              defaultTargetPlatform == TargetPlatform.macOS)) ...[
         SizedBox(
           width: double.infinity,
           child: SignInWithAppleButton(
@@ -382,33 +644,30 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       ),
       const SizedBox(height: 12),
 
-      // Guest / anonymous — desktop only. On phones, pairing + AI require a
-      // real account (claimPairing rejects anonymous users), so a guest could
-      // enter the app but couldn't actually use it. Hide the option on mobile.
-      if (!isMobileForm) ...[
-        // Divider
-        Row(
-          children: [
-            const Expanded(child: Divider(color: AppTheme.hairlineStrong)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              child: Text(
-                'or',
-                style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-              ),
+      // Guest / continue-without-account — available on every platform. It is
+      // local mock data only, with no Firebase anonymous account and no live
+      // API-backed screens.
+      Row(
+        children: [
+          const Expanded(child: Divider(color: AppTheme.hairlineStrong)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Text(
+              'or',
+              style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
             ),
-            const Expanded(child: Divider(color: AppTheme.hairlineStrong)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        TextButton(
-          onPressed: _isLoading ? null : _signInAnonymously,
-          child: Text(
-            'Continue as Guest',
-            style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w600),
           ),
+          const Expanded(child: Divider(color: AppTheme.hairlineStrong)),
+        ],
+      ),
+      const SizedBox(height: 12),
+      TextButton(
+        onPressed: _isLoading ? null : _signInAnonymously,
+        child: Text(
+          'Continue as Guest',
+          style: TextStyle(color: AppTheme.cyan, fontWeight: FontWeight.w600),
         ),
-      ],
+      ),
 
       if (_error != null) ...[const SizedBox(height: 16), _errorBanner(theme)],
 
@@ -424,13 +683,6 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
             color: AppTheme.textTertiary,
             fontSize: 11,
           ),
-        ),
-      ),
-      Text(
-        'Built by Angelo Nartey.',
-        style: theme.textTheme.bodySmall?.copyWith(
-          color: AppTheme.textTertiary,
-          fontSize: 10,
         ),
       ),
     ],
@@ -592,8 +844,14 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
   // ── Auth actions ──────────────────────────────────────────────────────────
 
   Future<void> _saveRememberMe() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('remember_me', _rememberMe);
+    // Best-effort: a "remember me" preference write must never surface as a
+    // sign-in error after the user has already authenticated.
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('remember_me', _rememberMe);
+    } catch (_) {
+      // Non-fatal; the user is signed in regardless.
+    }
   }
 
   Future<void> _signInWithGoogle() async {
@@ -605,7 +863,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
       await ref.read(sessionRepositoryProvider).signInWithGoogle();
       await _saveRememberMe();
     } catch (e) {
-      if (mounted) setState(() => _error = _friendly(e));
+      if (mounted) setState(() => _error = _friendly(e, oauth: true));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -622,10 +880,10 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     } on SignInWithAppleAuthorizationException catch (e) {
       // User cancelling the Apple sheet is not an error worth showing.
       if (e.code != AuthorizationErrorCode.canceled && mounted) {
-        setState(() => _error = _friendly(e));
+        setState(() => _error = _friendly(e, oauth: true));
       }
     } catch (e) {
-      if (mounted) setState(() => _error = _friendly(e));
+      if (mounted) setState(() => _error = _friendly(e, oauth: true));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -686,7 +944,7 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     }
   }
 
-  String _friendly(Object error) {
+  String _friendly(Object error, {bool oauth = false}) {
     final msg = error.toString();
     if (msg.contains('network-request-failed')) {
       return 'Network error. Check your connection.';
@@ -696,6 +954,19 @@ class _LoginScreenState extends ConsumerState<_LoginScreen> {
     }
     if (msg.contains('too-many-requests')) {
       return 'Too many attempts. Wait a moment.';
+    }
+    // For Apple/Google, `invalid-credential` means the OAuth token was rejected
+    // — NOT a wrong password. Showing "Incorrect email or password" there is
+    // misleading, so give an OAuth-specific message instead.
+    if (oauth) {
+      if (msg.contains('account-exists-with-different-credential')) {
+        return 'This email is already registered with a different sign-in '
+            'method. Use that method, or Email/Password.';
+      }
+      if (msg.contains('operation-not-allowed')) {
+        return 'This sign-in method is not enabled. Try Email or Guest.';
+      }
+      return 'Could not complete sign-in. Please try again.';
     }
     if (msg.contains('wrong-password') || msg.contains('invalid-credential')) {
       return 'Incorrect email or password.';

@@ -51,7 +51,9 @@ class _RegionPickerBadge extends ConsumerWidget {
         if (session != null &&
             session.isAuthenticated &&
             session.userId.isNotEmpty) {
-          ref.read(userRepositoryProvider).updatePreferredRegion(
+          ref
+              .read(userRepositoryProvider)
+              .updatePreferredRegion(
                 userId: session.userId,
                 fallbackName: session.displayName,
                 region: region,
@@ -109,6 +111,98 @@ class _RegionPickerBadge extends ConsumerWidget {
             const Icon(
               Icons.arrow_drop_down_rounded,
               color: AppTheme.cyan,
+              size: 14,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Genre picker badge ────────────────────────────────────────────────────────
+
+class _GenrePickerBadge extends ConsumerWidget {
+  const _GenrePickerBadge({required this.currentGenre});
+
+  final String currentGenre;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final genres = ref
+        .watch(availableGenresProvider)
+        .where((genre) => genre == 'All' || isSpecificGenre(genre))
+        .toList();
+
+    return PopupMenuButton<String>(
+      tooltip: 'Change genre',
+      offset: const Offset(0, 32),
+      color: AppTheme.panel,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppTheme.edge),
+      ),
+      onSelected: (genre) {
+        ref
+            .read(selectedGenreProvider.notifier)
+            .set(genre == 'All' ? null : genre);
+      },
+      itemBuilder: (_) => genres
+          .map(
+            (genre) => PopupMenuItem<String>(
+              value: genre,
+              child: Row(
+                children: [
+                  if (genre == currentGenre)
+                    const Icon(
+                      Icons.check_rounded,
+                      size: 14,
+                      color: AppTheme.amber,
+                    )
+                  else
+                    const SizedBox(width: 14),
+                  const SizedBox(width: 8),
+                  Text(
+                    genre,
+                    style: TextStyle(
+                      color: genre == currentGenre
+                          ? AppTheme.amber
+                          : AppTheme.textPrimary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.amber.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.amber.withValues(alpha: 0.2)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 170),
+              child: Text(
+                'Genre: $currentGenre',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.amber,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              Icons.arrow_drop_down_rounded,
+              color: AppTheme.amber,
               size: 14,
             ),
           ],

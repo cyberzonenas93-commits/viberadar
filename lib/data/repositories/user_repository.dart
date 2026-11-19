@@ -148,7 +148,7 @@ class MockUserRepository implements UserRepository {
       () => UserProfile.empty(
         id: userId,
         displayName: fallbackName,
-        preferredRegion: 'GH',
+        preferredRegion: 'Global',
       ),
     );
   }

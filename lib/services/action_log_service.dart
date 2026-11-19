@@ -20,7 +20,8 @@ class ActionLogService {
     // Persist to disk
     try {
       final file = await _logFile();
-      final line = '${entry.timestamp.toIso8601String()}'
+      final line =
+          '${entry.timestamp.toIso8601String()}'
           '\t${entry.actionType}'
           '\t${entry.fileCount}'
           '\t${entry.destinationPath ?? '-'}'
@@ -30,7 +31,12 @@ class ActionLogService {
           '\t${entry.summary}\n';
       await file.writeAsString(line, mode: FileMode.append);
     } catch (e, st) {
-      developer.log('Failed to write action log entry', name: 'ActionLog', error: e, stackTrace: st);
+      developer.log(
+        'Failed to write action log entry',
+        name: 'ActionLog',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
@@ -44,17 +50,24 @@ class ActionLogService {
     required List<String> missingTracks,
     required String mode, // 'copy', 'alias', 'virtual'
   }) async {
-    await log(ActionLogEntry(
-      timestamp: DateTime.now(),
-      actionType: 'crate_creation',
-      summary: 'Created crate "$crateName" ($mode): $copied copied, $skipped skipped, ${missingTracks.length} missing',
-      fileCount: copied + skipped,
-      destinationPath: destinationPath,
-      copied: copied,
-      skipped: skipped,
-      errors: errors,
-      metadata: {'crateName': crateName, 'mode': mode, 'missing': missingTracks.length},
-    ));
+    await log(
+      ActionLogEntry(
+        timestamp: DateTime.now(),
+        actionType: 'crate_creation',
+        summary:
+            'Created crate "$crateName" ($mode): $copied copied, $skipped skipped, ${missingTracks.length} missing',
+        fileCount: copied + skipped,
+        destinationPath: destinationPath,
+        copied: copied,
+        skipped: skipped,
+        errors: errors,
+        metadata: {
+          'crateName': crateName,
+          'mode': mode,
+          'missing': missingTracks.length,
+        },
+      ),
+    );
   }
 
   /// Log an export operation.
@@ -63,17 +76,19 @@ class ActionLogService {
     required String exportPath,
     required int trackCount,
   }) async {
-    await log(ActionLogEntry(
-      timestamp: DateTime.now(),
-      actionType: 'export',
-      summary: 'Exported $trackCount tracks as $format to $exportPath',
-      fileCount: trackCount,
-      destinationPath: exportPath,
-      copied: trackCount,
-      skipped: 0,
-      errors: [],
-      metadata: {'format': format},
-    ));
+    await log(
+      ActionLogEntry(
+        timestamp: DateTime.now(),
+        actionType: 'export',
+        summary: 'Exported $trackCount tracks as $format to $exportPath',
+        fileCount: trackCount,
+        destinationPath: exportPath,
+        copied: trackCount,
+        skipped: 0,
+        errors: [],
+        metadata: {'format': format},
+      ),
+    );
   }
 
   /// Log a duplicate cleanup.
@@ -83,17 +98,20 @@ class ActionLogService {
     required String destination, // 'trash' or folder path
     required List<String> errors,
   }) async {
-    await log(ActionLogEntry(
-      timestamp: DateTime.now(),
-      actionType: 'duplicate_cleanup',
-      summary: 'Duplicate cleanup: $moved moved to $destination, $skipped skipped',
-      fileCount: moved + skipped,
-      destinationPath: destination,
-      copied: 0,
-      skipped: skipped,
-      errors: errors,
-      metadata: {'moved': moved},
-    ));
+    await log(
+      ActionLogEntry(
+        timestamp: DateTime.now(),
+        actionType: 'duplicate_cleanup',
+        summary:
+            'Duplicate cleanup: $moved moved to $destination, $skipped skipped',
+        fileCount: moved + skipped,
+        destinationPath: destination,
+        copied: 0,
+        skipped: skipped,
+        errors: errors,
+        metadata: {'moved': moved},
+      ),
+    );
   }
 
   /// Get the log file path.

@@ -16,7 +16,8 @@ class _ArtistCatalogScreen extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_ArtistCatalogScreen> createState() => _ArtistCatalogScreenState();
+  ConsumerState<_ArtistCatalogScreen> createState() =>
+      _ArtistCatalogScreenState();
 }
 
 class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
@@ -38,9 +39,13 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   }
 
   Future<void> _loadSpotifyCatalogue() async {
-    setState(() { _loadingCatalogue = true; });
+    setState(() {
+      _loadingCatalogue = true;
+    });
     try {
-      final catalogue = await _spotifyService.getFullCatalogue(widget.artist.name);
+      final catalogue = await _spotifyService.getFullCatalogue(
+        widget.artist.name,
+      );
       if (mounted) {
         setState(() {
           _spotifyCatalogue = catalogue;
@@ -57,9 +62,13 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
   }
 
   Future<void> _loadAppleMusic() async {
-    setState(() { _loadingApple = true; });
+    setState(() {
+      _loadingApple = true;
+    });
     try {
-      final tracks = await _appleMusicService.getFullDiscography(widget.artist.name);
+      final tracks = await _appleMusicService.getFullDiscography(
+        widget.artist.name,
+      );
       if (mounted) {
         setState(() {
           _appleMusicTracks = tracks;
@@ -125,7 +134,10 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
               // Back button
               IconButton(
                 onPressed: widget.onBack,
-                icon: const Icon(Icons.arrow_back_rounded, color: AppTheme.textSecondary),
+                icon: const Icon(
+                  Icons.arrow_back_rounded,
+                  color: AppTheme.textSecondary,
+                ),
                 tooltip: 'Back to all artists',
               ),
               const SizedBox(width: 8),
@@ -148,7 +160,12 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(a.name, style: theme.textTheme.headlineSmall?.copyWith(color: AppTheme.textPrimary)),
+                    Text(
+                      a.name,
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
                     const SizedBox(height: 6),
                     Wrap(
                       spacing: 8,
@@ -156,8 +173,14 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                       children: [
                         _InfoChip(text: a.topGenre, color: AppTheme.violet),
                         _InfoChip(text: a.topRegion, color: AppTheme.cyan),
-                        _InfoChip(text: '${a.trackCount} tracks', color: AppTheme.textSecondary),
-                        _InfoChip(text: 'Score: ${(a.avgTrendScore * 100).toInt()}', color: AppTheme.amber),
+                        _InfoChip(
+                          text: '${a.trackCount} tracks',
+                          color: AppTheme.textSecondary,
+                        ),
+                        _InfoChip(
+                          text: 'Score: ${(a.avgTrendScore * 100).toInt()}',
+                          color: AppTheme.amber,
+                        ),
                       ],
                     ),
                     if (a.spotifyUrl != null) ...[
@@ -165,20 +188,41 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                       GestureDetector(
                         onTap: () async {
                           final uri = Uri.tryParse(a.spotifyUrl!);
-                          if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+                          if (uri != null) {
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          }
                         },
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1DB954).withValues(alpha: 0.12),
+                            color: const Color(
+                              0xFF1DB954,
+                            ).withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.open_in_new_rounded, color: Color(0xFF1DB954), size: 12),
+                              Icon(
+                                Icons.open_in_new_rounded,
+                                color: Color(0xFF1DB954),
+                                size: 12,
+                              ),
                               SizedBox(width: 6),
-                              Text('Open in Spotify', style: TextStyle(color: Color(0xFF1DB954), fontSize: 11, fontWeight: FontWeight.w600)),
+                              Text(
+                                'Open in Spotify',
+                                style: TextStyle(
+                                  color: Color(0xFF1DB954),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                             ],
                           ),
                         ),
@@ -192,43 +236,75 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   // Build Set button
-                  if (widget.artistModel != null && widget.artistModel!.topTracks.isNotEmpty)
+                  if (widget.artistModel != null &&
+                      widget.artistModel!.topTracks.isNotEmpty)
                     _BuildSetButton(
                       artistModel: widget.artistModel!,
-                      onBuilt: (count) => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Added $count tracks to Set Builder'),
-                          backgroundColor: AppTheme.violet,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      ),
+                      onBuilt: (count) =>
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Added $count tracks to Set Builder',
+                              ),
+                              backgroundColor: AppTheme.violet,
+                              duration: const Duration(seconds: 2),
+                            ),
+                          ),
                     ),
                   if (widget.artistModel != null) const SizedBox(height: 8),
                   // Sort selector
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: AppTheme.panelRaised,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.edge.withValues(alpha: 0.5)),
+                      border: Border.all(
+                        color: AppTheme.edge.withValues(alpha: 0.5),
+                      ),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text('Sort: ', style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                        const Text(
+                          'Sort: ',
+                          style: TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 11,
+                          ),
+                        ),
                         DropdownButtonHideUnderline(
                           child: DropdownButton<String>(
                             value: _sortBy,
                             isDense: true,
                             dropdownColor: AppTheme.panelRaised,
-                            style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 12,
+                            ),
                             items: const [
-                              DropdownMenuItem(value: 'score', child: Text('Hottest')),
-                              DropdownMenuItem(value: 'title', child: Text('Title A-Z')),
-                              DropdownMenuItem(value: 'bpm', child: Text('BPM')),
-                              DropdownMenuItem(value: 'genre', child: Text('Genre')),
+                              DropdownMenuItem(
+                                value: 'score',
+                                child: Text('Hottest'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'title',
+                                child: Text('Title A-Z'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'bpm',
+                                child: Text('BPM'),
+                              ),
+                              DropdownMenuItem(
+                                value: 'genre',
+                                child: Text('Genre'),
+                              ),
                             ],
-                            onChanged: (v) { if (v != null) setState(() => _sortBy = v); },
+                            onChanged: (v) {
+                              if (v != null) setState(() => _sortBy = v);
+                            },
                           ),
                         ),
                       ],
@@ -241,12 +317,16 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                       crateNames: crateState.crates.keys.toList(),
                       onAddToCrate: (crateName) {
                         for (final id in _selectedTrackIds) {
-                          ref.read(crateProvider.notifier).addTrackToCrate(crateName, id);
+                          ref
+                              .read(crateProvider.notifier)
+                              .addTrackToCrate(crateName, id);
                         }
                         setState(() => _selectedTrackIds.clear());
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Added ${_selectedTrackIds.isEmpty ? "tracks" : ""} to $crateName'),
+                            content: Text(
+                              'Added ${_selectedTrackIds.isEmpty ? "tracks" : ""} to $crateName',
+                            ),
                             backgroundColor: AppTheme.violet,
                           ),
                         );
@@ -254,7 +334,9 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                       onNewCrate: (name) {
                         ref.read(crateProvider.notifier).createCrate(name);
                         for (final id in _selectedTrackIds) {
-                          ref.read(crateProvider.notifier).addTrackToCrate(name, id);
+                          ref
+                              .read(crateProvider.notifier)
+                              .addTrackToCrate(name, id);
                         }
                         setState(() => _selectedTrackIds.clear());
                       },
@@ -275,32 +357,93 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
               Row(
                 children: [
                   if (_loadingCatalogue) ...[
-                    const SizedBox(width: 4, height: 4, child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF1DB954))),
+                    const SizedBox(
+                      width: 4,
+                      height: 4,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Color(0xFF1DB954),
+                      ),
+                    ),
                     const SizedBox(width: 6),
-                    const Text('Loading Spotify...', style: TextStyle(color: Color(0xFF1DB954), fontSize: 10)),
+                    const Text(
+                      'Loading Spotify...',
+                      style: TextStyle(color: Color(0xFF1DB954), fontSize: 10),
+                    ),
                     const SizedBox(width: 12),
                   ] else ...[
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFF1DB954), shape: BoxShape.circle)),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF1DB954),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 6),
-                    Text('${spotifyTracks.length} from Spotify', style: const TextStyle(color: Color(0xFF1DB954), fontSize: 10, fontWeight: FontWeight.w500)),
+                    Text(
+                      '${spotifyTracks.length} from Spotify',
+                      style: const TextStyle(
+                        color: Color(0xFF1DB954),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                     const SizedBox(width: 12),
                   ],
                   if (_loadingApple) ...[
-                    const SizedBox(width: 4, height: 4, child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFFFC3C44))),
+                    const SizedBox(
+                      width: 4,
+                      height: 4,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 1.5,
+                        color: Color(0xFFFC3C44),
+                      ),
+                    ),
                     const SizedBox(width: 6),
-                    const Text('Loading Apple Music...', style: TextStyle(color: Color(0xFFFC3C44), fontSize: 10)),
+                    const Text(
+                      'Loading Apple Music...',
+                      style: TextStyle(color: Color(0xFFFC3C44), fontSize: 10),
+                    ),
                   ] else ...[
-                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Color(0xFFFC3C44), shape: BoxShape.circle)),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFC3C44),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
                     const SizedBox(width: 6),
-                    Text('${appleTracks.length} from Apple Music', style: const TextStyle(color: Color(0xFFFC3C44), fontSize: 10, fontWeight: FontWeight.w500)),
+                    Text(
+                      '${appleTracks.length} from Apple Music',
+                      style: const TextStyle(
+                        color: Color(0xFFFC3C44),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ],
                   const Spacer(),
                   if (_selectedTrackIds.isNotEmpty) ...[
-                    Text('${_selectedTrackIds.length} selected', style: const TextStyle(color: AppTheme.violet, fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text(
+                      '${_selectedTrackIds.length} selected',
+                      style: const TextStyle(
+                        color: AppTheme.violet,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(width: 8),
                     GestureDetector(
                       onTap: () => setState(() => _selectedTrackIds.clear()),
-                      child: const Text('Clear', style: TextStyle(color: AppTheme.textTertiary, fontSize: 11)),
+                      child: const Text(
+                        'Clear',
+                        style: TextStyle(
+                          color: AppTheme.textTertiary,
+                          fontSize: 11,
+                        ),
+                      ),
                     ),
                   ],
                 ],
@@ -311,19 +454,60 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 scrollDirection: Axis.horizontal,
                 child: Row(
                   children: [
-                    _ViewTab(label: 'Full Catalogue', subtitle: _loadingCatalogue ? 'Loading...' : '${displayMerged.length}', isActive: _view == 'all', onTap: () => setState(() => _view = 'all')),
+                    _ViewTab(
+                      label: 'Full Catalogue',
+                      subtitle: _loadingCatalogue
+                          ? 'Loading...'
+                          : '${displayMerged.length}',
+                      isActive: _view == 'all',
+                      onTap: () => setState(() => _view = 'all'),
+                    ),
                     const SizedBox(width: 8),
-                    _ViewTab(label: 'Albums', subtitle: _loadingCatalogue ? '...' : '${_albumGroups(spotifyTracks).length}', isActive: _view == 'albums', onTap: () => setState(() => _view = 'albums')),
+                    _ViewTab(
+                      label: 'Albums',
+                      subtitle: _loadingCatalogue
+                          ? '...'
+                          : '${_albumGroups(spotifyTracks).length}',
+                      isActive: _view == 'albums',
+                      onTap: () => setState(() => _view = 'albums'),
+                    ),
                     const SizedBox(width: 8),
-                    _ViewTab(label: 'Top Tracks', subtitle: '${mergedTop.length}', isActive: _view == 'top', onTap: () => setState(() => _view = 'top')),
+                    _ViewTab(
+                      label: 'Top Tracks',
+                      subtitle: '${mergedTop.length}',
+                      isActive: _view == 'top',
+                      onTap: () => setState(() => _view = 'top'),
+                    ),
                     const SizedBox(width: 8),
-                    _ViewTab(label: 'In Radar', subtitle: '${radarTracks.length}', isActive: _view == 'radar', onTap: () => setState(() => _view = 'radar')),
+                    _ViewTab(
+                      label: 'In Radar',
+                      subtitle: '${radarTracks.length}',
+                      isActive: _view == 'radar',
+                      onTap: () => setState(() => _view = 'radar'),
+                    ),
                     const SizedBox(width: 8),
-                    _ViewTab(label: 'Trending', subtitle: '${widget.artistModel?.trendingTracks.length ?? 0}', isActive: _view == 'trending', onTap: () => setState(() => _view = 'trending')),
+                    _ViewTab(
+                      label: 'Trending',
+                      subtitle:
+                          '${widget.artistModel?.trendingTracks.length ?? 0}',
+                      isActive: _view == 'trending',
+                      onTap: () => setState(() => _view = 'trending'),
+                    ),
                     const SizedBox(width: 8),
-                    _ViewTab(label: 'By Era', subtitle: '${widget.artistModel?.tracksByEra.length ?? 0} eras', isActive: _view == 'by_era', onTap: () => setState(() => _view = 'by_era')),
+                    _ViewTab(
+                      label: 'By Era',
+                      subtitle:
+                          '${widget.artistModel?.tracksByEra.length ?? 0} eras',
+                      isActive: _view == 'by_era',
+                      onTap: () => setState(() => _view = 'by_era'),
+                    ),
                     const SizedBox(width: 8),
-                    _ViewTab(label: 'By BPM', subtitle: widget.artistModel?.bpmRangeLabel ?? '—', isActive: _view == 'by_bpm', onTap: () => setState(() => _view = 'by_bpm')),
+                    _ViewTab(
+                      label: 'By BPM',
+                      subtitle: widget.artistModel?.bpmRangeLabel ?? '—',
+                      isActive: _view == 'by_bpm',
+                      onTap: () => setState(() => _view = 'by_bpm'),
+                    ),
                   ],
                 ),
               ),
@@ -342,9 +526,10 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
               ? _buildEraView(widget.artistModel?.tracksByEra ?? {})
               : _view == 'by_bpm'
               ? _buildBpmView(
-                  [...(widget.artistModel?.topTracks ?? []),
-                   ...(widget.artistModel?.trendingTracks ?? [])]
-                    ..sort((a, b) => a.bpm.compareTo(b.bpm)),
+                  [
+                    ...(widget.artistModel?.topTracks ?? []),
+                    ...(widget.artistModel?.trendingTracks ?? []),
+                  ]..sort((a, b) => a.bpm.compareTo(b.bpm)),
                 )
               : _view == 'albums'
               ? _buildAlbumsView(spotifyTracks)
@@ -358,33 +543,45 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                     mainAxisSpacing: 12,
                   ),
                   itemCount: radarTracks.length,
-                  itemBuilder: (context, i) => _RadarTrackCard(track: radarTracks[i], rank: i + 1),
+                  itemBuilder: (context, i) =>
+                      _RadarTrackCard(track: radarTracks[i], rank: i + 1),
                 )
               : (_loadingCatalogue && displayMerged.isEmpty)
-                  ? const Center(child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircularProgressIndicator(color: AppTheme.violet),
-                        SizedBox(height: 12),
-                        Text('Loading catalogue...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                      ],
-                    ))
-                  : displayMerged.isEmpty
-                      ? const Center(child: Text('No tracks found', style: TextStyle(color: AppTheme.textTertiary)))
-                      : GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
-                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                            maxCrossAxisExtent: 200,
-                            childAspectRatio: 0.72,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                          ),
-                          itemCount: displayMerged.length,
-                          itemBuilder: (context, i) => _UnifiedTrackCard(
-                            track: displayMerged[i],
-                            rank: i + 1,
-                          ),
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: AppTheme.violet),
+                      SizedBox(height: 12),
+                      Text(
+                        'Loading catalogue...',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
                         ),
+                      ),
+                    ],
+                  ),
+                )
+              : displayMerged.isEmpty
+              ? const Center(
+                  child: Text(
+                    'No tracks found',
+                    style: TextStyle(color: AppTheme.textTertiary),
+                  ),
+                )
+              : GridView.builder(
+                  padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                    maxCrossAxisExtent: 200,
+                    childAspectRatio: 0.72,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                  ),
+                  itemCount: displayMerged.length,
+                  itemBuilder: (context, i) =>
+                      _UnifiedTrackCard(track: displayMerged[i], rank: i + 1),
+                ),
         ),
       ],
     );
@@ -392,26 +589,46 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
 
   // ── Intelligence tab helpers ──────────────────────────────────────────────
 
-  Widget _buildRadarTrackGrid(List<Track> tracks, {String emptyMsg = 'No tracks found'}) {
+  Widget _buildRadarTrackGrid(
+    List<Track> tracks, {
+    String emptyMsg = 'No tracks found',
+  }) {
     if (tracks.isEmpty) {
-      return Center(child: Text(emptyMsg, style: const TextStyle(color: AppTheme.textTertiary)));
+      return Center(
+        child: Text(
+          emptyMsg,
+          style: const TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
     return GridView.builder(
       padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 200, childAspectRatio: 0.72,
-        crossAxisSpacing: 12, mainAxisSpacing: 12,
+        maxCrossAxisExtent: 200,
+        childAspectRatio: 0.72,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
       itemCount: tracks.length,
-      itemBuilder: (context, i) => _RadarTrackCard(track: tracks[i], rank: i + 1),
+      itemBuilder: (context, i) =>
+          _RadarTrackCard(track: tracks[i], rank: i + 1),
     );
   }
 
   Widget _buildEraView(Map<String, List<Track>> tracksByEra) {
     if (tracksByEra.isEmpty) {
-      return const Center(child: Text('No era data available', style: TextStyle(color: AppTheme.textTertiary)));
+      return const Center(
+        child: Text(
+          'No era data available',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
-    final eras = ['2000s', '2010s', '2020s'].where(tracksByEra.containsKey).toList();
+    final eras = [
+      '2000s',
+      '2010s',
+      '2020s',
+    ].where(tracksByEra.containsKey).toList();
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(28, 12, 28, 28),
       itemCount: eras.length,
@@ -423,29 +640,51 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(colors: [AppTheme.violet, AppTheme.cyan]),
-                    borderRadius: BorderRadius.circular(8),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [AppTheme.violet, AppTheme.cyan],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      era,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
                   ),
-                  child: Text(era, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12)),
-                ),
-                const SizedBox(width: 10),
-                Text('${tracks.length} track${tracks.length != 1 ? 's' : ''}',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-              ]),
+                  const SizedBox(width: 10),
+                  Text(
+                    '${tracks.length} track${tracks.length != 1 ? 's' : ''}',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
             ),
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200, childAspectRatio: 0.72,
-                crossAxisSpacing: 12, mainAxisSpacing: 12,
+                maxCrossAxisExtent: 200,
+                childAspectRatio: 0.72,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
               ),
               itemCount: tracks.length,
-              itemBuilder: (ctx, i) => _RadarTrackCard(track: tracks[i], rank: i + 1),
+              itemBuilder: (ctx, i) =>
+                  _RadarTrackCard(track: tracks[i], rank: i + 1),
             ),
             const SizedBox(height: 8),
           ],
@@ -456,7 +695,12 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
 
   Widget _buildBpmView(List<Track> tracks) {
     if (tracks.isEmpty) {
-      return const Center(child: Text('No BPM data available', style: TextStyle(color: AppTheme.textTertiary)));
+      return const Center(
+        child: Text(
+          'No BPM data available',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
     // Group by BPM bucket (10-BPM bands)
     final buckets = <String, List<Track>>{};
@@ -466,7 +710,12 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
       buckets.putIfAbsent(band, () => []).add(t);
     }
     if (buckets.isEmpty) {
-      return const Center(child: Text('No BPM data available', style: TextStyle(color: AppTheme.textTertiary)));
+      return const Center(
+        child: Text(
+          'No BPM data available',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
     final keys = buckets.keys.toList()..sort();
     return ListView.builder(
@@ -480,31 +729,52 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Row(children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.amber.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(7),
-                    border: Border.all(color: AppTheme.amber.withValues(alpha: 0.3)),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.amber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: AppTheme.amber.withValues(alpha: 0.3),
+                      ),
+                    ),
+                    child: Text(
+                      '$band BPM',
+                      style: const TextStyle(
+                        color: AppTheme.amber,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                    ),
                   ),
-                  child: Text('$band BPM',
-                      style: const TextStyle(color: AppTheme.amber, fontWeight: FontWeight.w700, fontSize: 11)),
-                ),
-                const SizedBox(width: 8),
-                Text('${bpmTracks.length} track${bpmTracks.length != 1 ? 's' : ''}',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-              ]),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${bpmTracks.length} track${bpmTracks.length != 1 ? 's' : ''}',
+                    style: const TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
             ),
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                maxCrossAxisExtent: 200, childAspectRatio: 0.72,
-                crossAxisSpacing: 12, mainAxisSpacing: 12,
+                maxCrossAxisExtent: 200,
+                childAspectRatio: 0.72,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
               ),
               itemCount: bpmTracks.length,
-              itemBuilder: (ctx, i) => _RadarTrackCard(track: bpmTracks[i], rank: i + 1),
+              itemBuilder: (ctx, i) =>
+                  _RadarTrackCard(track: bpmTracks[i], rank: i + 1),
             ),
             const SizedBox(height: 6),
           ],
@@ -518,12 +788,18 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
     final map = <String, _AlbumGroup>{};
     for (final t in tracks) {
       final key = t.albumName.isEmpty ? 'Singles' : t.albumName;
-      map.putIfAbsent(key, () => _AlbumGroup(
-        name: key,
-        artworkUrl: t.albumArt,
-        releaseDate: t.releaseDate,
-        tracks: [],
-      )).tracks.add(t);
+      map
+          .putIfAbsent(
+            key,
+            () => _AlbumGroup(
+              name: key,
+              artworkUrl: t.albumArt,
+              releaseDate: t.releaseDate,
+              tracks: [],
+            ),
+          )
+          .tracks
+          .add(t);
     }
     // Sort albums by release date descending (newest first)
     final groups = map.values.toList();
@@ -537,19 +813,29 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
 
   Widget _buildAlbumsView(List<SpotifyTrackInfo> allSpotifyTracks) {
     if (_loadingCatalogue) {
-      return const Center(child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          CircularProgressIndicator(color: AppTheme.violet),
-          SizedBox(height: 12),
-          Text('Loading albums...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-        ],
-      ));
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: AppTheme.violet),
+            SizedBox(height: 12),
+            Text(
+              'Loading albums...',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
+      );
     }
 
     final albums = _albumGroups(allSpotifyTracks);
     if (albums.isEmpty) {
-      return const Center(child: Text('No albums found', style: TextStyle(color: AppTheme.textTertiary)));
+      return const Center(
+        child: Text(
+          'No albums found',
+          style: TextStyle(color: AppTheme.textTertiary),
+        ),
+      );
     }
 
     return CustomScrollView(
@@ -564,19 +850,45 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: album.artworkUrl != null
-                        ? CachedNetworkImage(imageUrl: album.artworkUrl!, width: 48, height: 48, fit: BoxFit.cover)
-                        : Container(width: 48, height: 48, color: AppTheme.edge, child: const Icon(Icons.album_rounded, color: AppTheme.textTertiary, size: 20)),
+                        ? CachedNetworkImage(
+                            imageUrl: album.artworkUrl!,
+                            width: 48,
+                            height: 48,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            width: 48,
+                            height: 48,
+                            color: AppTheme.edge,
+                            child: const Icon(
+                              Icons.album_rounded,
+                              color: AppTheme.textTertiary,
+                              size: 20,
+                            ),
+                          ),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(album.name, style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          album.name,
+                          style: const TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 2),
                         Text(
                           '${album.tracks.length} track${album.tracks.length > 1 ? 's' : ''}${album.releaseDate != null && album.releaseDate!.length >= 4 ? '  ·  ${album.releaseDate!.substring(0, 4)}' : ''}',
-                          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
+                          style: const TextStyle(
+                            color: AppTheme.textTertiary,
+                            fontSize: 11,
+                          ),
                         ),
                       ],
                     ),
@@ -596,7 +908,8 @@ class _ArtistCatalogScreenState extends ConsumerState<_ArtistCatalogScreen> {
                 mainAxisSpacing: 12,
               ),
               delegate: SliverChildBuilderDelegate(
-                (context, i) => _SpotifyTrackCard(track: album.tracks[i], rank: i + 1),
+                (context, i) =>
+                    _SpotifyTrackCard(track: album.tracks[i], rank: i + 1),
                 childCount: album.tracks.length,
               ),
             ),
@@ -646,8 +959,12 @@ class _BuildSetButton extends StatelessWidget {
           durationMinutes: 48,
           genre: 'All',
           vibe: 'All',
-          minBpm: artistModel.hasBpmData ? artistModel.bpmRange[0].toDouble() : 60,
-          maxBpm: artistModel.hasBpmData ? artistModel.bpmRange[1].toDouble() : 200,
+          minBpm: artistModel.hasBpmData
+              ? artistModel.bpmRange[0].toDouble()
+              : 60,
+          maxBpm: artistModel.hasBpmData
+              ? artistModel.bpmRange[1].toDouble()
+              : 200,
         );
         final count = set.isEmpty ? allForArtist.length : set.length;
         onBuilt(count);
@@ -671,11 +988,14 @@ class _BuildSetButton extends StatelessWidget {
           children: [
             Icon(Icons.queue_music_rounded, color: Colors.white, size: 14),
             SizedBox(width: 6),
-            Text('Build Set',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600)),
+            Text(
+              'Build Set',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -684,7 +1004,7 @@ class _BuildSetButton extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Add to Crate button with dropdown
+// Add to setlist button with dropdown
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _AddToCrateButton extends StatelessWidget {
@@ -713,10 +1033,15 @@ class _AddToCrateButton extends StatelessWidget {
       color: AppTheme.panelRaised,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       itemBuilder: (context) => [
-        ...crateNames.map((name) => PopupMenuItem(
-          value: name,
-          child: Text(name, style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12)),
-        )),
+        ...crateNames.map(
+          (name) => PopupMenuItem(
+            value: name,
+            child: Text(
+              name,
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+            ),
+          ),
+        ),
         if (crateNames.isNotEmpty) const PopupMenuDivider(),
         const PopupMenuItem(
           value: '__new__',
@@ -724,7 +1049,14 @@ class _AddToCrateButton extends StatelessWidget {
             children: [
               Icon(Icons.add_rounded, color: AppTheme.violet, size: 16),
               SizedBox(width: 8),
-              Text('New Crate...', style: TextStyle(color: AppTheme.violet, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text(
+                'New Setlist...',
+                style: TextStyle(
+                  color: AppTheme.violet,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ],
           ),
         ),
@@ -732,16 +1064,34 @@ class _AddToCrateButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          gradient: const LinearGradient(colors: [AppTheme.violet, Color(0xFF6D4AE6)]),
+          gradient: const LinearGradient(
+            colors: [AppTheme.violet, Color(0xFF6D4AE6)],
+          ),
           borderRadius: BorderRadius.circular(8),
-          boxShadow: [BoxShadow(color: AppTheme.violet.withValues(alpha: 0.3), blurRadius: 8)],
+          boxShadow: [
+            BoxShadow(
+              color: AppTheme.violet.withValues(alpha: 0.3),
+              blurRadius: 8,
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.playlist_add_rounded, color: Colors.white, size: 16),
+            const Icon(
+              Icons.playlist_add_rounded,
+              color: Colors.white,
+              size: 16,
+            ),
             const SizedBox(width: 6),
-            Text('Add $selectedCount to Crate', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+            Text(
+              'Add $selectedCount to Setlist',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
@@ -755,12 +1105,15 @@ class _AddToCrateButton extends StatelessWidget {
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.panel,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        title: const Text('New Crate', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+        title: const Text(
+          'New Setlist',
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+        ),
         content: TextField(
           controller: controller,
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
-          decoration: const InputDecoration(hintText: 'Crate name...'),
+          decoration: const InputDecoration(hintText: 'Setlist name...'),
           onSubmitted: (value) {
             if (value.trim().isNotEmpty) {
               onNewCrate(value.trim());
@@ -769,7 +1122,10 @@ class _AddToCrateButton extends StatelessWidget {
           },
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () {
               final name = controller.text.trim();

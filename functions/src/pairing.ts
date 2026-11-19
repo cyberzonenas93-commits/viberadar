@@ -2,6 +2,20 @@ import { onCall, HttpsError } from "firebase-functions/v2/https";
 import type { CallableRequest } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { randomInt } from "crypto";
+import {
+  PAIRING_CLAIM_DAILY_LIMIT,
+  PAIRING_CREATE_DAILY_LIMIT,
+} from "./lib/config";
+import { appClientCallableOptions } from "./lib/appCheck";
+import {
+  isAnonymousCallableAuth,
+  requireCallableAuth,
+  requireFullCallableAccount,
+} from "./lib/auth";
+import { enforceUsageLimit } from "./lib/usage";
+
+export { isAnonymousCallableAuth } from "./lib/auth";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -16,6 +30,8 @@ export interface PairingDoc {
   createdAt: FirebaseFirestore.Timestamp | FieldValue;
   claimedAt: FirebaseFirestore.Timestamp | FieldValue | null;
   expiresAt: FirebaseFirestore.Timestamp;
+  revokedAt?: FirebaseFirestore.Timestamp | FieldValue | null;
+  revokedByUid?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,7 +49,7 @@ const CODE_LENGTH = 6;
 export function generateCode(): string {
   let code = "";
   for (let i = 0; i < CODE_LENGTH; i++) {
-    const idx = Math.floor(Math.random() * CODE_ALPHABET.length);
+    const idx = randomInt(CODE_ALPHABET.length);
     code += CODE_ALPHABET[idx];
   }
   return code;
@@ -123,16 +139,22 @@ interface CreatePairingResult {
  * Returns { pairingId, code } on success.
  */
 export const createPairing = onCall(
-  { region: "us-central1" },
-  async (request: CallableRequest<CreatePairingData>): Promise<CreatePairingResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication required");
-    }
-
-    const desktopUid = request.auth.uid;
+  { region: "us-central1", ...appClientCallableOptions },
+  async (
+    request: CallableRequest<CreatePairingData>,
+  ): Promise<CreatePairingResult> => {
+    const auth = requireCallableAuth(request.auth);
+    const desktopUid = auth.uid;
     const desktopName = request.data?.desktopName?.trim() || "Desktop";
     const now = Date.now();
     const expiresAt = new Date(now + 10 * 60 * 1000); // +10 minutes
+
+    await enforceUsageLimit({
+      uid: desktopUid,
+      key: "pairing_create",
+      limit: PAIRING_CREATE_DAILY_LIMIT.value(),
+      window: "daily",
+    });
 
     // Generate a unique code (retry up to 5 times on collision)
     let code = "";
@@ -147,7 +169,10 @@ export const createPairing = onCall(
     }
     if (!code) {
       // Extremely unlikely — all 5 retries collided
-      throw new HttpsError("resource-exhausted", "Failed to generate unique code; try again");
+      throw new HttpsError(
+        "resource-exhausted",
+        "Failed to generate unique code; try again",
+      );
     }
 
     const pairingData: Omit<PairingDoc, "createdAt"> & {
@@ -187,19 +212,32 @@ interface ClaimPairingResult {
  * Runs inside a Firestore transaction so double-claims are prevented.
  */
 export const claimPairing = onCall(
-  { region: "us-central1" },
-  async (request: CallableRequest<ClaimPairingData>): Promise<ClaimPairingResult> => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Authentication required");
-    }
+  { region: "us-central1", ...appClientCallableOptions },
+  async (
+    request: CallableRequest<ClaimPairingData>,
+  ): Promise<ClaimPairingResult> => {
+    const auth = requireFullCallableAccount(
+      request.auth,
+      "A full account is required to pair a phone.",
+    );
 
     const code = (request.data?.code ?? "").trim().toUpperCase();
-    if (!code) {
-      throw new HttpsError("invalid-argument", "code is required");
+    if (!/^[A-Z2-9]{6}$/.test(code)) {
+      throw new HttpsError(
+        "invalid-argument",
+        "code must be a 6-character pairing code",
+      );
     }
 
-    const claimedByUid = request.auth.uid;
+    const claimedByUid = auth.uid;
     const now = Date.now();
+
+    await enforceUsageLimit({
+      uid: claimedByUid,
+      key: "pairing_claim",
+      limit: PAIRING_CLAIM_DAILY_LIMIT.value(),
+      window: "daily",
+    });
 
     // Find the matching pairing outside the transaction first (optimistic read)
     const snap = await db()
@@ -244,5 +282,61 @@ export const claimPairing = onCall(
     });
 
     return result;
+  },
+);
+
+// ---------------------------------------------------------------------------
+
+interface RevokePairingData {
+  pairingId?: string;
+}
+
+interface RevokePairingResult {
+  revoked: true;
+}
+
+/**
+ * revokePairing — either side can sever an active pairing.
+ *
+ * The document stays in Firestore with status `revoked`, which immediately
+ * removes setlist access through Firestore rules while preserving an audit
+ * trail for support/debugging.
+ */
+export const revokePairing = onCall(
+  { region: "us-central1", ...appClientCallableOptions },
+  async (
+    request: CallableRequest<RevokePairingData>,
+  ): Promise<RevokePairingResult> => {
+    const auth = requireCallableAuth(request.auth);
+    const pairingId =
+      typeof request.data?.pairingId === "string"
+        ? request.data.pairingId.trim()
+        : "";
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(pairingId)) {
+      throw new HttpsError("invalid-argument", "Invalid pairing id");
+    }
+
+    const ref = db().collection("pairings").doc(pairingId);
+    await db().runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        throw new HttpsError("not-found", "Pairing not found");
+      }
+      const data = snap.data() as PairingDoc;
+      const isParticipant =
+        data.desktopUid === auth.uid || data.claimedByUid === auth.uid;
+      if (!isParticipant) {
+        throw new HttpsError("permission-denied", "Pairing is not yours");
+      }
+      if (data.status === "revoked") return;
+
+      tx.update(ref, {
+        status: "revoked",
+        revokedAt: FieldValue.serverTimestamp(),
+        revokedByUid: auth.uid,
+      });
+    });
+
+    return { revoked: true };
   },
 );

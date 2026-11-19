@@ -1218,6 +1218,9 @@ PODS:
     - FlutterMacOS
   - file_picker (0.0.1):
     - FlutterMacOS
+  - Firebase/AppCheck (12.14.0):
+    - Firebase/CoreOnly
+    - FirebaseAppCheck (~> 12.14.0)
   - Firebase/Auth (12.14.0):
     - Firebase/CoreOnly
     - FirebaseAuth (~> 12.14.0)
@@ -1229,9 +1232,17 @@ PODS:
   - Firebase/Functions (12.14.0):
     - Firebase/CoreOnly
     - FirebaseFunctions (~> 12.14.0)
+  - Firebase/Messaging (12.14.0):
+    - Firebase/CoreOnly
+    - FirebaseMessaging (~> 12.14.0)
   - Firebase/Storage (12.14.0):
     - Firebase/CoreOnly
     - FirebaseStorage (~> 12.14.0)
+  - firebase_app_check (0.4.4-2):
+    - Firebase/AppCheck (~> 12.14.0)
+    - Firebase/CoreOnly (~> 12.14.0)
+    - firebase_core
+    - FlutterMacOS
   - firebase_auth (6.5.2):
     - Firebase/Auth (~> 12.14.0)
     - Firebase/CoreOnly (~> 12.14.0)
@@ -1240,11 +1251,22 @@ PODS:
   - firebase_core (4.10.0):
     - Firebase/CoreOnly (~> 12.14.0)
     - FlutterMacOS
+  - firebase_messaging (16.3.0):
+    - Firebase/CoreOnly (~> 12.14.0)
+    - Firebase/Messaging (~> 12.14.0)
+    - firebase_core
+    - FlutterMacOS
   - firebase_storage (13.4.2):
     - Firebase/CoreOnly (~> 12.14.0)
     - Firebase/Storage (~> 12.14.0)
     - firebase_core
     - FlutterMacOS
+  - FirebaseAppCheck (12.14.0):
+    - AppCheckCore (~> 11.0)
+    - FirebaseAppCheckInterop (~> 12.14.0)
+    - FirebaseCore (~> 12.14.0)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
   - FirebaseAppCheckInterop (12.14.0)
   - FirebaseAuth (12.14.0):
     - FirebaseAppCheckInterop (~> 12.14.0)
@@ -1292,6 +1314,20 @@ PODS:
     - FirebaseMessagingInterop (~> 12.14.0)
     - FirebaseSharedSwift (~> 12.14.0)
     - GTMSessionFetcher/Core (< 6.0, >= 3.4)
+  - FirebaseInstallations (12.14.0):
+    - FirebaseCore (~> 12.14.0)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - PromisesObjC (~> 2.4)
+  - FirebaseMessaging (12.14.0):
+    - FirebaseCore (~> 12.14.0)
+    - FirebaseInstallations (~> 12.14.0)
+    - GoogleDataTransport (~> 10.1)
+    - GoogleUtilities/AppDelegateSwizzler (~> 8.1)
+    - GoogleUtilities/Environment (~> 8.1)
+    - GoogleUtilities/Reachability (~> 8.1)
+    - GoogleUtilities/UserDefaults (~> 8.1)
+    - nanopb (~> 3.30910.0)
   - FirebaseMessagingInterop (12.14.0)
   - FirebaseSharedSwift (12.14.0)
   - FirebaseStorage (12.14.0):
@@ -1309,6 +1345,9 @@ PODS:
     - FlutterMacOS
     - GoogleSignIn (~> 9.0)
     - GTMSessionFetcher (>= 3.4.0)
+  - GoogleDataTransport (10.1.0):
+    - nanopb (~> 3.30910.0)
+    - PromisesObjC (~> 2.4)
   - GoogleSignIn (9.1.0):
     - AppAuth (~> 2.0)
     - AppCheckCore (~> 11.0)
@@ -1438,7 +1477,13 @@ PODS:
   - GTMSessionFetcher/Core (3.5.0)
   - GTMSessionFetcher/Full (3.5.0):
     - GTMSessionFetcher/Core
+  - in_app_purchase_storekit (0.0.1):
+    - Flutter
+    - FlutterMacOS
   - leveldb-library (1.22.6)
+  - mobile_scanner (7.0.0):
+    - Flutter
+    - FlutterMacOS
   - nanopb (3.30910.0):
     - nanopb/decode (= 3.30910.0)
     - nanopb/encode (= 3.30910.0)
@@ -1466,12 +1511,16 @@ DEPENDENCIES:
   - cloud_functions (from `Flutter/ephemeral/.symlinks/plugins/cloud_functions/macos`)
   - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
   - file_picker (from `Flutter/ephemeral/.symlinks/plugins/file_picker/macos`)
+  - firebase_app_check (from `Flutter/ephemeral/.symlinks/plugins/firebase_app_check/macos`)
   - firebase_auth (from `Flutter/ephemeral/.symlinks/plugins/firebase_auth/macos`)
   - firebase_core (from `Flutter/ephemeral/.symlinks/plugins/firebase_core/macos`)
+  - firebase_messaging (from `Flutter/ephemeral/.symlinks/plugins/firebase_messaging/macos`)
   - firebase_storage (from `Flutter/ephemeral/.symlinks/plugins/firebase_storage/macos`)
   - flutter_secure_storage_macos (from `Flutter/ephemeral/.symlinks/plugins/flutter_secure_storage_macos/macos`)
   - FlutterMacOS (from `Flutter/ephemeral`)
   - google_sign_in_ios (from `Flutter/ephemeral/.symlinks/plugins/google_sign_in_ios/darwin`)
+  - in_app_purchase_storekit (from `Flutter/ephemeral/.symlinks/plugins/in_app_purchase_storekit/darwin`)
+  - mobile_scanner (from `Flutter/ephemeral/.symlinks/plugins/mobile_scanner/darwin`)
   - screen_retriever (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos`)
   - shared_preferences_foundation (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_foundation/darwin`)
   - sign_in_with_apple (from `Flutter/ephemeral/.symlinks/plugins/sign_in_with_apple/darwin`)
@@ -1486,6 +1535,7 @@ SPEC REPOS:
     - AppCheckCore
     - BoringSSL-GRPC
     - Firebase
+    - FirebaseAppCheck
     - FirebaseAppCheckInterop
     - FirebaseAuth
     - FirebaseAuthInterop
@@ -1495,9 +1545,12 @@ SPEC REPOS:
     - FirebaseFirestore
     - FirebaseFirestoreInternal
     - FirebaseFunctions
+    - FirebaseInstallations
+    - FirebaseMessaging
     - FirebaseMessagingInterop
     - FirebaseSharedSwift
     - FirebaseStorage
+    - GoogleDataTransport
     - GoogleSignIn
     - GoogleUtilities
     - "gRPC-C++"
@@ -1517,10 +1570,14 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos
   file_picker:
     :path: Flutter/ephemeral/.symlinks/plugins/file_picker/macos
+  firebase_app_check:
+    :path: Flutter/ephemeral/.symlinks/plugins/firebase_app_check/macos
   firebase_auth:
     :path: Flutter/ephemeral/.symlinks/plugins/firebase_auth/macos
   firebase_core:
     :path: Flutter/ephemeral/.symlinks/plugins/firebase_core/macos
+  firebase_messaging:
+    :path: Flutter/ephemeral/.symlinks/plugins/firebase_messaging/macos
   firebase_storage:
     :path: Flutter/ephemeral/.symlinks/plugins/firebase_storage/macos
   flutter_secure_storage_macos:
@@ -1529,6 +1586,10 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral
   google_sign_in_ios:
     :path: Flutter/ephemeral/.symlinks/plugins/google_sign_in_ios/darwin
+  in_app_purchase_storekit:
+    :path: Flutter/ephemeral/.symlinks/plugins/in_app_purchase_storekit/darwin
+  mobile_scanner:
+    :path: Flutter/ephemeral/.symlinks/plugins/mobile_scanner/darwin
   screen_retriever:
     :path: Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos
   shared_preferences_foundation:
@@ -1552,9 +1613,12 @@ SPEC CHECKSUMS:
   desktop_drop: e0b672a7d84c0a6cbc378595e82cdb15f2970a43
   file_picker: 7584aae6fa07a041af2b36a2655122d42f578c1a
   Firebase: 7cc10425300768ec86292688af5cb228f0604bde
+  firebase_app_check: 23653983dca492c8037c0a6be4fd0c2702a9f5f4
   firebase_auth: 89d373337c82c44d9083d396490d850a5123bd71
   firebase_core: 6c25555337efe4f9288389c14373ddd107790d90
+  firebase_messaging: 42a62d26647e5068cb1fbb083a01e59c702b983f
   firebase_storage: 02e5645d0dfdef624ef52b56cb232874586542b3
+  FirebaseAppCheck: 49d593026a7959280816e303fd27a3f732ccb9aa
   FirebaseAppCheckInterop: f123c0261a7b46f060e98fc2961651f1ac68f384
   FirebaseAuth: 01a77d472aec77ec008141e7d859d1b9cb8dc2cf
   FirebaseAuthInterop: 63056ef7f9602e79a8f8d756d4cb35f38e2927c3
@@ -1564,19 +1628,24 @@ SPEC CHECKSUMS:
   FirebaseFirestore: 7026cd6035af7c9f34066dfc7425cea01f96fa93
   FirebaseFirestoreInternal: 5bd3585e6292ec5e8dc019a46f20d165de27fcd1
   FirebaseFunctions: 5ccef4817f5a5fc0024f3d5dfc1fbbcf0744d07d
+  FirebaseInstallations: 7cdc919e29dc54306edeffdbdc1eed1a40d7d1e7
+  FirebaseMessaging: 4803888ce3002188f24e19faa8d2326261538426
   FirebaseMessagingInterop: e835049cc41a4c6c71781eaceee113b2601cd89d
   FirebaseSharedSwift: 7c659ebf23afdc1e60a05df72a07ad7349f5758f
   FirebaseStorage: 84d86cc0c0451e56e30f235fce26a264f1de13dc
   flutter_secure_storage_macos: 7f45e30f838cf2659862a4e4e3ee1c347c2b3b54
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
   google_sign_in_ios: 000870aa06da9b28d1d0bf7ef70ff0213059dd28
+  GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleSignIn: fcee2257188d5eda57a5e2b6a715550ffff9206d
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   "gRPC-C++": cc207623316fb041a7a3e774c252cf68a058b9e8
   gRPC-Core: 860978b7db482de8b4f5e10677216309b5ff6330
   GTMAppAuth: 217a876b249c3c585a54fd6f73e6b58c4f5c4238
   GTMSessionFetcher: 5aea5ba6bd522a239e236100971f10cb71b96ab6
+  in_app_purchase_storekit: 22cca7d08eebca9babdf4d07d0baccb73325d3c8
   leveldb-library: cc8b8f8e013647a295ad3f8cd2ddf49a6f19be19
+  mobile_scanner: 9157936403f5a0644ca3779a38ff8404c5434a93
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   screen_retriever: 4f97c103641aab8ce183fa5af3b87029df167936

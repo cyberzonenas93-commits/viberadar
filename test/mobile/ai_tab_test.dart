@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
 import 'package:viberadar/models/session_state.dart';
+import 'package:viberadar/models/track.dart';
+import 'package:viberadar/providers/app_state.dart';
 import 'package:viberadar/providers/repositories.dart';
 import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/services/ai_copilot_service.dart';
+import 'package:viberadar/services/set_resolution_service.dart';
 import 'package:viberadar/ui/mobile/ai_tab.dart';
 import 'package:viberadar/data/repositories/user_repository.dart';
 import 'package:viberadar/data/repositories/session_repository.dart';
@@ -178,6 +181,16 @@ Widget _buildTestApp({required _FakeUserRepository fakeRepo}) {
       setlistActionsProvider.overrideWith(
         (ref) => _CapturingSetlistActions(ref, fakeRepo),
       ),
+      // Empty library so resolution falls through to the (fake) platform search.
+      trackStreamProvider.overrideWith((ref) => Stream.value(const <Track>[])),
+      // Deterministic resolver: every song "found" on Spotify, no network.
+      setResolutionServiceProvider.overrideWithValue(
+        SetResolutionService.test(
+          searchSpotify: (q) async => (url: 'https://sp/$q', art: ''),
+          searchApple: (q) async => null,
+          searchYoutube: (q) async => null,
+        ),
+      ),
     ],
     child: const MaterialApp(home: Scaffold(body: AiTab())),
   );
@@ -244,9 +257,9 @@ void main() {
     });
   });
 
-  group('AiTab — save flow', () {
+  group('AiTab — resolve + save flow', () {
     testWidgets(
-      'after building, Save as setlist creates Crate with correct name and 2 trackIds',
+      'building → Resolve & add → Save as new setlist persists a Crate with 2 rich tracks',
       (tester) async {
         final repo = _FakeUserRepository();
         await tester.pumpWidget(_buildTestApp(fakeRepo: repo));
@@ -256,29 +269,26 @@ void main() {
         await tester.tap(find.text('Build'));
         await tester.pumpAndSettle();
 
-        // Save button should now be enabled
-        final saveButton = tester.widget<ElevatedButton>(
-          find.widgetWithText(ElevatedButton, 'Save as setlist'),
-        );
-        expect(saveButton.onPressed, isNotNull);
+        // After building, the next action is "Resolve & add".
+        await tester.tap(find.widgetWithText(ElevatedButton, 'Resolve & add'));
+        await tester.pumpAndSettle();
 
+        // Now the save action is available.
         await tester.tap(
-          find.widgetWithText(ElevatedButton, 'Save as setlist'),
+          find.widgetWithText(ElevatedButton, 'Save as new setlist'),
         );
         await tester.pumpAndSettle();
 
-        // Exactly one crate should have been saved
         expect(repo.savedCrates, hasLength(1));
-
         final saved = repo.savedCrates.first;
         expect(saved.name, equals('Test Vibes'));
-        expect(saved.trackIds, hasLength(2));
-
-        // Synthesized ids follow 'ai:<artist - title>' pattern (lowercased, trimmed)
+        expect(saved.tracks, hasLength(2));
         expect(
-          saved.trackIds,
-          containsAll(['ai:burna boy - last last', 'ai:rema - calm down']),
+          saved.tracks.map((t) => t.title),
+          containsAll(['Last Last', 'Calm Down']),
         );
+        // The fake resolver attached a Spotify link.
+        expect(saved.tracks.first.spotifyUrl, isNotNull);
       },
     );
 
@@ -291,7 +301,11 @@ void main() {
       await tester.tap(find.text('Build'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.widgetWithText(ElevatedButton, 'Save as setlist'));
+      await tester.tap(find.widgetWithText(ElevatedButton, 'Resolve & add'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.widgetWithText(ElevatedButton, 'Save as new setlist'),
+      );
       await tester.pumpAndSettle();
 
       expect(find.textContaining('Test Vibes'), findsAtLeastNWidgets(1));
@@ -327,6 +341,75 @@ void main() {
       // No tracks rendered (no crate block)
       expect(find.textContaining('Burna Boy'), findsNothing);
     });
+
+    testWidgets(
+      'build prompts fall back to a local draft when AI has no crate',
+      (tester) async {
+        final repo = _FakeUserRepository();
+        final plainFake = _PlainReplyFakeService();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              aiCopilotServiceProvider.overrideWithValue(plainFake),
+              sessionRepositoryProvider.overrideWithValue(
+                _FakeSessionRepository(),
+              ),
+              userRepositoryProvider.overrideWithValue(repo),
+              trackStreamProvider.overrideWith(
+                (ref) => Stream.value(const <Track>[]),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: AiTab())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'Build me a club set');
+        await tester.tap(find.text('Build'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Draft'), findsOneWidget);
+        await tester.drag(find.byType(ListView), const Offset(0, -700));
+        await tester.pumpAndSettle();
+        expect(find.text('Resolve & add'), findsOneWidget);
+        expect(find.textContaining('Harmonic mixing tip'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'AI service errors fall back to a local draft for short prompts',
+      (tester) async {
+        final repo = _FakeUserRepository();
+        await tester.pumpWidget(
+          ProviderScope(
+            overrides: [
+              aiCopilotServiceProvider.overrideWithValue(
+                _ThrowingAiCopilotService(),
+              ),
+              sessionRepositoryProvider.overrideWithValue(
+                _FakeSessionRepository(),
+              ),
+              userRepositoryProvider.overrideWithValue(repo),
+              trackStreamProvider.overrideWith(
+                (ref) => Stream.value(const <Track>[]),
+              ),
+            ],
+            child: const MaterialApp(home: Scaffold(body: AiTab())),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.enterText(find.byType(TextField), 'afrobeats');
+        await tester.tap(find.text('Build'));
+        await tester.pumpAndSettle();
+
+        expect(find.textContaining('Draft'), findsOneWidget);
+        expect(
+          find.textContaining('AI build is temporarily unavailable'),
+          findsNothing,
+        );
+      },
+    );
   });
 }
 
@@ -340,5 +423,18 @@ class _PlainReplyFakeService extends AiCopilotService {
     int? yearTo,
   }) async {
     return 'Harmonic mixing tip: use the Camelot wheel.';
+  }
+}
+
+class _ThrowingAiCopilotService extends AiCopilotService {
+  @override
+  Future<String> chat(
+    List<Map<String, String>> history,
+    String userMessage, {
+    List<Map<String, String>>? trackContext,
+    int? yearFrom,
+    int? yearTo,
+  }) async {
+    throw StateError('permission-denied');
   }
 }

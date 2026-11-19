@@ -10,15 +10,20 @@ import 'package:viberadar/services/audio_cue_detector.dart';
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Build a flat envelope at [level] for [durationSec] at [windowSec].
-List<double> _flatEnv(double level, double durationSec,
-    {double windowSec = 0.1}) {
+List<double> _flatEnv(
+  double level,
+  double durationSec, {
+  double windowSec = 0.1,
+}) {
   final n = (durationSec / windowSec).ceil();
   return List<double>.filled(n, level);
 }
 
 /// Build an envelope by concatenating segments described as (level, durationSec).
-List<double> _segmentedEnv(List<(double, double)> segments,
-    {double windowSec = 0.1}) {
+List<double> _segmentedEnv(
+  List<(double, double)> segments, {
+  double windowSec = 0.1,
+}) {
   final out = <double>[];
   for (final (level, dur) in segments) {
     final n = (dur / windowSec).ceil();
@@ -28,8 +33,12 @@ List<double> _segmentedEnv(List<(double, double)> segments,
 }
 
 /// Build a ramp from [start] to [end] over [durationSec].
-List<double> _rampEnv(double start, double end, double durationSec,
-    {double windowSec = 0.1}) {
+List<double> _rampEnv(
+  double start,
+  double end,
+  double durationSec, {
+  double windowSec = 0.1,
+}) {
   final n = (durationSec / windowSec).ceil();
   return List<double>.generate(n, (i) {
     if (n <= 1) return end;
@@ -48,19 +57,24 @@ void main() {
       expect(env.every((v) => v == 0.0), isTrue);
     });
 
-    test('buildEnergyEnvelope: RMS of full-scale sine is close to 1/sqrt(2)', () {
-      // Generate one full period of a unit sine at 440 Hz sampled at 11025 Hz
-      const rate = 11025;
-      const freq = 440.0;
-      final samples = List<double>.generate(
-          rate, (i) => math.sin(2 * math.pi * freq * i / rate));
-      // One window of 1102 samples
-      final env = AudioCueDetector.buildEnergyEnvelope(samples, 1102);
-      // RMS of a sine ≈ 0.707; allow ±0.05 due to windowing
-      for (final v in env) {
-        expect(v, closeTo(1 / math.sqrt(2), 0.05));
-      }
-    });
+    test(
+      'buildEnergyEnvelope: RMS of full-scale sine is close to 1/sqrt(2)',
+      () {
+        // Generate one full period of a unit sine at 440 Hz sampled at 11025 Hz
+        const rate = 11025;
+        const freq = 440.0;
+        final samples = List<double>.generate(
+          rate,
+          (i) => math.sin(2 * math.pi * freq * i / rate),
+        );
+        // One window of 1102 samples
+        final env = AudioCueDetector.buildEnergyEnvelope(samples, 1102);
+        // RMS of a sine ≈ 0.707; allow ±0.05 due to windowing
+        for (final v in env) {
+          expect(v, closeTo(1 / math.sqrt(2), 0.05));
+        }
+      },
+    );
 
     test('smoothEnvelope: flat signal stays flat', () {
       final env = List<double>.filled(100, 0.6);
@@ -109,28 +123,34 @@ void main() {
   });
 
   group('detectEventsFromEnvelope — drop detection', () {
-    test('Sharp rise from low to high in first 40% → drop event near transition', () {
-      // 30 s low (0.1), then 90 s high (0.9) — rise at t=30
-      const windowSec = 0.1;
-      const totalDur = 120.0;
-      final env = _segmentedEnv([
-        (0.1, 30.0),
-        (0.9, 90.0),
-      ], windowSec: windowSec);
+    test(
+      'Sharp rise from low to high in first 40% → drop event near transition',
+      () {
+        // 30 s low (0.1), then 90 s high (0.9) — rise at t=30
+        const windowSec = 0.1;
+        const totalDur = 120.0;
+        final env = _segmentedEnv([
+          (0.1, 30.0),
+          (0.9, 90.0),
+        ], windowSec: windowSec);
 
-      final events = AudioCueDetector.detectEventsFromEnvelope(
-        env,
-        windowSec: windowSec,
-        totalDuration: totalDur,
-      );
+        final events = AudioCueDetector.detectEventsFromEnvelope(
+          env,
+          windowSec: windowSec,
+          totalDuration: totalDur,
+        );
 
-      final drops = events.where((e) => e.type == CueType.drop).toList();
-      expect(drops, isNotEmpty, reason: 'Expected at least one drop event');
-      // The drop should be near t=30 (within 5 s given smoothing)
-      final near30 = drops.any((e) => (e.timeSeconds - 30.0).abs() < 10.0);
-      expect(near30, isTrue,
-          reason: 'Drop should be detected near the 30s transition');
-    });
+        final drops = events.where((e) => e.type == CueType.drop).toList();
+        expect(drops, isNotEmpty, reason: 'Expected at least one drop event');
+        // The drop should be near t=30 (within 5 s given smoothing)
+        final near30 = drops.any((e) => (e.timeSeconds - 30.0).abs() < 10.0);
+        expect(
+          near30,
+          isTrue,
+          reason: 'Drop should be detected near the 30s transition',
+        );
+      },
+    );
 
     test('No drop if track is flat at low energy', () {
       const windowSec = 0.1;
@@ -141,7 +161,11 @@ void main() {
         totalDuration: 120.0,
       );
       final drops = events.where((e) => e.type == CueType.drop);
-      expect(drops, isEmpty, reason: 'No drop expected in a flat low-energy track');
+      expect(
+        drops,
+        isEmpty,
+        reason: 'No drop expected in a flat low-energy track',
+      );
     });
   });
 
@@ -224,9 +248,11 @@ void main() {
       );
 
       for (var i = 1; i < events.length; i++) {
-        expect(events[i].timeSeconds,
-            greaterThanOrEqualTo(events[i - 1].timeSeconds),
-            reason: 'Events must be time-ordered');
+        expect(
+          events[i].timeSeconds,
+          greaterThanOrEqualTo(events[i - 1].timeSeconds),
+          reason: 'Events must be time-ordered',
+        );
       }
     });
 
@@ -250,10 +276,13 @@ void main() {
 
       for (var i = 1; i < events.length; i++) {
         final gap = events[i].timeSeconds - events[i - 1].timeSeconds;
-        expect(gap, greaterThanOrEqualTo(minSpacing - 1e-9),
-            reason:
-                'Gap between events ${events[i - 1].type} and ${events[i].type} '
-                '(${gap.toStringAsFixed(2)}s) < minSpacing ($minSpacing s)');
+        expect(
+          gap,
+          greaterThanOrEqualTo(minSpacing - 1e-9),
+          reason:
+              'Gap between events ${events[i - 1].type} and ${events[i].type} '
+              '(${gap.toStringAsFixed(2)}s) < minSpacing ($minSpacing s)',
+        );
       }
     });
 
@@ -273,9 +302,12 @@ void main() {
       );
 
       for (final ev in events) {
-        expect(ev.timeSeconds, lessThan(totalDur),
-            reason:
-                'Event ${ev.type} at ${ev.timeSeconds}s exceeds duration $totalDur');
+        expect(
+          ev.timeSeconds,
+          lessThan(totalDur),
+          reason:
+              'Event ${ev.type} at ${ev.timeSeconds}s exceeds duration $totalDur',
+        );
       }
     });
 
@@ -295,8 +327,11 @@ void main() {
         maxCues: 8,
       );
 
-      expect(events.length, lessThanOrEqualTo(8),
-          reason: 'Should not exceed maxCues=8');
+      expect(
+        events.length,
+        lessThanOrEqualTo(8),
+        reason: 'Should not exceed maxCues=8',
+      );
     });
 
     test('Confidence is in [0, 1] for all events', () {
@@ -316,8 +351,11 @@ void main() {
       );
 
       for (final ev in events) {
-        expect(ev.confidence, inInclusiveRange(0.0, 1.0),
-            reason: 'Confidence out of range for ${ev.type}');
+        expect(
+          ev.confidence,
+          inInclusiveRange(0.0, 1.0),
+          reason: 'Confidence out of range for ${ev.type}',
+        );
       }
     });
 
@@ -374,80 +412,98 @@ void main() {
   //   - no .mp3 file is found in ~/Downloads/amapiano
   //
   group('AudioCueDetector — integration smoke test (real audio, optional)', () {
-    test('detectCues returns plausible events for a real .mp3', () async {
-      // ── Guard: ffmpeg must be present ──────────────────────────────────
-      const ffmpegPath = '/opt/homebrew/bin/ffmpeg';
-      bool ffmpegAvailable = File(ffmpegPath).existsSync();
-      if (!ffmpegAvailable) {
-        try {
-          final r = await Process.run('which', ['ffmpeg']);
-          ffmpegAvailable = r.exitCode == 0;
-        } catch (_) {}
-      }
-      if (!ffmpegAvailable) {
+    test(
+      'detectCues returns plausible events for a real .mp3',
+      () async {
+        // ── Guard: ffmpeg must be present ──────────────────────────────────
+        const ffmpegPath = '/opt/homebrew/bin/ffmpeg';
+        bool ffmpegAvailable = File(ffmpegPath).existsSync();
+        if (!ffmpegAvailable) {
+          try {
+            final r = await Process.run('which', ['ffmpeg']);
+            ffmpegAvailable = r.exitCode == 0;
+          } catch (_) {}
+        }
+        if (!ffmpegAvailable) {
+          // ignore: avoid_print
+          print('[SKIP] ffmpeg not found — skipping integration smoke test');
+          return;
+        }
+
+        // ── Guard: find a .mp3 in ~/Downloads/amapiano ────────────────────
+        final dir = Directory(
+          '${Platform.environment['HOME'] ?? ''}/Downloads/amapiano',
+        );
+        if (!dir.existsSync()) {
+          // ignore: avoid_print
+          print(
+            '[SKIP] ~/Downloads/amapiano not found — skipping integration smoke test',
+          );
+          return;
+        }
+        final mp3Files = dir
+            .listSync(recursive: false)
+            .whereType<File>()
+            .where((f) => f.path.toLowerCase().endsWith('.mp3'))
+            .toList();
+        if (mp3Files.isEmpty) {
+          // ignore: avoid_print
+          print(
+            '[SKIP] No .mp3 files in ~/Downloads/amapiano — skipping integration smoke test',
+          );
+          return;
+        }
+
+        final testFile = mp3Files.first;
         // ignore: avoid_print
-        print('[SKIP] ffmpeg not found — skipping integration smoke test');
-        return;
-      }
+        print('[INFO] Integration smoke test using: ${testFile.path}');
 
-      // ── Guard: find a .mp3 in ~/Downloads/amapiano ────────────────────
-      final dir = Directory(
-          '${Platform.environment['HOME'] ?? ''}/Downloads/amapiano');
-      if (!dir.existsSync()) {
-        // ignore: avoid_print
-        print('[SKIP] ~/Downloads/amapiano not found — skipping integration smoke test');
-        return;
-      }
-      final mp3Files = dir
-          .listSync(recursive: false)
-          .whereType<File>()
-          .where((f) => f.path.toLowerCase().endsWith('.mp3'))
-          .toList();
-      if (mp3Files.isEmpty) {
-        // ignore: avoid_print
-        print('[SKIP] No .mp3 files in ~/Downloads/amapiano — skipping integration smoke test');
-        return;
-      }
+        // ── Run the detector ──────────────────────────────────────────────
+        final detector = AudioCueDetector();
+        final events = await detector.detectCues(testFile.path);
 
-      final testFile = mp3Files.first;
-      // ignore: avoid_print
-      print('[INFO] Integration smoke test using: ${testFile.path}');
+        expect(
+          events,
+          isNotNull,
+          reason: 'detectCues should not return null for a valid mp3 file',
+        );
+        expect(
+          events!,
+          isNotEmpty,
+          reason: 'detectCues should return at least one event',
+        );
 
-      // ── Run the detector ──────────────────────────────────────────────
-      final detector = AudioCueDetector();
-      final events = await detector.detectCues(testFile.path);
-
-      expect(events, isNotNull,
-          reason: 'detectCues should not return null for a valid mp3 file');
-      expect(events!, isNotEmpty,
-          reason: 'detectCues should return at least one event');
-
-      // All events must be time-ordered
-      for (var i = 1; i < events.length; i++) {
-        expect(events[i].timeSeconds,
+        // All events must be time-ordered
+        for (var i = 1; i < events.length; i++) {
+          expect(
+            events[i].timeSeconds,
             greaterThanOrEqualTo(events[i - 1].timeSeconds),
-            reason: 'Events must be time-ordered');
-      }
+            reason: 'Events must be time-ordered',
+          );
+        }
 
-      // All events must have valid confidence
-      for (final ev in events) {
-        expect(ev.confidence, inInclusiveRange(0.0, 1.0));
-        expect(ev.timeSeconds, greaterThanOrEqualTo(0.0));
-      }
+        // All events must have valid confidence
+        for (final ev in events) {
+          expect(ev.confidence, inInclusiveRange(0.0, 1.0));
+          expect(ev.timeSeconds, greaterThanOrEqualTo(0.0));
+        }
 
-      // Intro must be first
-      expect(events.first.type, equals(CueType.intro));
+        // Intro must be first
+        expect(events.first.type, equals(CueType.intro));
 
-      // ignore: avoid_print
-      print('[INFO] Detected ${events.length} events:');
-      for (final ev in events) {
-        final min = (ev.timeSeconds / 60).floor();
-        final sec = (ev.timeSeconds % 60).floor();
         // ignore: avoid_print
-        print(
+        print('[INFO] Detected ${events.length} events:');
+        for (final ev in events) {
+          final min = (ev.timeSeconds / 60).floor();
+          final sec = (ev.timeSeconds % 60).floor();
+          // ignore: avoid_print
+          print(
             '  ${ev.type.label.padRight(12)} @ ${min.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')} '
-            '(conf: ${ev.confidence.toStringAsFixed(2)})');
-      }
-    }, timeout: const Timeout(Duration(minutes: 3)));
+            '(conf: ${ev.confidence.toStringAsFixed(2)})',
+          );
+        }
+      },
+      timeout: const Timeout(Duration(minutes: 3)),
+    );
   });
 }

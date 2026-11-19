@@ -1,7 +1,7 @@
 name: viberadar
 description: "VibeRadar - DJ trend intelligence platform"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+16
 
 environment:
   sdk: ^3.11.0
@@ -22,6 +22,7 @@ dependencies:
   firebase_auth: ^6.3.0
   cloud_firestore: ^6.2.0
   firebase_storage: ^13.2.0
+  firebase_messaging: ^16.0.0
   google_sign_in: ^7.2.0
 
   # Desktop
@@ -47,7 +48,10 @@ dependencies:
   cross_file: ^0.3.4+2
   cloud_functions: ^6.3.2
   qr_flutter: ^4.1.0
+  mobile_scanner: ^7.0.0
   sign_in_with_apple: ^8.1.0
+  in_app_purchase: ^3.3.0
+  firebase_app_check: ^0.4.4+2
 
 dev_dependencies:
   flutter_test:
@@ -59,8 +63,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/splash/frames/
     - assets/icon/app_icon.png
+    - assets/onboarding/
+    - assets/paywall/
 
 flutter_launcher_icons:
   image_path: "assets/icon/app_icon.png"
@@ -79,9 +84,7 @@ flutter_launcher_icons:
 
 flutter_native_splash:
   color: "#06070B"
-  image: "assets/icon/app_icon.png"
   android_12:
-    image: "assets/icon/app_icon.png"
     color: "#06070B"
   ios: true
   android: true

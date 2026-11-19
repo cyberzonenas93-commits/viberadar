@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/music_genres.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/social_profile.dart';
 import '../../../models/uploaded_track.dart';
@@ -37,12 +38,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     return profileAsync.when(
       loading: () =>
           const Center(child: CircularProgressIndicator(color: AppTheme.cyan)),
-      error: (e, _) => Center(
-        child: Text(
-          'Error: $e',
-          style: const TextStyle(color: AppTheme.textTertiary),
-        ),
-      ),
+      error: (e, st) {
+        developer.log(
+          'Failed to load social profile',
+          name: 'ProfileScreen',
+          error: e,
+          stackTrace: st,
+        );
+        if (isOwn && session?.isAuthenticated == true) {
+          return _buildProfile(
+            context,
+            SocialProfile(
+              userId: session!.userId,
+              displayName: session.displayName,
+            ),
+            true,
+            session.userId,
+          );
+        }
+        return const Center(
+          child: VibeEmptyState(
+            icon: Icons.person_off_rounded,
+            title: 'Profile unavailable',
+          ),
+        );
+      },
       data: (profile) =>
           _buildProfile(context, profile, isOwn, session?.userId ?? ''),
     );
@@ -116,7 +136,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                 color: AppTheme.textPrimary,
                                 fontWeight: FontWeight.w800,
                                 fontSize: 22,
-                                letterSpacing: -0.5,
+                                letterSpacing: 0,
                               ),
                             ),
                           ),
@@ -354,7 +374,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 color: AppTheme.textPrimary,
                 fontWeight: FontWeight.w800,
                 fontSize: 15,
-                letterSpacing: -0.3,
+                letterSpacing: 0,
               ),
             ),
           ),
@@ -365,8 +385,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               child: CircularProgressIndicator(color: AppTheme.cyan),
             ),
           ),
-          error: (e, _) =>
-              SliverFillRemaining(child: Center(child: Text('$e'))),
+          error: (e, st) {
+            developer.log(
+              'Failed to load profile uploads',
+              name: 'ProfileScreen',
+              error: e,
+              stackTrace: st,
+            );
+            return SliverFillRemaining(
+              hasScrollBody: false,
+              child: VibeEmptyState(
+                icon: Icons.cloud_off_rounded,
+                title: isOwn ? 'No uploads yet' : 'No uploads available',
+              ),
+            );
+          },
           data: (uploads) => uploads.isEmpty
               ? SliverFillRemaining(
                   hasScrollBody: false,
@@ -512,17 +545,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      for (final g in [
-                        'Afrobeats',
-                        'Amapiano',
-                        'R&B',
-                        'Hip-Hop',
-                        'House',
-                        'Pop',
-                        'Dancehall',
-                        'Afro-House',
-                        'Open Format',
-                      ])
+                      for (final g in kCanonicalMusicGenres)
                         FilterChip(
                           label: Text(g, style: const TextStyle(fontSize: 11)),
                           selected: _genres.contains(g),
@@ -586,7 +609,7 @@ class _Stat extends StatelessWidget {
           color: AppTheme.textPrimary,
           fontWeight: FontWeight.w800,
           fontSize: 16,
-          letterSpacing: -0.5,
+          letterSpacing: 0,
         ),
       ),
       Text(
@@ -617,19 +640,22 @@ class _UploadTile extends StatelessWidget {
               ),
               child: SizedBox.expand(
                 child: track.artworkUrl.isNotEmpty
-                    ? CachedNetworkImage(
-                        imageUrl: track.artworkUrl,
-                        fit: BoxFit.cover,
+                    ? FutureBuilder<String>(
+                        future: resolveCommunityMediaUrl(track.artworkUrl),
+                        builder: (context, snapshot) {
+                          final url = snapshot.data;
+                          if (url == null || url.isEmpty) {
+                            return _profileUploadPlaceholder();
+                          }
+                          return CachedNetworkImage(
+                            imageUrl: url,
+                            fit: BoxFit.cover,
+                          );
+                        },
                       )
                     : Container(
                         color: AppTheme.edge,
-                        child: const Center(
-                          child: Icon(
-                            Icons.headphones_rounded,
-                            color: AppTheme.textTertiary,
-                            size: 32,
-                          ),
-                        ),
+                        child: _profileUploadPlaceholder(),
                       ),
               ),
             ),
@@ -664,3 +690,7 @@ class _UploadTile extends StatelessWidget {
     );
   }
 }
+
+Widget _profileUploadPlaceholder() => const Center(
+  child: Icon(Icons.headphones_rounded, color: AppTheme.textTertiary, size: 32),
+);

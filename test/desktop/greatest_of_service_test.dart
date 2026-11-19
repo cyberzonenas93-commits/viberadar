@@ -78,54 +78,113 @@ void main() {
     test('higher trendScore → strictly higher score (all else equal)', () {
       final low = _track(id: 'low', trendScore: 0.1);
       final high = _track(id: 'high', trendScore: 0.9);
-      expect(svc.computeGreatestScore(high),
-          greaterThan(svc.computeGreatestScore(low)));
+      expect(
+        svc.computeGreatestScore(high),
+        greaterThan(svc.computeGreatestScore(low)),
+      );
     });
 
     test('more region scores → higher artistInfluence component', () {
-      final narrow = _track(id: 'n',
-          regionScores: {'NG': 0.8}, trendScore: 0.5);
-      final broad = _track(id: 'b',
-          regionScores: {'NG': 0.8, 'GH': 0.7, 'US': 0.6, 'GB': 0.5,
-                         'ZA': 0.4, 'FR': 0.3},
-          trendScore: 0.5);
-      expect(svc.computeGreatestScore(broad),
-          greaterThan(svc.computeGreatestScore(narrow)));
+      final narrow = _track(
+        id: 'n',
+        regionScores: {'NG': 0.8},
+        trendScore: 0.5,
+      );
+      final broad = _track(
+        id: 'b',
+        regionScores: {
+          'NG': 0.8,
+          'GH': 0.7,
+          'US': 0.6,
+          'GB': 0.5,
+          'ZA': 0.4,
+          'FR': 0.3,
+        },
+        trendScore: 0.5,
+      );
+      expect(
+        svc.computeGreatestScore(broad),
+        greaterThan(svc.computeGreatestScore(narrow)),
+      );
     });
 
     test('more platform links → higher chartLegacy component', () {
-      final few = _track(id: 'f',
-          platformLinks: {'spotify': 'url1'});
-      final many = _track(id: 'm',
-          platformLinks: {'spotify': 'url1', 'apple': 'url2',
-                          'youtube': 'url3', 'tidal': 'url4', 'deezer': 'url5'});
-      expect(svc.computeGreatestScore(many),
-          greaterThan(svc.computeGreatestScore(few)));
+      final few = _track(id: 'f', platformLinks: {'spotify': 'url1'});
+      final many = _track(
+        id: 'm',
+        platformLinks: {
+          'spotify': 'url1',
+          'apple': 'url2',
+          'youtube': 'url3',
+          'tidal': 'url4',
+          'deezer': 'url5',
+        },
+      );
+      expect(
+        svc.computeGreatestScore(many),
+        greaterThan(svc.computeGreatestScore(few)),
+      );
     });
 
     test('DJ-friendly BPM (85–140) yields higher score than extreme BPM', () {
       final friendly = _track(id: 'f', bpm: 120, trendScore: 0.5);
       final extreme = _track(id: 'e', bpm: 200, trendScore: 0.5);
-      expect(svc.computeGreatestScore(friendly),
-          greaterThan(svc.computeGreatestScore(extreme)));
+      expect(
+        svc.computeGreatestScore(friendly),
+        greaterThan(svc.computeGreatestScore(extreme)),
+      );
     });
 
     test('known keySignature gives a bonus over missing key ("--")', () {
       // Use BPM=70 — in the outer range (0.6 score), so key bonus (0.15)
       // pushes it to 0.75 vs 0.6 without hitting the 1.0 clamp.
-      final withKey = _track(id: 'wk', keySignature: '8B', bpm: 70, trendScore: 0.5);
-      final noKey = _track(id: 'nk', keySignature: '--', bpm: 70, trendScore: 0.5);
-      expect(svc.computeGreatestScore(withKey),
-          greaterThan(svc.computeGreatestScore(noKey)));
+      final withKey = _track(
+        id: 'wk',
+        keySignature: '8B',
+        bpm: 70,
+        trendScore: 0.5,
+      );
+      final noKey = _track(
+        id: 'nk',
+        keySignature: '--',
+        bpm: 70,
+        trendScore: 0.5,
+      );
+      expect(
+        svc.computeGreatestScore(withKey),
+        greaterThan(svc.computeGreatestScore(noKey)),
+      );
     });
 
     test('more sources yield higher cross-source prominence', () {
       final single = _track(id: 's', sources: ['spotify']);
-      final triple = _track(id: 't',
-          sources: ['spotify', 'youtube', 'billboard']);
+      final triple = _track(
+        id: 't',
+        sources: ['spotify', 'youtube', 'billboard'],
+      );
       // All other fields identical — only sources differ
-      expect(svc.computeGreatestScore(triple),
-          greaterThan(svc.computeGreatestScore(single)));
+      expect(
+        svc.computeGreatestScore(triple),
+        greaterThan(svc.computeGreatestScore(single)),
+      );
+    });
+
+    test('Soundcharts sources boost greatest score over generic sources', () {
+      final generic = _track(
+        id: 'generic',
+        sources: ['spotify', 'youtube', 'billboard'],
+        platformLinks: {'spotify': 'u1'},
+      );
+      final soundcharts = _track(
+        id: 'soundcharts',
+        sources: ['spotify', 'shazam', 'tiktok'],
+        platformLinks: {'spotify': 'u1'},
+      );
+
+      expect(
+        svc.computeGreatestScore(soundcharts),
+        greaterThan(svc.computeGreatestScore(generic)),
+      );
     });
 
     test('older track with high trendScore scores higher on timelessness', () {
@@ -133,15 +192,20 @@ void main() {
       final old = _track(id: 'old', releaseYear: 2010, trendScore: 0.9);
       // A very recent track (2024) with same trendScore
       final recent = _track(id: 'new', releaseYear: 2024, trendScore: 0.9);
-      expect(svc.computeGreatestScore(old),
-          greaterThan(svc.computeGreatestScore(recent)));
+      expect(
+        svc.computeGreatestScore(old),
+        greaterThan(svc.computeGreatestScore(recent)),
+      );
     });
 
     test('track younger than 2 years has timelessness == 0', () {
       // timelessness is tested indirectly; a track released THIS year cannot
       // dominate purely via age — verify score still in range
-      final brand = _track(id: 'brand', releaseYear: DateTime.now().year,
-          trendScore: 1.0);
+      final brand = _track(
+        id: 'brand',
+        releaseYear: DateTime.now().year,
+        trendScore: 1.0,
+      );
       final score = svc.computeGreatestScore(brand);
       expect(score, inInclusiveRange(0.0, 1.0));
     });
@@ -160,17 +224,26 @@ void main() {
         bpm: 120,
         keySignature: '8B',
         energyLevel: 0.9,
-        trendHistory: [const TrendPoint(label: 'w1', score: 0.7),
-                       const TrendPoint(label: 'w2', score: 0.95)],
+        trendHistory: [
+          const TrendPoint(label: 'w1', score: 0.7),
+          const TrendPoint(label: 'w2', score: 0.95),
+        ],
         regionScores: {'NG': 0.9, 'GH': 0.8, 'US': 0.7, 'GB': 0.6},
-        platformLinks: {'spotify': 'u1', 'apple': 'u2', 'youtube': 'u3',
-                        'tidal': 'u4', 'deezer': 'u5'},
+        platformLinks: {
+          'spotify': 'u1',
+          'apple': 'u2',
+          'youtube': 'u3',
+          'tidal': 'u4',
+          'deezer': 'u5',
+        },
         sources: ['spotify', 'youtube', 'billboard'],
         releaseYear: 2012,
       );
       final minimal = _track(id: 'min');
-      expect(svc.computeGreatestScore(powerhouse),
-          greaterThan(svc.computeGreatestScore(minimal)));
+      expect(
+        svc.computeGreatestScore(powerhouse),
+        greaterThan(svc.computeGreatestScore(minimal)),
+      );
     });
   });
 
@@ -180,10 +253,19 @@ void main() {
     test('returns tracks ordered by computeGreatestScore descending', () {
       final tracks = [
         _track(id: 'low', trendScore: 0.1),
-        _track(id: 'high', trendScore: 0.9,
-            regionScores: {'US': 0.9, 'NG': 0.8, 'GB': 0.7, 'ZA': 0.6},
-            platformLinks: {'sp': 'u', 'ap': 'u2', 'yt': 'u3', 'td': 'u4', 'dz': 'u5'},
-            sources: ['spotify', 'youtube', 'billboard']),
+        _track(
+          id: 'high',
+          trendScore: 0.9,
+          regionScores: {'US': 0.9, 'NG': 0.8, 'GB': 0.7, 'ZA': 0.6},
+          platformLinks: {
+            'sp': 'u',
+            'ap': 'u2',
+            'yt': 'u3',
+            'td': 'u4',
+            'dz': 'u5',
+          },
+          sources: ['spotify', 'youtube', 'billboard'],
+        ),
         _track(id: 'mid', trendScore: 0.5),
       ];
 
@@ -191,8 +273,10 @@ void main() {
       expect(result.first.id, 'high');
       // Score of result[0] >= result[1] >= result[2]
       for (var i = 0; i < result.length - 1; i++) {
-        expect(svc.computeGreatestScore(result[i]),
-            greaterThanOrEqualTo(svc.computeGreatestScore(result[i + 1])));
+        expect(
+          svc.computeGreatestScore(result[i]),
+          greaterThanOrEqualTo(svc.computeGreatestScore(result[i + 1])),
+        );
       }
     });
 
@@ -236,8 +320,10 @@ void main() {
         _track(id: 'm2', genre: 'techno'),
         _track(id: 'm3', genre: 'afrobeats'),
       ];
-      final result = svc.buildGreatestOfSet(tracks: tracks,
-          genre: 'house,techno');
+      final result = svc.buildGreatestOfSet(
+        tracks: tracks,
+        genre: 'house,techno',
+      );
       final genres = result.map((t) => t.genre).toSet();
       expect(genres, containsAll(['house', 'techno']));
       expect(genres, isNot(contains('afrobeats')));
@@ -251,10 +337,17 @@ void main() {
       final tracks = [
         _track(id: 'art1', artist: 'Burna Boy', genre: 'Afrobeats'),
         _track(id: 'art2', artist: 'Wizkid', genre: 'Afrobeats'),
-        _track(id: 'art3', artist: 'Burna Boy feat. Wizkid', genre: 'Afrobeats'),
+        _track(
+          id: 'art3',
+          artist: 'Burna Boy feat. Wizkid',
+          genre: 'Afrobeats',
+        ),
       ];
 
-      final result = svc.buildGreatestOfSet(tracks: tracks, artist: 'Burna Boy');
+      final result = svc.buildGreatestOfSet(
+        tracks: tracks,
+        artist: 'Burna Boy',
+      );
       final artistNames = result.map((t) => t.artist).toList();
       // Should include 'Burna Boy' and 'Burna Boy feat. Wizkid'
       expect(artistNames, contains('Burna Boy'));
@@ -296,8 +389,11 @@ void main() {
         _track(id: 'r3', releaseYear: 2019),
         _track(id: 'r4', releaseYear: 2025),
       ];
-      final result = svc.buildGreatestOfSet(tracks: tracks,
-          yearFrom: 2005, yearTo: 2019);
+      final result = svc.buildGreatestOfSet(
+        tracks: tracks,
+        yearFrom: 2005,
+        yearTo: 2019,
+      );
       final ids = result.map((t) => t.id).toList();
       expect(ids, containsAll(['r2', 'r3']));
       expect(ids, isNot(contains('r1')));
@@ -310,8 +406,8 @@ void main() {
   group('GreatestOfService.buildGreatestOfSet — region filter', () {
     test('region filter keeps only tracks whose leadRegion matches', () {
       final tracks = [
-        _track(id: 'reg1', regionScores: {'NG': 0.9}),  // leadRegion = NG
-        _track(id: 'reg2', regionScores: {'US': 0.8}),  // leadRegion = US
+        _track(id: 'reg1', regionScores: {'NG': 0.9}), // leadRegion = NG
+        _track(id: 'reg2', regionScores: {'US': 0.8}), // leadRegion = US
       ];
 
       final result = svc.buildGreatestOfSet(tracks: tracks, region: 'NG');
@@ -381,8 +477,10 @@ void main() {
 
   group('GreatestOfService.eraPresets', () {
     test('contains expected keys', () {
-      expect(GreatestOfService.eraPresets.keys,
-          containsAll(['90s', '2000s', '2010s', '2020s', 'All Time']));
+      expect(
+        GreatestOfService.eraPresets.keys,
+        containsAll(['90s', '2000s', '2010s', '2020s', 'All Time']),
+      );
     });
 
     test('"90s" preset has yearFrom=1990, yearTo=1999', () {

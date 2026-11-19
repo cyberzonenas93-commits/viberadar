@@ -1,4 +1,4 @@
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -7,7 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../providers/app_state.dart';
 import '../../providers/repositories.dart';
 import '../../services/account_deletion_service.dart';
-import '../../services/secure_storage_service.dart';
+import '../widgets/subscription_section.dart';
 
 /// Bottom-sheet with basic account info, sign-out, and account deletion.
 ///
@@ -21,107 +21,124 @@ class MobileSettingsSheet extends ConsumerWidget {
     final sessionAsync = ref.watch(sessionProvider);
     final email = sessionAsync.value?.email ?? '';
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 24,
-        right: 24,
-        top: 24,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 40,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Drag handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: AppTheme.edge,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-          ),
-
-          // Title
-          const Text(
-            'Account',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 20,
-            ),
-          ),
-          const SizedBox(height: 4),
-
-          // Signed-in email
-          if (email.isNotEmpty)
-            Text(
-              email,
-              key: const Key('settings_email_label'),
-              style: const TextStyle(
-                color: AppTheme.textSecondary,
-                fontSize: 14,
+    return SingleChildScrollView(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 24,
+          right: 24,
+          top: 24,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 40,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: AppTheme.edge,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
 
-          const SizedBox(height: 28),
-          Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
-          const SizedBox(height: 20),
-
-          // Sign out
-          OutlinedButton.icon(
-            key: const Key('sign_out_button'),
-            icon: const Icon(Icons.logout, size: 18),
-            label: const Text('Sign out'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppTheme.textSecondary,
-              side: BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            // Title
+            const Text(
+              'Account',
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontWeight: FontWeight.w700,
+                fontSize: 20,
               ),
             ),
-            onPressed: () => _signOut(context, ref),
-          ),
+            const SizedBox(height: 4),
 
-          const SizedBox(height: 12),
-
-          // Delete account — destructive
-          OutlinedButton.icon(
-            key: const Key('delete_account_button'),
-            icon: const Icon(Icons.delete_forever, size: 18),
-            label: const Text('Delete account'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red.shade400,
-              side: BorderSide(color: Colors.red.shade400.withValues(alpha: 0.5)),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+            // Signed-in email
+            if (email.isNotEmpty)
+              Text(
+                email,
+                key: const Key('settings_email_label'),
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 14,
+                ),
               ),
+
+            const SizedBox(height: 28),
+            Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
+            const SizedBox(height: 20),
+
+            const SubscriptionSection(compact: true),
+
+            const SizedBox(height: 20),
+            Divider(color: AppTheme.edge.withValues(alpha: 0.4), height: 1),
+            const SizedBox(height: 20),
+
+            // Sign out
+            OutlinedButton.icon(
+              key: const Key('sign_out_button'),
+              icon: const Icon(Icons.logout, size: 18),
+              label: const Text('Sign out'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppTheme.textSecondary,
+                side: BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => _signOut(context, ref),
             ),
-            onPressed: () => _confirmDelete(context, ref),
-          ),
 
-          const SizedBox(height: 16),
-          // Privacy policy — App Store requires an in-app link for data apps.
-          Center(
-            child: TextButton(
-              onPressed: () => launchUrl(
-                Uri.parse('https://viberadar-462b8.web.app/privacy.html'),
-                mode: LaunchMode.externalApplication,
+            const SizedBox(height: 12),
+
+            // Delete account — destructive
+            OutlinedButton.icon(
+              key: const Key('delete_account_button'),
+              icon: const Icon(Icons.delete_forever, size: 18),
+              label: const Text('Delete account'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.red.shade400,
+                side: BorderSide(
+                  color: Colors.red.shade400.withValues(alpha: 0.5),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
-              child: const Text(
-                'Privacy Policy',
-                style: TextStyle(color: AppTheme.textTertiary, fontSize: 13),
-              ),
+              onPressed: () => _confirmDelete(context, ref),
             ),
-          ),
 
-          const SizedBox(height: 8),
-        ],
+            const SizedBox(height: 16),
+            // Privacy policy — App Store requires an in-app link for data apps.
+            Wrap(
+              alignment: WrapAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                _LegalLink(
+                  label: 'Privacy',
+                  url: 'https://viberadar-462b8.web.app/privacy.html',
+                ),
+                _LegalLink(
+                  label: 'Support',
+                  url: 'https://viberadar-462b8.web.app/support.html',
+                ),
+                _LegalLink(
+                  label: 'Terms',
+                  url: 'https://viberadar-462b8.web.app/terms.html',
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 8),
+          ],
+        ),
       ),
     );
   }
@@ -197,8 +214,8 @@ class MobileSettingsSheet extends ConsumerWidget {
       if (context.mounted && Navigator.of(context).canPop()) {
         Navigator.of(context).pop();
       }
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
+    } on FirebaseFunctionsException catch (e) {
+      if (e.code == 'unauthenticated') {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -209,147 +226,37 @@ class MobileSettingsSheet extends ConsumerWidget {
       } else {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${e.message}')),
+            SnackBar(
+              content: Text('Account deletion failed: ${e.message ?? e.code}'),
+            ),
           );
         }
       }
     } catch (e) {
       if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
   }
 }
 
-/// Lets the user store their personal OpenAI API key, used by the AI tab.
-///
-/// The key is written to this device's Keychain via [SecureStorageService] and
-/// is never bundled or synced. Saving an empty value clears the stored key.
-class OpenAiKeySection extends StatefulWidget {
-  const OpenAiKeySection({super.key, this.storage});
+class _LegalLink extends StatelessWidget {
+  const _LegalLink({required this.label, required this.url});
 
-  /// Injectable backend for tests; defaults to the real Keychain-backed service.
-  final SecureStorageService? storage;
-
-  @override
-  State<OpenAiKeySection> createState() => _OpenAiKeySectionState();
-}
-
-class _OpenAiKeySectionState extends State<OpenAiKeySection> {
-  late final SecureStorageService _storage =
-      widget.storage ?? SecureStorageService();
-  final _controller = TextEditingController();
-  bool _loading = true;
-  bool _saved = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final key = await _storage.readSecret(kOpenAiApiKey);
-    if (!mounted) return;
-    setState(() {
-      if (key != null) _controller.text = key;
-      _saved = key != null && key.trim().isNotEmpty;
-      _loading = false;
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    final key = _controller.text.trim();
-    if (key.isEmpty) {
-      await _storage.deleteSecret(kOpenAiApiKey);
-    } else {
-      await _storage.writeSecret(kOpenAiApiKey, key);
-    }
-    if (!mounted) return;
-    setState(() => _saved = key.isNotEmpty);
-    FocusScope.of(context).unfocus();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(key.isEmpty ? 'OpenAI key cleared' : 'OpenAI key saved'),
-      ),
-    );
-  }
+  final String label;
+  final String url;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            const Text(
-              'OpenAI API Key',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontWeight: FontWeight.w700,
-                fontSize: 15,
-              ),
-            ),
-            const SizedBox(width: 8),
-            if (_saved)
-              const Icon(Icons.check_circle, size: 16, color: AppTheme.lime),
-          ],
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Powers the AI tab. Stored only on this device.',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                key: const Key('openai_key_field'),
-                controller: _controller,
-                obscureText: true,
-                enabled: !_loading,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 14,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'sk-…',
-                  hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                  filled: true,
-                  fillColor: AppTheme.panel,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide:
-                        BorderSide(color: AppTheme.edge.withValues(alpha: 0.6)),
-                  ),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                ),
-              ),
-            ),
-            const SizedBox(width: 10),
-            ElevatedButton(
-              key: const Key('save_openai_key_button'),
-              onPressed: _loading ? null : _save,
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      ],
+    return TextButton(
+      onPressed: () =>
+          launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
+      child: Text(
+        label,
+        style: const TextStyle(color: AppTheme.textTertiary, fontSize: 13),
+      ),
     );
   }
 }

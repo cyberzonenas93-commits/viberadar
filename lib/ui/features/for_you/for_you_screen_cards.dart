@@ -90,7 +90,7 @@ class _ArtistSection extends StatelessWidget {
                         style: theme.textTheme.titleLarge?.copyWith(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w800,
-                          letterSpacing: -0.3,
+                          letterSpacing: 0,
                         ),
                       ),
                       if (!isLoading && profile!.genres.isNotEmpty) ...[

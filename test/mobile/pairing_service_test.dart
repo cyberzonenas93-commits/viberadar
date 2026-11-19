@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
+import 'package:viberadar/models/crate_track.dart';
 import 'package:viberadar/services/pairing_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -61,7 +62,11 @@ class _FakeCollection {
 
   Stream<_FakeQuerySnapshot> snapshots() => _ctrl.stream;
 
-  Future<void> set(String id, Map<String, dynamic> data, {bool merge = false}) async {
+  Future<void> set(
+    String id,
+    Map<String, dynamic> data, {
+    bool merge = false,
+  }) async {
     if (merge && _docs.containsKey(id)) {
       _docs[id] = {..._docs[id]!, ...data};
     } else {
@@ -116,14 +121,11 @@ class _FakePairingChannel {
   _FakePairingChannel(this._fakeFs);
   final _FakeFirestore _fakeFs;
 
-  _FakeCollection _col(String pairingId) =>
-      _fakeFs._setlistsFor(pairingId);
+  _FakeCollection _col(String pairingId) => _fakeFs._setlistsFor(pairingId);
 
   Stream<List<Crate>> watchSharedSetlists(String pairingId) {
     return _col(pairingId).snapshots().map((snap) {
-      final crates = snap.docs
-          .map((doc) => Crate.fromMap(doc.data()))
-          .toList()
+      final crates = snap.docs.map((doc) => Crate.fromMap(doc.data())).toList()
         ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
       return crates;
     });
@@ -154,14 +156,16 @@ Crate _makeCrate(String id, {DateTime? updatedAt, List<String>? trackIds}) =>
       id: id,
       name: 'Crate $id',
       context: 'Open format',
-      trackIds: trackIds ?? const [],
+      tracks: (trackIds ?? const <String>[]).map(CrateTrack.reference).toList(),
       createdAt: DateTime(2024, 1, 1),
       updatedAt: updatedAt ?? DateTime(2025, 1, 1),
     );
 
 /// Pump the event loop until [condition] is true, or give up.
-Future<void> _pumpUntil(bool Function() condition,
-    {int maxIterations = 100}) async {
+Future<void> _pumpUntil(
+  bool Function() condition, {
+  int maxIterations = 100,
+}) async {
   for (var i = 0; i < maxIterations; i++) {
     if (condition()) return;
     await Future<void>.delayed(Duration.zero);
@@ -182,7 +186,7 @@ void main() {
         id: 'abc-123',
         name: 'Sunset Set',
         context: 'Deep house',
-        trackIds: const ['t1', 't2', 't3'],
+        tracks: ['t1', 't2', 't3'].map(CrateTrack.reference).toList(),
         createdAt: DateTime(2024, 6, 15, 10, 30),
         updatedAt: DateTime(2025, 1, 20, 18, 0),
       );
@@ -215,9 +219,11 @@ void main() {
     });
 
     test('toMap uses snake_case keys required by Firestore channel', () {
-      final crate = _makeCrate('x',
-          trackIds: ['t1'],
-          updatedAt: DateTime(2025, 3, 1));
+      final crate = _makeCrate(
+        'x',
+        trackIds: ['t1'],
+        updatedAt: DateTime(2025, 3, 1),
+      );
       final map = crate.toMap();
 
       expect(map.containsKey('track_ids'), isTrue);
@@ -246,8 +252,7 @@ void main() {
     });
 
     test('updated_at in the doc overrides the original Crate.updatedAt', () {
-      final crate = _makeCrate('crate-2',
-          updatedAt: DateTime(2020, 1, 1));
+      final crate = _makeCrate('crate-2', updatedAt: DateTime(2020, 1, 1));
       const laterIso = '2025-12-31T23:59:59.000';
 
       final doc = setlistDocData(crate, 'uid', laterIso);
@@ -282,25 +287,27 @@ void main() {
       expect(emitted.first, isEmpty);
     });
 
-    test('emits Crate list sorted by updatedAt descending after push', () async {
-      const pairingId = 'pairing-sort';
-      final older = _makeCrate('old', updatedAt: DateTime(2025, 1, 1));
-      final newer = _makeCrate('new', updatedAt: DateTime(2025, 6, 1));
+    test(
+      'emits Crate list sorted by updatedAt descending after push',
+      () async {
+        const pairingId = 'pairing-sort';
+        final older = _makeCrate('old', updatedAt: DateTime(2025, 1, 1));
+        final newer = _makeCrate('new', updatedAt: DateTime(2025, 6, 1));
 
-      final emitted = <List<Crate>>[];
-      final sub =
-          channel.watchSharedSetlists(pairingId).listen(emitted.add);
-      addTearDown(sub.cancel);
+        final emitted = <List<Crate>>[];
+        final sub = channel.watchSharedSetlists(pairingId).listen(emitted.add);
+        addTearDown(sub.cancel);
 
-      await channel.pushSetlist(pairingId, older, editorUid: 'uid-1');
-      await channel.pushSetlist(pairingId, newer, editorUid: 'uid-1');
+        await channel.pushSetlist(pairingId, older, editorUid: 'uid-1');
+        await channel.pushSetlist(pairingId, newer, editorUid: 'uid-1');
 
-      await _pumpUntil(() => emitted.isNotEmpty);
-      final last = emitted.last;
-      expect(last.length, 2);
-      expect(last[0].id, 'new'); // newest first
-      expect(last[1].id, 'old');
-    });
+        await _pumpUntil(() => emitted.isNotEmpty);
+        final last = emitted.last;
+        expect(last.length, 2);
+        expect(last[0].id, 'new'); // newest first
+        expect(last[1].id, 'old');
+      },
+    );
   });
 
   // --------------------------------------------------------------------------
@@ -343,7 +350,7 @@ void main() {
         id: 'rt-1',
         name: 'Round-trip',
         context: 'Techno',
-        trackIds: const ['x', 'y'],
+        tracks: ['x', 'y'].map(CrateTrack.reference).toList(),
         createdAt: DateTime(2024, 1, 1),
         updatedAt: DateTime(2025, 5, 1),
       );

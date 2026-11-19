@@ -120,7 +120,8 @@ class DjExportNotifier extends Notifier<DjExportState> {
   Future<void> setVdjRoot(String path) async {
     if (!_rootDetection.validateVirtualDjRoot(path)) {
       state = state.copyWith(
-        errorMessage: 'The selected folder does not look like a VirtualDJ library '
+        errorMessage:
+            'The selected folder does not look like a VirtualDJ library '
             '(missing database.xml or Folders directory).',
       );
       return;
@@ -132,7 +133,8 @@ class DjExportNotifier extends Notifier<DjExportState> {
   Future<void> setSeratoRoot(String path) async {
     if (!_rootDetection.validateSeratoRoot(path)) {
       state = state.copyWith(
-        errorMessage: 'The selected folder does not look like a Serato library '
+        errorMessage:
+            'The selected folder does not look like a Serato library '
             '(missing Subcrates or database V2).',
       );
       return;
@@ -154,7 +156,10 @@ class DjExportNotifier extends Notifier<DjExportState> {
     String? overrideRoot,
   }) async {
     state = state.copyWith(
-        status: DjExportStatus.exporting, clearResult: true, clearError: true);
+      status: DjExportStatus.exporting,
+      clearResult: true,
+      clearError: true,
+    );
     try {
       final result = await _exportService.exportToVirtualDj(
         playlistName: playlistName,
@@ -164,10 +169,15 @@ class DjExportNotifier extends Notifier<DjExportState> {
         overrideRoot: overrideRoot ?? state.vdjRoot,
       );
       state = state.copyWith(
-          status: DjExportStatus.done, result: result, vdjRoot: result.djRoot);
+        status: DjExportStatus.done,
+        result: result,
+        vdjRoot: result.djRoot,
+      );
     } catch (e) {
       state = state.copyWith(
-          status: DjExportStatus.error, errorMessage: e.toString());
+        status: DjExportStatus.error,
+        errorMessage: e.toString(),
+      );
     }
   }
 
@@ -178,7 +188,10 @@ class DjExportNotifier extends Notifier<DjExportState> {
     String? overrideRoot,
   }) async {
     state = state.copyWith(
-        status: DjExportStatus.exporting, clearResult: true, clearError: true);
+      status: DjExportStatus.exporting,
+      clearResult: true,
+      clearError: true,
+    );
     try {
       final result = await _exportService.exportToSerato(
         playlistName: playlistName,
@@ -187,18 +200,24 @@ class DjExportNotifier extends Notifier<DjExportState> {
         overrideRoot: overrideRoot ?? state.seratoRoot,
       );
       state = state.copyWith(
-          status: DjExportStatus.done,
-          result: result,
-          seratoRoot: result.djRoot);
+        status: DjExportStatus.done,
+        result: result,
+        seratoRoot: result.djRoot,
+      );
     } catch (e) {
       state = state.copyWith(
-          status: DjExportStatus.error, errorMessage: e.toString());
+        status: DjExportStatus.error,
+        errorMessage: e.toString(),
+      );
     }
   }
 
   void reset() {
     state = state.copyWith(
-        status: DjExportStatus.ready, clearResult: true, clearError: true);
+      status: DjExportStatus.ready,
+      clearResult: true,
+      clearError: true,
+    );
   }
 }
 
@@ -206,5 +225,6 @@ class DjExportNotifier extends Notifier<DjExportState> {
 // Provider
 // ─────────────────────────────────────────────────────────────────────────────
 
-final djExportProvider =
-    NotifierProvider<DjExportNotifier, DjExportState>(DjExportNotifier.new);
+final djExportProvider = NotifierProvider<DjExportNotifier, DjExportState>(
+  DjExportNotifier.new,
+);

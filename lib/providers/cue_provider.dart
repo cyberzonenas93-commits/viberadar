@@ -15,67 +15,67 @@ enum VdjWriteStatus { idle, writing, done, error }
 // ── State ──────────────────────────────────────────────────────────────────────
 class CueState {
   const CueState({
-    this.status        = CueGenStatus.idle,
-    this.results       = const [],
-    this.progress      = 0,
-    this.total         = 0,
+    this.status = CueGenStatus.idle,
+    this.results = const [],
+    this.progress = 0,
+    this.total = 0,
     this.errorMessage,
     this.vdjWriteStatus = VdjWriteStatus.idle,
     this.vdjWriteResults = const [],
     this.vdjWriteError,
-    this.storedCues    = const {},
+    this.storedCues = const {},
   });
 
-  final CueGenStatus       status;
+  final CueGenStatus status;
   final List<CueGenerationResult> results;
-  final int                progress;
-  final int                total;
-  final String?            errorMessage;
-  final VdjWriteStatus     vdjWriteStatus;
+  final int progress;
+  final int total;
+  final String? errorMessage;
+  final VdjWriteStatus vdjWriteStatus;
   final List<VdjCueWriteResult> vdjWriteResults;
-  final String?            vdjWriteError;
+  final String? vdjWriteError;
   final Map<String, List<HotCue>> storedCues; // trackId → cues
 
-  bool get isAnalyzing  => status == CueGenStatus.analyzing;
-  bool get isDone       => status == CueGenStatus.done;
-  bool get hasResults   => results.isNotEmpty;
+  bool get isAnalyzing => status == CueGenStatus.analyzing;
+  bool get isDone => status == CueGenStatus.done;
+  bool get hasResults => results.isNotEmpty;
   bool get isWritingVdj => vdjWriteStatus == VdjWriteStatus.writing;
 
   CueState copyWith({
-    CueGenStatus?       status,
+    CueGenStatus? status,
     List<CueGenerationResult>? results,
-    int?                progress,
-    int?                total,
-    String?             errorMessage,
-    VdjWriteStatus?     vdjWriteStatus,
+    int? progress,
+    int? total,
+    String? errorMessage,
+    VdjWriteStatus? vdjWriteStatus,
     List<VdjCueWriteResult>? vdjWriteResults,
-    String?             vdjWriteError,
+    String? vdjWriteError,
     Map<String, List<HotCue>>? storedCues,
   }) {
     return CueState(
-      status:          status          ?? this.status,
-      results:         results         ?? this.results,
-      progress:        progress        ?? this.progress,
-      total:           total           ?? this.total,
-      errorMessage:    errorMessage,
-      vdjWriteStatus:  vdjWriteStatus  ?? this.vdjWriteStatus,
+      status: status ?? this.status,
+      results: results ?? this.results,
+      progress: progress ?? this.progress,
+      total: total ?? this.total,
+      errorMessage: errorMessage,
+      vdjWriteStatus: vdjWriteStatus ?? this.vdjWriteStatus,
       vdjWriteResults: vdjWriteResults ?? this.vdjWriteResults,
-      vdjWriteError:   vdjWriteError,
-      storedCues:      storedCues      ?? this.storedCues,
+      vdjWriteError: vdjWriteError,
+      storedCues: storedCues ?? this.storedCues,
     );
   }
 }
 
 // ── Notifier ───────────────────────────────────────────────────────────────────
 class CueNotifier extends Notifier<CueState> {
-  late final CueAnalysisService  _analysis;
-  late final CueStorageService   _storage;
-  late final VirtualDjCueWriter  _vdjWriter;
+  late final CueAnalysisService _analysis;
+  late final CueStorageService _storage;
+  late final VirtualDjCueWriter _vdjWriter;
 
   @override
   CueState build() {
-    _analysis  = CueAnalysisService();
-    _storage   = CueStorageService();
+    _analysis = CueAnalysisService();
+    _storage = CueStorageService();
     _vdjWriter = VirtualDjCueWriter();
     _loadStoredCues();
     return const CueState();
@@ -89,18 +89,23 @@ class CueNotifier extends Notifier<CueState> {
     bool useAi = true,
   }) async {
     state = state.copyWith(
-      status: CueGenStatus.analyzing, results: [], progress: 1, total: 1,
+      status: CueGenStatus.analyzing,
+      results: [],
+      progress: 1,
+      total: 1,
     );
     try {
       final result = await _analysis.analyzeTrack(
-        track, cloudTrack: cloudTrack, useAi: useAi,
+        track,
+        cloudTrack: cloudTrack,
+        useAi: useAi,
       );
       await _storage.saveCues(track.id, result.cues);
       state = state.copyWith(
-        status:   CueGenStatus.done,
-        results:  [result],
+        status: CueGenStatus.done,
+        results: [result],
         progress: 1,
-        total:    1,
+        total: 1,
         storedCues: Map.from(state.storedCues)..[track.id] = result.cues,
       );
     } catch (e) {
@@ -118,7 +123,10 @@ class CueNotifier extends Notifier<CueState> {
   }) async {
     if (tracks.isEmpty) return;
     state = state.copyWith(
-      status: CueGenStatus.analyzing, results: [], progress: 0, total: tracks.length,
+      status: CueGenStatus.analyzing,
+      results: [],
+      progress: 0,
+      total: tracks.length,
     );
     try {
       final results = await _analysis.analyzeBatch(
@@ -134,15 +142,16 @@ class CueNotifier extends Notifier<CueState> {
         updatedCues[r.trackId] = r.cues;
       }
       state = state.copyWith(
-        status:     CueGenStatus.done,
-        results:    results,
-        progress:   tracks.length,
-        total:      tracks.length,
+        status: CueGenStatus.done,
+        results: results,
+        progress: tracks.length,
+        total: tracks.length,
         storedCues: updatedCues,
       );
     } catch (e) {
       state = state.copyWith(
-        status: CueGenStatus.error, errorMessage: e.toString(),
+        status: CueGenStatus.error,
+        errorMessage: e.toString(),
       );
     }
   }
@@ -161,8 +170,9 @@ class CueNotifier extends Notifier<CueState> {
     final updated = state.results.map((r) {
       if (r.trackId != resultTrackId) return r;
       return r.copyWith(
-        cues: r.cues.map((c) =>
-          c.id == cueId ? c.copyWith(label: newLabel) : c).toList(),
+        cues: r.cues
+            .map((c) => c.id == cueId ? c.copyWith(label: newLabel) : c)
+            .toList(),
       );
     }).toList();
     state = state.copyWith(results: updated);
@@ -197,27 +207,33 @@ class CueNotifier extends Notifier<CueState> {
         final updatedResults = state.results.map((r) {
           if (r.trackId != result.trackId) return r;
           return r.copyWith(
-            cues: r.cues.map((c) => c.copyWith(
-              isWritten: true, targetSoftware: 'virtualDJ')).toList(),
+            cues: r.cues
+                .map(
+                  (c) =>
+                      c.copyWith(isWritten: true, targetSoftware: 'virtualDJ'),
+                )
+                .toList(),
           );
         }).toList();
-        await _storage.saveCues(result.trackId, updatedResults
-            .firstWhere((r) => r.trackId == result.trackId).cues);
+        await _storage.saveCues(
+          result.trackId,
+          updatedResults.firstWhere((r) => r.trackId == result.trackId).cues,
+        );
         state = state.copyWith(
-          vdjWriteStatus:  VdjWriteStatus.done,
+          vdjWriteStatus: VdjWriteStatus.done,
           vdjWriteResults: [writeResult],
-          results:         updatedResults,
+          results: updatedResults,
         );
       } else {
         state = state.copyWith(
           vdjWriteStatus: VdjWriteStatus.error,
-          vdjWriteError:  writeResult.errorMessage,
+          vdjWriteError: writeResult.errorMessage,
         );
       }
     } catch (e) {
       state = state.copyWith(
         vdjWriteStatus: VdjWriteStatus.error,
-        vdjWriteError:  e.toString(),
+        vdjWriteError: e.toString(),
       );
     }
   }
@@ -233,15 +249,17 @@ class CueNotifier extends Notifier<CueState> {
     final cueMap = {for (final r in withPaths) r.localFilePath!: r.cues};
     try {
       final writeResults = await _vdjWriter.writeBatch(
-        vdjRoot: vdjRoot, cuesByFilePath: cueMap,
+        vdjRoot: vdjRoot,
+        cuesByFilePath: cueMap,
       );
       state = state.copyWith(
-        vdjWriteStatus:  VdjWriteStatus.done,
+        vdjWriteStatus: VdjWriteStatus.done,
         vdjWriteResults: writeResults,
       );
     } catch (e) {
       state = state.copyWith(
-        vdjWriteStatus: VdjWriteStatus.error, vdjWriteError: e.toString(),
+        vdjWriteStatus: VdjWriteStatus.error,
+        vdjWriteError: e.toString(),
       );
     }
   }
@@ -254,7 +272,9 @@ class CueNotifier extends Notifier<CueState> {
   }
 
   Future<List<HotCue>> loadCuesForTrack(String trackId) async {
-    if (state.storedCues.containsKey(trackId)) return state.storedCues[trackId]!;
+    if (state.storedCues.containsKey(trackId)) {
+      return state.storedCues[trackId]!;
+    }
     return _storage.loadCues(trackId);
   }
 
@@ -266,11 +286,11 @@ class CueNotifier extends Notifier<CueState> {
 
   void resetVdjWrite() {
     state = state.copyWith(
-      vdjWriteStatus: VdjWriteStatus.idle, vdjWriteError: null,
+      vdjWriteStatus: VdjWriteStatus.idle,
+      vdjWriteError: null,
     );
   }
 }
 
 // ── Provider ───────────────────────────────────────────────────────────────────
-final cueProvider =
-    NotifierProvider<CueNotifier, CueState>(CueNotifier.new);
+final cueProvider = NotifierProvider<CueNotifier, CueState>(CueNotifier.new);

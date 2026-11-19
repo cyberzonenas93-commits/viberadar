@@ -20,7 +20,7 @@ class _HeroCardState extends State<_HeroCard> {
     final t = widget.track;
     final score = (t.trendScore * 100).toInt();
     final compact = MediaQuery.sizeOf(context).width < 700;
-    final cardHeight = compact ? 210.0 : 240.0;
+    final cardHeight = compact ? null : 240.0;
     final artSize = compact ? 98.0 : 170.0;
     final contentPadding = compact ? 16.0 : 22.0;
     final gap = compact ? 14.0 : 22.0;
@@ -39,6 +39,7 @@ class _HeroCardState extends State<_HeroCard> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: cardHeight,
+          constraints: BoxConstraints(minHeight: compact ? 236.0 : 240.0),
           decoration: AppTheme.glass(
             radius: AppTheme.rXl,
             tint: AppTheme.amber,
@@ -264,7 +265,7 @@ class _RunnerCardState extends State<_RunnerCard> {
         ),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
-          height: 114,
+          constraints: const BoxConstraints(minHeight: 114),
           padding: const EdgeInsets.all(12),
           decoration: AppTheme.glass(
             radius: AppTheme.rLg,
@@ -508,40 +509,47 @@ class _TrackCardState extends State<_TrackCard> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Text(
-                          formatBpm(t.bpm),
-                          style: const TextStyle(
-                            color: AppTheme.textTertiary,
-                            fontSize: 10,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.edge.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(3),
-                          ),
-                          child: Text(
-                            t.keySignature,
-                            style: const TextStyle(
-                              color: AppTheme.textPrimary,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final showSources = constraints.maxWidth >= 150;
+                        return Wrap(
+                          spacing: 5,
+                          runSpacing: 5,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              formatBpm(t.bpm),
+                              style: const TextStyle(
+                                color: AppTheme.textTertiary,
+                                fontSize: 10,
+                              ),
                             ),
-                          ),
-                        ),
-                        const Spacer(),
-                        SourceBadges(
-                          sources: t.effectiveSources,
-                          compact: true,
-                        ),
-                      ],
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppTheme.edge.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                t.keySignature,
+                                style: const TextStyle(
+                                  color: AppTheme.textPrimary,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            if (showSources)
+                              SourceBadges(
+                                sources: t.effectiveSources,
+                                compact: true,
+                              ),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),

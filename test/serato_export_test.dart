@@ -37,8 +37,10 @@ void main() {
     test('vrsn value is "1.0/Serato ScratchLive Crate"', () {
       final b = svc.buildCrateBytes([]);
       final len = _readU32(b, 4);
-      expect(_decodeUtf16BE(b.sublist(8, 8 + len)),
-          equals('1.0/Serato ScratchLive Crate'));
+      expect(
+        _decodeUtf16BE(b.sublist(8, 8 + len)),
+        equals('1.0/Serato ScratchLive Crate'),
+      );
     });
 
     test('vrsn value is exactly 56 bytes (28 chars × 2)', () {
@@ -110,13 +112,17 @@ void main() {
     });
 
     test('parent provided → "<parent>%%<name>.crate"', () {
-      expect(svc.buildCrateFilename('House', 'LocalMusic'),
-          equals('LocalMusic%%House.crate'));
+      expect(
+        svc.buildCrateFilename('House', 'LocalMusic'),
+        equals('LocalMusic%%House.crate'),
+      );
     });
 
     test('spaces in names are preserved', () {
-      expect(svc.buildCrateFilename('Deep House', 'My Crates'),
-          equals('My Crates%%Deep House.crate'));
+      expect(
+        svc.buildCrateFilename('Deep House', 'My Crates'),
+        equals('My Crates%%Deep House.crate'),
+      );
     });
   });
 

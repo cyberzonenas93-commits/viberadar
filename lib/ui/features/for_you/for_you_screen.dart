@@ -177,7 +177,7 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                       style: theme.textTheme.headlineSmall?.copyWith(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
+                        letterSpacing: 0,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -251,7 +251,7 @@ class _ForYouScreenState extends ConsumerState<ForYouScreen> {
                       color: AppTheme.textPrimary,
                       fontWeight: FontWeight.w800,
                       fontSize: 16,
-                      letterSpacing: -0.3,
+                      letterSpacing: 0,
                     ),
                   ),
                 ],

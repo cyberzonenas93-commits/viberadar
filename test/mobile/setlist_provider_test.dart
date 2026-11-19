@@ -5,10 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
 import 'package:viberadar/models/session_state.dart';
 import 'package:viberadar/models/user_profile.dart';
+import 'package:viberadar/providers/paired_computer_provider.dart';
 import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/providers/app_state.dart';
 import 'package:viberadar/providers/repositories.dart';
 import 'package:viberadar/data/repositories/user_repository.dart';
+import 'package:viberadar/services/pairing_service.dart';
 
 // ---------------------------------------------------------------------------
 // Minimal fake UserRepository that captures saveCrate calls.
@@ -32,8 +34,7 @@ class _FakeUserRepository implements UserRepository {
   Stream<UserProfile> watchUser({
     required String userId,
     required String fallbackName,
-  }) =>
-      Stream.value(UserProfile.empty(id: userId, displayName: fallbackName));
+  }) => Stream.value(UserProfile.empty(id: userId, displayName: fallbackName));
 
   @override
   Future<void> toggleWatchlist({
@@ -71,18 +72,48 @@ class _FakeUserRepository implements UserRepository {
   }) async {}
 }
 
+class _FakePairingService extends PairingService {
+  _FakePairingService({this.throwOnPush = false}) : super.testOnly();
+
+  final bool throwOnPush;
+  final List<({String pairingId, Crate crate, String editorUid})>
+  pushedSetlists = [];
+
+  @override
+  Future<void> pushSetlist(
+    String pairingId,
+    Crate crate, {
+    required String editorUid,
+  }) async {
+    if (throwOnPush) throw Exception('pairing offline');
+    pushedSetlists.add((
+      pairingId: pairingId,
+      crate: crate,
+      editorUid: editorUid,
+    ));
+  }
+}
+
+class _PreseededPairedComputerController extends PairedComputerController {
+  _PreseededPairedComputerController(this._initial);
+  final PairedComputer? _initial;
+
+  @override
+  PairedComputer? build() => _initial;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 Crate _makeCrate(String id, DateTime updatedAt) => Crate(
-      id: id,
-      name: 'Crate $id',
-      context: 'Open format',
-      trackIds: const [],
-      createdAt: DateTime(2024, 1, 1),
-      updatedAt: updatedAt,
-    );
+  id: id,
+  name: 'Crate $id',
+  context: 'Open format',
+  tracks: const [],
+  createdAt: DateTime(2024, 1, 1),
+  updatedAt: updatedAt,
+);
 
 /// Pump the event loop until [condition] is true, or [maxIterations] reached.
 Future<void> _pumpUntil(
@@ -117,9 +148,7 @@ void main() {
       final ctrl = StreamController<UserProfile>();
 
       final container = ProviderContainer(
-        overrides: [
-          userProfileProvider.overrideWith((ref) => ctrl.stream),
-        ],
+        overrides: [userProfileProvider.overrideWith((ref) => ctrl.stream)],
       );
       addTearDown(container.dispose);
       addTearDown(ctrl.close);
@@ -129,9 +158,7 @@ void main() {
 
       // Emit the profile.
       ctrl.add(profile);
-      await _pumpUntil(
-        () => container.read(userProfileProvider).value != null,
-      );
+      await _pumpUntil(() => container.read(userProfileProvider).value != null);
 
       final setlists = container.read(setlistsProvider);
 
@@ -142,17 +169,12 @@ void main() {
     });
 
     test('returns empty list when userProfile has no crates', () async {
-      final profile = UserProfile.empty(
-        id: 'user-1',
-        displayName: 'Test DJ',
-      );
+      final profile = UserProfile.empty(id: 'user-1', displayName: 'Test DJ');
 
       final ctrl = StreamController<UserProfile>();
 
       final container = ProviderContainer(
-        overrides: [
-          userProfileProvider.overrideWith((ref) => ctrl.stream),
-        ],
+        overrides: [userProfileProvider.overrideWith((ref) => ctrl.stream)],
       );
       addTearDown(container.dispose);
       addTearDown(ctrl.close);
@@ -160,9 +182,7 @@ void main() {
       container.listen(userProfileProvider, (_, __) {});
 
       ctrl.add(profile);
-      await _pumpUntil(
-        () => container.read(userProfileProvider).value != null,
-      );
+      await _pumpUntil(() => container.read(userProfileProvider).value != null);
 
       final setlists = container.read(setlistsProvider);
       expect(setlists, isEmpty);
@@ -170,56 +190,165 @@ void main() {
   });
 
   group('SetlistActions.create', () {
-    test('calls saveCrate with correct name and userId when authenticated',
-        () async {
-      final fakeRepo = _FakeUserRepository();
+    test(
+      'calls saveCrate with correct name and userId when authenticated',
+      () async {
+        final fakeRepo = _FakeUserRepository();
 
-      const session = SessionState(
-        userId: 'user-42',
-        displayName: 'DJ Test',
-        email: 'dj@test.com',
-        providerLabel: 'Google',
-        isAuthenticated: true,
-        isDemo: false,
-      );
+        const session = SessionState(
+          userId: 'user-42',
+          displayName: 'DJ Test',
+          email: 'dj@test.com',
+          providerLabel: 'Google',
+          isAuthenticated: true,
+          isDemo: false,
+        );
 
-      final sessionCtrl = StreamController<SessionState>();
-      final profileCtrl = StreamController<UserProfile>();
+        final sessionCtrl = StreamController<SessionState>();
+        final profileCtrl = StreamController<UserProfile>();
 
-      final container = ProviderContainer(
-        overrides: [
-          sessionProvider.overrideWith((ref) => sessionCtrl.stream),
-          userRepositoryProvider.overrideWithValue(fakeRepo),
-          userProfileProvider.overrideWith((ref) => profileCtrl.stream),
-        ],
-      );
-      addTearDown(container.dispose);
-      addTearDown(sessionCtrl.close);
-      addTearDown(profileCtrl.close);
+        final container = ProviderContainer(
+          overrides: [
+            sessionProvider.overrideWith((ref) => sessionCtrl.stream),
+            userRepositoryProvider.overrideWithValue(fakeRepo),
+            userProfileProvider.overrideWith((ref) => profileCtrl.stream),
+          ],
+        );
+        addTearDown(container.dispose);
+        addTearDown(sessionCtrl.close);
+        addTearDown(profileCtrl.close);
 
-      // Start listening on both providers before emitting.
-      container.listen(sessionProvider, (_, __) {});
-      container.listen(userProfileProvider, (_, __) {});
+        // Start listening on both providers before emitting.
+        container.listen(sessionProvider, (_, __) {});
+        container.listen(userProfileProvider, (_, __) {});
 
-      sessionCtrl.add(session);
-      profileCtrl.add(
-        UserProfile.empty(id: 'user-42', displayName: 'DJ Test'),
-      );
+        sessionCtrl.add(session);
+        profileCtrl.add(
+          UserProfile.empty(id: 'user-42', displayName: 'DJ Test'),
+        );
 
-      await _pumpUntil(
-        () => container.read(sessionProvider).value != null,
-      );
+        await _pumpUntil(() => container.read(sessionProvider).value != null);
 
-      await container.read(setlistActionsProvider).create('Sunset');
+        await container.read(setlistActionsProvider).create('Sunset');
 
-      expect(fakeRepo.capturedUserId, 'user-42');
-      expect(fakeRepo.capturedCrate, isNotNull);
-      expect(fakeRepo.capturedCrate!.name, 'Sunset');
-      expect(fakeRepo.capturedCrate!.trackIds, isEmpty);
-      expect(fakeRepo.capturedCrate!.context, 'Open format');
-      // ID should be a non-empty UUID string
-      expect(fakeRepo.capturedCrate!.id, isNotEmpty);
-    });
+        expect(fakeRepo.capturedUserId, 'user-42');
+        expect(fakeRepo.capturedCrate, isNotNull);
+        expect(fakeRepo.capturedCrate!.name, 'Sunset');
+        expect(fakeRepo.capturedCrate!.trackIds, isEmpty);
+        expect(fakeRepo.capturedCrate!.context, 'Custom setlist');
+        // ID should be a non-empty UUID string
+        expect(fakeRepo.capturedCrate!.id, isNotEmpty);
+      },
+    );
+
+    test(
+      'also pushes a signed-in save to the paired computer channel',
+      () async {
+        final fakeRepo = _FakeUserRepository();
+        final fakePairing = _FakePairingService();
+
+        const session = SessionState(
+          userId: 'user-42',
+          displayName: 'DJ Test',
+          email: 'dj@test.com',
+          providerLabel: 'Google',
+          isAuthenticated: true,
+          isDemo: false,
+        );
+
+        final sessionCtrl = StreamController<SessionState>();
+        final profileCtrl = StreamController<UserProfile>();
+
+        final container = ProviderContainer(
+          overrides: [
+            sessionProvider.overrideWith((ref) => sessionCtrl.stream),
+            userRepositoryProvider.overrideWithValue(fakeRepo),
+            userProfileProvider.overrideWith((ref) => profileCtrl.stream),
+            pairingServiceProvider.overrideWithValue(fakePairing),
+            pairedComputerProvider.overrideWith(
+              () => _PreseededPairedComputerController(
+                const PairedComputer('pairing-1', 'Studio Mac'),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        addTearDown(sessionCtrl.close);
+        addTearDown(profileCtrl.close);
+
+        container.listen(sessionProvider, (_, __) {});
+        container.listen(userProfileProvider, (_, __) {});
+
+        sessionCtrl.add(session);
+        profileCtrl.add(
+          UserProfile.empty(id: 'user-42', displayName: 'DJ Test'),
+        );
+
+        await _pumpUntil(() => container.read(sessionProvider).value != null);
+
+        await container.read(setlistActionsProvider).create('Sunset');
+
+        expect(fakeRepo.capturedCrate, isNotNull);
+        expect(fakePairing.pushedSetlists, hasLength(1));
+        final pushed = fakePairing.pushedSetlists.single;
+        expect(pushed.pairingId, 'pairing-1');
+        expect(pushed.editorUid, 'user-42');
+        expect(pushed.crate.id, fakeRepo.capturedCrate!.id);
+        expect(pushed.crate.name, 'Sunset');
+      },
+    );
+
+    test(
+      'keeps account persistence successful when paired computer push fails',
+      () async {
+        final fakeRepo = _FakeUserRepository();
+        final fakePairing = _FakePairingService(throwOnPush: true);
+
+        const session = SessionState(
+          userId: 'user-42',
+          displayName: 'DJ Test',
+          email: 'dj@test.com',
+          providerLabel: 'Google',
+          isAuthenticated: true,
+          isDemo: false,
+        );
+
+        final sessionCtrl = StreamController<SessionState>();
+        final profileCtrl = StreamController<UserProfile>();
+
+        final container = ProviderContainer(
+          overrides: [
+            sessionProvider.overrideWith((ref) => sessionCtrl.stream),
+            userRepositoryProvider.overrideWithValue(fakeRepo),
+            userProfileProvider.overrideWith((ref) => profileCtrl.stream),
+            pairingServiceProvider.overrideWithValue(fakePairing),
+            pairedComputerProvider.overrideWith(
+              () => _PreseededPairedComputerController(
+                const PairedComputer('pairing-1', 'Studio Mac'),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        addTearDown(sessionCtrl.close);
+        addTearDown(profileCtrl.close);
+
+        container.listen(sessionProvider, (_, __) {});
+        container.listen(userProfileProvider, (_, __) {});
+
+        sessionCtrl.add(session);
+        profileCtrl.add(
+          UserProfile.empty(id: 'user-42', displayName: 'DJ Test'),
+        );
+
+        await _pumpUntil(() => container.read(sessionProvider).value != null);
+
+        await container.read(setlistActionsProvider).create('Sunset');
+
+        expect(fakeRepo.capturedCrate, isNotNull);
+        expect(fakeRepo.capturedCrate!.name, 'Sunset');
+      },
+    );
 
     test('does nothing when session is not authenticated', () async {
       final fakeRepo = _FakeUserRepository();
@@ -251,13 +380,9 @@ void main() {
       container.listen(userProfileProvider, (_, __) {});
 
       sessionCtrl.add(session);
-      profileCtrl.add(
-        UserProfile.empty(id: 'demo-dj', displayName: 'Demo DJ'),
-      );
+      profileCtrl.add(UserProfile.empty(id: 'demo-dj', displayName: 'Demo DJ'));
 
-      await _pumpUntil(
-        () => container.read(sessionProvider).value != null,
-      );
+      await _pumpUntil(() => container.read(sessionProvider).value != null);
 
       await container.read(setlistActionsProvider).create('Blocked');
 

@@ -1,13 +1,11 @@
-import 'dart:convert';
+import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:math';
 
-import 'package:crypto/crypto.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../models/session_state.dart';
 
@@ -72,14 +70,27 @@ class FirebaseSessionRepository implements SessionRepository {
   }) : _auth = auth,
        _googleSignIn = googleSignIn;
 
+  static const _localGuestModeKey = 'local_guest_mode_active';
+
   final FirebaseAuth _auth;
   final GoogleSignIn _googleSignIn;
+  // Repository lives for the app container lifetime.
+  // ignore: close_sinks
+  final StreamController<SessionState> _manualSessionEvents =
+      StreamController<SessionState>.broadcast();
 
   @override
   Stream<SessionState> sessionChanges() async* {
     // Check "remember me" preference
     final prefs = await SharedPreferences.getInstance();
     final rememberMe = prefs.getBool('remember_me') ?? true;
+    final localGuestMode = prefs.getBool(_localGuestModeKey) ?? false;
+
+    if (localGuestMode) {
+      yield const SessionState.demo();
+      yield* _sessionEvents();
+      return;
+    }
 
     // ── Warm start: user already in memory ──
     final cached = _auth.currentUser;
@@ -88,11 +99,11 @@ class FirebaseSessionRepository implements SessionRepository {
         // User opted out of "keep me signed in" — sign out
         await _auth.signOut();
         yield _toState(null);
-        yield* _auth.authStateChanges().map(_toState);
+        yield* _sessionEvents();
         return;
       }
       yield _toState(cached);
-      yield* _auth.authStateChanges().map(_toState);
+      yield* _sessionEvents();
       return;
     }
 
@@ -100,14 +111,15 @@ class FirebaseSessionRepository implements SessionRepository {
     if (!rememberMe) {
       // Not remembering — go straight to login
       yield _toState(null);
-      yield* _auth.authStateChanges().map(_toState);
+      yield* _sessionEvents();
       return;
     }
 
     // Wait up to 3 seconds for a non-null user from the auth stream.
     User? firstUser;
     try {
-      firstUser = await _auth.authStateChanges()
+      firstUser = await _auth
+          .authStateChanges()
           .where((u) => u != null)
           .first
           .timeout(const Duration(seconds: 3));
@@ -121,7 +133,49 @@ class FirebaseSessionRepository implements SessionRepository {
       yield _toState(null);
     }
 
-    yield* _auth.authStateChanges().map(_toState);
+    yield* _sessionEvents();
+  }
+
+  Stream<SessionState> _sessionEvents() {
+    // Closed by the consumer when the returned stream subscription is canceled.
+    // ignore: close_sinks
+    final controller = StreamController<SessionState>();
+    StreamSubscription<SessionState>? authSub;
+    StreamSubscription<SessionState>? manualSub;
+
+    controller.onListen = () {
+      authSub = _auth
+          .authStateChanges()
+          .asyncMap(_stateForUser)
+          .listen(controller.add, onError: controller.addError);
+      manualSub = _manualSessionEvents.stream.listen(
+        controller.add,
+        onError: controller.addError,
+      );
+    };
+    controller.onCancel = () async {
+      await authSub?.cancel();
+      await manualSub?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  Future<SessionState> _stateForUser(User? user) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_localGuestModeKey) ?? false) {
+      return const SessionState.demo();
+    }
+    return _toState(user);
+  }
+
+  Future<void> _setLocalGuestMode(bool active) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (active) {
+      await prefs.setBool(_localGuestModeKey, true);
+    } else {
+      await prefs.remove(_localGuestModeKey);
+    }
   }
 
   SessionState _toState(User? user) {
@@ -136,15 +190,16 @@ class FirebaseSessionRepository implements SessionRepository {
       );
     }
     final isAnon = user.isAnonymous;
+    if (isAnon) {
+      return const SessionState.demo();
+    }
     return SessionState(
       userId: user.uid,
-      displayName: isAnon ? 'Guest DJ' : (user.displayName ?? 'VibeRadar DJ'),
-      email: isAnon ? '' : (user.email ?? 'unknown@viberadar.app'),
-      providerLabel: isAnon
-          ? 'Guest'
-          : (user.providerData.isEmpty
-                ? 'Email'
-                : user.providerData.first.providerId),
+      displayName: user.displayName ?? 'VibeRadar DJ',
+      email: user.email ?? 'unknown@viberadar.app',
+      providerLabel: user.providerData.isEmpty
+          ? 'Email'
+          : user.providerData.first.providerId,
       isAuthenticated: true,
       isDemo: false,
     );
@@ -156,6 +211,7 @@ class FirebaseSessionRepository implements SessionRepository {
     required String password,
     required String displayName,
   }) async {
+    await _setLocalGuestMode(false);
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
       password: password,
@@ -163,27 +219,41 @@ class FirebaseSessionRepository implements SessionRepository {
     try {
       await credential.user?.updateDisplayName(displayName);
     } catch (e, st) {
-      developer.log('Failed to set display name after registration', name: 'SessionRepository', error: e, stackTrace: st);
+      developer.log(
+        'Failed to set display name after registration',
+        name: 'SessionRepository',
+        error: e,
+        stackTrace: st,
+      );
     }
+    _syncPostSignInProfile(credential.user, displayName: displayName);
   }
 
   @override
   Future<void> signInWithEmail({
     required String email,
     required String password,
-  }) {
-    return _auth.signInWithEmailAndPassword(email: email, password: password);
+  }) async {
+    await _setLocalGuestMode(false);
+    final credential = await _auth.signInWithEmailAndPassword(
+      email: email,
+      password: password,
+    );
+    _syncPostSignInProfile(credential.user);
   }
 
   @override
   Future<void> signInAnonymously() async {
-    debugPrint('VIBERADAR: Signing in anonymously...');
-    await _auth.signInAnonymously();
-    debugPrint('VIBERADAR: Anonymous sign-in complete.');
+    debugPrint('VIBERADAR: Starting local guest mode with mock data.');
+    await _setLocalGuestMode(true);
+    await _auth.signOut();
+    _manualSessionEvents.add(const SessionState.demo());
+    debugPrint('VIBERADAR: Local guest mode active.');
   }
 
   @override
   Future<void> signInWithGoogle() async {
+    await _setLocalGuestMode(false);
     debugPrint('VIBERADAR: Starting Google Sign-In...');
     try {
       final googleUser = await _googleSignIn.authenticate();
@@ -199,7 +269,8 @@ class FirebaseSessionRepository implements SessionRepository {
 
       debugPrint('VIBERADAR: Got ID token, signing into Firebase...');
       final credential = GoogleAuthProvider.credential(idToken: idToken);
-      await _auth.signInWithCredential(credential);
+      final userCredential = await _auth.signInWithCredential(credential);
+      _syncPostSignInProfile(userCredential.user);
       debugPrint('VIBERADAR: Firebase sign-in complete!');
     } catch (e, stack) {
       debugPrint('VIBERADAR: Google Sign-In error: $e');
@@ -210,6 +281,7 @@ class FirebaseSessionRepository implements SessionRepository {
 
   @override
   Future<void> signInWithApple() async {
+    await _setLocalGuestMode(false);
     debugPrint('VIBERADAR: Starting Sign in with Apple...');
     try {
       if (kIsWeb) {
@@ -218,7 +290,8 @@ class FirebaseSessionRepository implements SessionRepository {
         final provider = OAuthProvider('apple.com')
           ..addScope('email')
           ..addScope('name');
-        await _auth.signInWithPopup(provider);
+        final credential = await _auth.signInWithPopup(provider);
+        _syncPostSignInProfile(credential.user);
       } else if (defaultTargetPlatform == TargetPlatform.iOS ||
           defaultTargetPlatform == TargetPlatform.macOS) {
         // Apple platforms: native ASAuthorization sheet (best UX; identified by
@@ -231,7 +304,8 @@ class FirebaseSessionRepository implements SessionRepository {
         final provider = OAuthProvider('apple.com')
           ..addScope('email')
           ..addScope('name');
-        await _auth.signInWithProvider(provider);
+        final credential = await _auth.signInWithProvider(provider);
+        _syncPostSignInProfile(credential.user);
       }
       debugPrint('VIBERADAR: Apple sign-in complete!');
     } catch (e, stack) {
@@ -244,51 +318,77 @@ class FirebaseSessionRepository implements SessionRepository {
   /// Native Sign in with Apple (iOS/macOS): the on-device ASAuthorization sheet,
   /// exchanging Apple's ID token for a Firebase credential.
   Future<void> _signInWithAppleNative() async {
-    // Apple requires a nonce: the SHA-256 hash goes to Apple, the raw value
-    // goes to Firebase, which re-hashes and compares to bind the token.
-    final rawNonce = _generateNonce();
-    final hashedNonce = _sha256OfString(rawNonce);
-
-    final appleCredential = await SignInWithApple.getAppleIDCredential(
-      scopes: [
-        AppleIDAuthorizationScopes.email,
-        AppleIDAuthorizationScopes.fullName,
-      ],
-      nonce: hashedNonce,
-    );
-
-    final idToken = appleCredential.identityToken;
-    if (idToken == null || idToken.isEmpty) {
-      throw StateError(
-        'Apple Sign-In did not return an identity token. '
-        'Check the Sign in with Apple capability and Firebase Apple provider.',
-      );
-    }
-
-    final oauthCredential = OAuthProvider('apple.com').credential(
-      idToken: idToken,
-      rawNonce: rawNonce,
-    );
-    final userCredential = await _auth.signInWithCredential(oauthCredential);
+    final provider = AppleAuthProvider()
+      ..addScope('email')
+      ..addScope('name');
+    final userCredential = await _auth.signInWithProvider(provider);
 
     // Apple returns the name only on the FIRST sign-in; persist it so the
     // Firebase profile isn't left blank on subsequent logins.
     final user = userCredential.user;
+    final name = _appleDisplayName(userCredential.additionalUserInfo?.profile);
     if (user != null &&
+        name != null &&
         (user.displayName == null || user.displayName!.isEmpty)) {
-      final name = [appleCredential.givenName, appleCredential.familyName]
-          .whereType<String>()
-          .where((p) => p.isNotEmpty)
-          .join(' ')
-          .trim();
-      if (name.isNotEmpty) {
+      // The user is already signed in. A display-name update failure (network
+      // blip, internal error) must NOT surface as a sign-in error.
+      try {
         await user.updateDisplayName(name);
+      } catch (e) {
+        developer.log(
+          'Apple display-name update failed (non-fatal)',
+          name: 'SessionRepository',
+          error: e,
+        );
       }
+      _syncPostSignInProfile(user, displayName: name);
+    } else {
+      _syncPostSignInProfile(user);
+    }
+  }
+
+  void _syncPostSignInProfile(User? user, {String? displayName}) {
+    if (user == null || user.isAnonymous) return;
+    unawaited(_ensurePostSignInProfile(user, displayName: displayName));
+  }
+
+  Future<void> _ensurePostSignInProfile(
+    User user, {
+    String? displayName,
+  }) async {
+    final requestedName = displayName?.trim();
+    final authName = user.displayName?.trim();
+    final resolvedName = requestedName?.isNotEmpty == true
+        ? requestedName!
+        : authName?.isNotEmpty == true
+        ? authName!
+        : 'VibeRadar DJ';
+    try {
+      final db = FirebaseFirestore.instance;
+      await Future.wait([
+        db.collection('users').doc(user.uid).set({
+          'display_name': resolvedName,
+          'preferences': {'region': 'Global'},
+        }, SetOptions(merge: true)),
+        db.collection('social_profiles').doc(user.uid).set({
+          'userId': user.uid,
+          'displayName': resolvedName,
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true)),
+      ]);
+    } catch (e, st) {
+      developer.log(
+        'Failed to initialize signed-in user profile',
+        name: 'SessionRepository',
+        error: e,
+        stackTrace: st,
+      );
     }
   }
 
   @override
   Future<void> signOut() async {
+    await _setLocalGuestMode(false);
     try {
       await _googleSignIn.signOut();
     } catch (_) {
@@ -296,20 +396,22 @@ class FirebaseSessionRepository implements SessionRepository {
       // below will still run, so the user is effectively signed out regardless.
     }
     await _auth.signOut();
+    _manualSessionEvents.add(_toState(null));
   }
 }
 
-/// Generates a cryptographically secure random nonce for Sign in with Apple.
-String _generateNonce([int length = 32]) {
-  const charset =
-      '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-._';
-  final random = Random.secure();
-  return List.generate(
-    length,
-    (_) => charset[random.nextInt(charset.length)],
-  ).join();
+String? _appleDisplayName(Map<String, dynamic>? profile) {
+  if (profile == null) return null;
+  final directName = profile['name'];
+  if (directName is String && directName.trim().isNotEmpty) {
+    return directName.trim();
+  }
+  final parts = <String>[
+    if (profile['given_name'] case final String given when given.isNotEmpty)
+      given,
+    if (profile['family_name'] case final String family when family.isNotEmpty)
+      family,
+  ];
+  final joined = parts.join(' ').trim();
+  return joined.isEmpty ? null : joined;
 }
-
-/// SHA-256 of [input], hex-encoded — used to hash the Apple nonce.
-String _sha256OfString(String input) =>
-    sha256.convert(utf8.encode(input)).toString();

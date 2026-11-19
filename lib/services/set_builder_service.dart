@@ -19,22 +19,25 @@ class SetBuilderService {
       if (bpm < minBpm || bpm > maxBpm) return false;
       if (genre != 'All' && track.genre != genre) return false;
       if (vibe != 'All' && track.vibe != vibe) return false;
-      if (yearFrom != null && track.effectiveReleaseYear < yearFrom) return false;
+      if (yearFrom != null && track.effectiveReleaseYear < yearFrom) {
+        return false;
+      }
       if (yearTo != null && track.effectiveReleaseYear > yearTo) return false;
       return true;
-    }).toList()
-      ..sort((a, b) => a.energyLevel.compareTo(b.energyLevel));
+    }).toList()..sort((a, b) => a.energyLevel.compareTo(b.energyLevel));
 
     if (filtered.isEmpty) {
       return const [];
     }
 
     // User-specified count takes priority; otherwise estimate from duration
-    final targetCount = trackCount ?? (durationMinutes / 4).clamp(6, 200).round();
+    final targetCount =
+        trackCount ?? (durationMinutes / 4).clamp(6, 200).round();
     final initial = filtered.first;
     final selected = <Track>[initial];
-    final remaining =
-        filtered.whereNot((track) => track.id == initial.id).toList();
+    final remaining = filtered
+        .whereNot((track) => track.id == initial.id)
+        .toList();
 
     while (selected.length < targetCount && remaining.isNotEmpty) {
       final current = selected.last;
@@ -118,8 +121,9 @@ class SetBuilderService {
     final trimmed = key.trim();
 
     // Already Camelot notation?
-    final camelotMatch =
-        RegExp(r'^(\d{1,2})([AB])$').firstMatch(trimmed.toUpperCase());
+    final camelotMatch = RegExp(
+      r'^(\d{1,2})([AB])$',
+    ).firstMatch(trimmed.toUpperCase());
     if (camelotMatch != null) {
       return (int.parse(camelotMatch.group(1)!), camelotMatch.group(2)!);
     }

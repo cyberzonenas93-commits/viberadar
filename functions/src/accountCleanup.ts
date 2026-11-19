@@ -2,6 +2,8 @@ import { onDocumentDeleted } from "firebase-functions/v2/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
+import { appClientCallableOptions } from "./lib/appCheck";
+import { ownedStoragePathFromUrl } from "./lib/storagePaths";
 
 type Db = admin.firestore.Firestore;
 
@@ -31,7 +33,7 @@ export const onUserDeleted = onDocumentDeleted(
  * keeps the destructive work on the trusted backend.
  */
 export const deleteMyAccount = onCall(
-  { region: "us-central1", timeoutSeconds: 120 },
+  { region: "us-central1", timeoutSeconds: 120, ...appClientCallableOptions },
   async (request): Promise<{ deleted: true }> => {
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Authentication required");
@@ -65,6 +67,8 @@ async function purgeUserData(db: Db, userId: string): Promise<void> {
     ),
     // doc-per-user collections
     deleteSocialProfile(db, userId),
+    db.collection("entitlements").doc(userId).delete(),
+    db.recursiveDelete(db.collection("usage").doc(userId)),
     db.collection("user_likes").doc(userId).delete(),
     // owned content + relationships
     deleteUploads(db, userId),
@@ -72,6 +76,7 @@ async function purgeUserData(db: Db, userId: string): Promise<void> {
     deleteBlocks(db, userId),
     deleteReports(db, userId),
     deletePairings(db, userId),
+    deleteAppStoreTransactions(db, userId),
   ];
 
   const results = await Promise.allSettled(steps);
@@ -93,11 +98,20 @@ async function deleteSocialProfile(db: Db, userId: string): Promise<void> {
   const ref = db.collection("social_profiles").doc(userId);
   const snap = await ref.get();
   if (snap.exists) {
-    const path = storagePathFromUrl(snap.get("photoUrl") as string | undefined);
+    const path = ownedStoragePathFromUrl({
+      url: snap.get("photoUrl") as string | undefined,
+      ownerUid: userId,
+      allowedRoots: ["profile_photos"],
+    });
     if (path) {
-      await admin.storage().bucket().file(path).delete().catch(() => {
-        /* blob already gone — ignore */
-      });
+      await admin
+        .storage()
+        .bucket()
+        .file(path)
+        .delete()
+        .catch(() => {
+          /* blob already gone — ignore */
+        });
     }
   }
   await ref.delete();
@@ -113,14 +127,25 @@ async function deleteUploads(db: Db, userId: string): Promise<void> {
 
   const bucket = admin.storage().bucket();
   const storageDeletes: Array<Promise<unknown>> = [];
+  const fields: Array<{ field: string; roots: readonly string[] }> = [
+    { field: "audioUrl", roots: ["uploads"] },
+    { field: "artworkUrl", roots: ["artwork"] },
+  ];
   for (const doc of snap.docs) {
-    for (const field of ["audioUrl", "artworkUrl"]) {
-      const path = storagePathFromUrl(doc.get(field) as string | undefined);
+    for (const { field, roots } of fields) {
+      const path = ownedStoragePathFromUrl({
+        url: doc.get(field) as string | undefined,
+        ownerUid: userId,
+        allowedRoots: roots,
+      });
       if (path) {
         storageDeletes.push(
-          bucket.file(path).delete().catch(() => {
-            /* blob already gone — ignore */
-          }),
+          bucket
+            .file(path)
+            .delete()
+            .catch(() => {
+              /* blob already gone — ignore */
+            }),
         );
       }
     }
@@ -173,15 +198,20 @@ async function deletePairings(db: Db, userId: string): Promise<void> {
   }
 }
 
-/** Extracts the Storage object path from a Firebase download URL. */
-function storagePathFromUrl(url?: string): string | null {
-  if (!url) return null;
-  const m = url.match(/\/o\/([^?]+)/);
-  if (!m) return null;
-  try {
-    return decodeURIComponent(m[1]);
-  } catch {
-    return null;
+/**
+ * Deletes App Store purchase ownership docs for the removed account.
+ *
+ * The transaction history itself is provider-owned, so removing this local
+ * binding allows a future full account to restore the purchase with the
+ * expected appAccountToken instead of being locked to a deleted Firebase UID.
+ */
+async function deleteAppStoreTransactions(db: Db, userId: string): Promise<void> {
+  const snap = await db
+    .collection("app_store_transactions")
+    .where("uid", "==", userId)
+    .get();
+  for (const doc of snap.docs) {
+    await db.recursiveDelete(doc.ref);
   }
 }
 

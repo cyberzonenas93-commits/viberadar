@@ -481,11 +481,19 @@ class ExportService {
     List<dynamic> tracks,
   ) async {
     final buf = StringBuffer();
-    buf.writeln('title,artist,bpm,key,spotify_url,apple_url,status');
+    buf.writeln(
+      'title,artist,bpm,key,phase,confidence,reasons,spotify_url,apple_url,status',
+    );
     for (final t in tracks) {
+      final reasons = (t.reasons as List<String>? ?? const <String>[]).join(
+        ' | ',
+      );
       buf.writeln(
         '"${_csv(t.title as String)}","${_csv(t.artist as String)}",'
         '"${t.bpm}","${t.key}",'
+        '"${_csv(t.phaseLabel as String? ?? '')}",'
+        '"${((t.confidence as double?) ?? 0).toStringAsFixed(2)}",'
+        '"${_csv(reasons)}",'
         '"${_csv(t.spotifyUrl as String? ?? '')}","${_csv(t.appleUrl as String? ?? '')}",'
         '"${(t.resolved as bool) ? 'found' : 'missing'}"',
       );
@@ -509,6 +517,16 @@ class ExportService {
       buf.writeln(
         '${i + 1}. ${t.artist} - ${t.title} (${t.bpm} BPM, ${t.key}) [$status]',
       );
+      if (t.phaseLabel != null) {
+        final confidence = ((t.confidence as double?) ?? 0) * 100;
+        buf.writeln(
+          '   Phase: ${t.phaseLabel} · Confidence: ${confidence.toStringAsFixed(0)}%',
+        );
+      }
+      final reasons = t.reasons as List<String>? ?? const <String>[];
+      for (final reason in reasons) {
+        buf.writeln('   Why: $reason');
+      }
       if (t.spotifyUrl != null) buf.writeln('   Spotify: ${t.spotifyUrl}');
       if (t.appleUrl != null) buf.writeln('   Apple Music: ${t.appleUrl}');
       if (!(t.resolved as bool)) {

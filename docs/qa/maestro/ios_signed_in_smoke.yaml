@@ -1,0 +1,48 @@
+appId: com.viberadar.viberadar
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible: "Spot the wave early\nVibeRadar scans the world's charts so you play tomorrow's hits tonight."
+    timeout: 30000
+- tapOn: "Skip"
+- extendedWaitUntil:
+    visible: "Track Global Trends\nMonitor momentum across Spotify, YouTube, Apple Music, and more. See which tracks are breaking out before they peak."
+    timeout: 15000
+- tapOn: "Skip"
+- extendedWaitUntil:
+    visible: "Continue with Google"
+    timeout: 20000
+- assertVisible: "Sign in with Apple"
+- assertVisible: "Sign in with Email"
+- takeScreenshot: ios-auth-options
+- tapOn: "Sign in with Email"
+- extendedWaitUntil:
+    visible: "Email address"
+    timeout: 10000
+- tapOn: "Email address"
+- inputText: ${MAESTRO_TEST_EMAIL}
+- tapOn: "Password"
+- inputText: ${MAESTRO_TEST_PASSWORD}
+- tapOn: "Done"
+- tapOn:
+    text: "Sign In"
+    index: 1
+- extendedWaitUntil:
+    visible: "Choose Your Artists"
+    timeout: 30000
+- takeScreenshot: ios-post-auth-artist-picker
+- tapOn: "Skip"
+- extendedWaitUntil:
+    visible: "Your Dashboard"
+    timeout: 30000
+- assertVisible: "Got it"
+- takeScreenshot: ios-signed-in-dashboard-tutorial
+- tapOn: "Got it"
+- extendedWaitUntil:
+    visible: "Welcome to VibeRadar"
+    timeout: 15000
+- assertVisible: "VibeRadar"
+- assertVisible: "Upgrade"
+- takeScreenshot: ios-signed-in-shell

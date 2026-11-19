@@ -85,34 +85,53 @@ Track _track({
 void main() {
   group('regionalRelevance — output range', () {
     test('always returns a value in [0.0, 1.0]', () {
-      final t = _track(trendScore: 1.0, genre: 'Afrobeats',
-          regionScores: {'GH': 1.0});
+      final t = _track(
+        trendScore: 1.0,
+        genre: 'Afrobeats',
+        regionScores: {'GH': 1.0},
+      );
       expect(regionalRelevance(t, 'GH'), inInclusiveRange(0.0, 1.0));
     });
 
-    test('zero trendScore and no region score gives small but non-negative result', () {
-      final t = _track(trendScore: 0.0, regionScores: {});
-      final r = regionalRelevance(t, 'US');
-      expect(r, greaterThanOrEqualTo(0.0));
-    });
+    test(
+      'zero trendScore and no region score gives small but non-negative result',
+      () {
+        final t = _track(trendScore: 0.0, regionScores: {});
+        final r = regionalRelevance(t, 'US');
+        expect(r, greaterThanOrEqualTo(0.0));
+      },
+    );
 
     test('result is clamped to 1.0 even when components sum > 1', () {
       // rawScore=1.0, genreBoost=0.4 (Afrobeats/GH), trendScore*0.3=0.3 → sum=1.7
-      final t = _track(trendScore: 1.0, genre: 'Afrobeats',
-          regionScores: {'GH': 1.0});
+      final t = _track(
+        trendScore: 1.0,
+        genre: 'Afrobeats',
+        regionScores: {'GH': 1.0},
+      );
       expect(regionalRelevance(t, 'GH'), closeTo(1.0, 1e-9));
     });
   });
 
   group('regionalRelevance — genre boost (GH / NG)', () {
     test('Afrobeats track gets genre boost for GH region', () {
-      final afro = _track(id: 'a', trendScore: 0.5, genre: 'Afrobeats',
-          regionScores: {'GH': 0.0});
-      final pop = _track(id: 'p', trendScore: 0.5, genre: 'Pop',
-          regionScores: {'GH': 0.0});
+      final afro = _track(
+        id: 'a',
+        trendScore: 0.5,
+        genre: 'Afrobeats',
+        regionScores: {'GH': 0.0},
+      );
+      final pop = _track(
+        id: 'p',
+        trendScore: 0.5,
+        genre: 'Pop',
+        regionScores: {'GH': 0.0},
+      );
       // Afrobeats should outscore Pop for GH
-      expect(regionalRelevance(afro, 'GH'),
-          greaterThan(regionalRelevance(pop, 'GH')));
+      expect(
+        regionalRelevance(afro, 'GH'),
+        greaterThan(regionalRelevance(pop, 'GH')),
+      );
     });
 
     test('Afrobeats boost applies equally to GH and NG', () {
@@ -121,60 +140,108 @@ void main() {
     });
 
     test('Dancehall gets a smaller boost than Afrobeats for GH', () {
-      final afro = _track(id: 'af', trendScore: 0.0, genre: 'Afrobeats',
-          regionScores: {});
-      final dancehall = _track(id: 'dh', trendScore: 0.0, genre: 'Dancehall',
-          regionScores: {});
-      expect(regionalRelevance(afro, 'GH'),
-          greaterThan(regionalRelevance(dancehall, 'GH')));
+      final afro = _track(
+        id: 'af',
+        trendScore: 0.0,
+        genre: 'Afrobeats',
+        regionScores: {},
+      );
+      final dancehall = _track(
+        id: 'dh',
+        trendScore: 0.0,
+        genre: 'Dancehall',
+        regionScores: {},
+      );
+      expect(
+        regionalRelevance(afro, 'GH'),
+        greaterThan(regionalRelevance(dancehall, 'GH')),
+      );
     });
   });
 
   group('regionalRelevance — genre boost (ZA)', () {
     test('Amapiano gets the highest ZA boost', () {
-      final amapiano = _track(id: 'am', trendScore: 0.0, genre: 'Amapiano',
-          regionScores: {});
-      final house = _track(id: 'ho', trendScore: 0.0, genre: 'House',
-          regionScores: {});
-      expect(regionalRelevance(amapiano, 'ZA'),
-          greaterThan(regionalRelevance(house, 'ZA')));
+      final amapiano = _track(
+        id: 'am',
+        trendScore: 0.0,
+        genre: 'Amapiano',
+        regionScores: {},
+      );
+      final house = _track(
+        id: 'ho',
+        trendScore: 0.0,
+        genre: 'House',
+        regionScores: {},
+      );
+      expect(
+        regionalRelevance(amapiano, 'ZA'),
+        greaterThan(regionalRelevance(house, 'ZA')),
+      );
     });
   });
 
   group('regionalRelevance — region score contribution', () {
     test('higher raw region score → higher relevance (genre constant)', () {
-      final low = _track(id: 'lo', trendScore: 0.0, genre: 'Pop',
-          regionScores: {'US': 0.2});
-      final high = _track(id: 'hi', trendScore: 0.0, genre: 'Pop',
-          regionScores: {'US': 0.9});
-      expect(regionalRelevance(high, 'US'),
-          greaterThan(regionalRelevance(low, 'US')));
+      final low = _track(
+        id: 'lo',
+        trendScore: 0.0,
+        genre: 'Pop',
+        regionScores: {'US': 0.2},
+      );
+      final high = _track(
+        id: 'hi',
+        trendScore: 0.0,
+        genre: 'Pop',
+        regionScores: {'US': 0.9},
+      );
+      expect(
+        regionalRelevance(high, 'US'),
+        greaterThan(regionalRelevance(low, 'US')),
+      );
     });
   });
 
   group('regionalRelevance — trendScore contribution (0.3 weight)', () {
     test('higher trendScore increases relevance even with no region score', () {
-      final weak = _track(id: 'w', trendScore: 0.1, genre: 'Pop',
-          regionScores: {});
-      final strong = _track(id: 's', trendScore: 0.9, genre: 'Pop',
-          regionScores: {});
-      expect(regionalRelevance(strong, 'US'),
-          greaterThan(regionalRelevance(weak, 'US')));
+      final weak = _track(
+        id: 'w',
+        trendScore: 0.1,
+        genre: 'Pop',
+        regionScores: {},
+      );
+      final strong = _track(
+        id: 's',
+        trendScore: 0.9,
+        genre: 'Pop',
+        regionScores: {},
+      );
+      expect(
+        regionalRelevance(strong, 'US'),
+        greaterThan(regionalRelevance(weak, 'US')),
+      );
     });
 
-    test('trendScore contributes exactly 0.3*trendScore when no boost/region', () {
-      final t = _track(trendScore: 0.5, genre: 'Pop', regionScores: {});
-      // No genre boost for Pop/US; no region score → result = 0.3 * 0.5 = 0.15
-      expect(regionalRelevance(t, 'US'), closeTo(0.15, 1e-9));
-    });
+    test(
+      'trendScore contributes exactly 0.3*trendScore when no boost/region',
+      () {
+        final t = _track(trendScore: 0.5, genre: 'Pop', regionScores: {});
+        // No genre boost for Pop/US; no region score → result = 0.3 * 0.5 = 0.15
+        expect(regionalRelevance(t, 'US'), closeTo(0.15, 1e-9));
+      },
+    );
   });
 
   group('regionalRelevance — case insensitivity of region key', () {
     test('region "gh" and "GH" yield the same result', () {
-      final t = _track(trendScore: 0.5, genre: 'Afrobeats',
-          regionScores: {'GH': 0.7});
-      expect(regionalRelevance(t, 'gh'),
-          closeTo(regionalRelevance(t, 'GH'), 1e-9));
+      final t = _track(
+        trendScore: 0.5,
+        genre: 'Afrobeats',
+        regionScores: {'GH': 0.7},
+      );
+      expect(
+        regionalRelevance(t, 'gh'),
+        closeTo(regionalRelevance(t, 'GH'), 1e-9),
+      );
     });
   });
 

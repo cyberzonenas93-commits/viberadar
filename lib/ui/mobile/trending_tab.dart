@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/utils/formatters.dart';
-import '../../models/crate.dart';
 import '../../models/track.dart';
 import '../../providers/app_state.dart';
-import '../../providers/setlist_provider.dart';
+import '../widgets/add_to_setlist_sheet.dart';
+import '../widgets/platform_play_actions.dart';
 import '../widgets/source_badges.dart';
+import '../widgets/track_action_menu.dart';
 
 class TrendingTab extends ConsumerWidget {
   const TrendingTab({super.key});
@@ -53,6 +54,7 @@ class _TrendingRow extends ConsumerWidget {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: _Artwork(url: track.artworkUrl),
+      onTap: () => showTrackActionMenu(context, ref, track),
       title: Text(
         track.title,
         style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
@@ -81,124 +83,21 @@ class _TrendingRow extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: 6),
+          PlatformPlayActions(
+            links: track.platformLinks,
+            compact: true,
+            maxLinks: 3,
+          ),
         ],
       ),
       isThreeLine: true,
       trailing: IconButton(
         icon: const Icon(Icons.add_circle_outline),
         tooltip: 'Add to setlist',
-        onPressed: () => _showAddSheet(context, ref, track),
+        onPressed: () => showAddToSetlistSheet(context, ref, track),
       ),
     );
-  }
-
-  Future<void> _showAddSheet(
-    BuildContext context,
-    WidgetRef ref,
-    Track track,
-  ) async {
-    final setlists = ref.read(setlistsProvider);
-    final actions = ref.read(setlistActionsProvider);
-
-    await showModalBottomSheet<void>(
-      context: context,
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: _AddToSetlistSheet(
-            track: track,
-            setlists: setlists,
-            actions: actions,
-            onDone: (name) {
-              Navigator.of(sheetCtx).pop();
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(SnackBar(content: Text('Added to $name')));
-            },
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _AddToSetlistSheet extends StatelessWidget {
-  const _AddToSetlistSheet({
-    required this.track,
-    required this.setlists,
-    required this.actions,
-    required this.onDone,
-  });
-
-  final Track track;
-  final List<Crate> setlists;
-  final SetlistActions actions;
-  final void Function(String name) onDone;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // Handle bar
-        Padding(
-          padding: const EdgeInsets.only(top: 12, bottom: 8),
-          child: Container(
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.white24,
-              borderRadius: BorderRadius.circular(2),
-            ),
-          ),
-        ),
-        ...setlists.map(
-          (crate) => ListTile(
-            leading: const Icon(Icons.queue_music),
-            title: Text(crate.name),
-            onTap: () async {
-              await actions.addTrack(crate, track.id);
-              onDone(crate.name);
-            },
-          ),
-        ),
-        ListTile(
-          leading: const Icon(Icons.add),
-          title: const Text('New setlist…'),
-          onTap: () => _promptNewSetlist(context),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _promptNewSetlist(BuildContext context) async {
-    final controller = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('New setlist'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: 'Setlist name'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () =>
-                Navigator.of(dialogCtx).pop(controller.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
-      ),
-    );
-
-    if (name == null || name.isEmpty) return;
-
-    await actions.createWithTrack(name, track.id);
-    onDone(name);
   }
 }
 

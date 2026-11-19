@@ -3,9 +3,13 @@ import {
   onDocumentDeleted,
   onDocumentWritten,
 } from "firebase-functions/v2/firestore";
+import { HttpsError, onCall } from "firebase-functions/v2/https";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import { FieldValue } from "firebase-admin/firestore";
+import { appClientCallableOptions } from "./lib/appCheck";
+import { requireFullCallableAccount } from "./lib/auth";
+import { ownedStoragePathFromUrl } from "./lib/storagePaths";
 
 const REGION = "us-central1";
 
@@ -15,10 +19,11 @@ export const onUploadCreated = onDocumentCreated(
     const uploadedBy = event.data?.get("uploadedBy") as string | undefined;
     if (!uploadedBy) return;
 
-    await admin.firestore().collection("social_profiles").doc(uploadedBy).set(
-      { uploadCount: FieldValue.increment(1) },
-      { merge: true },
-    );
+    await admin
+      .firestore()
+      .collection("social_profiles")
+      .doc(uploadedBy)
+      .set({ uploadCount: FieldValue.increment(1) }, { merge: true });
   },
 );
 
@@ -30,10 +35,11 @@ export const onUploadDeleted = onDocumentDeleted(
     if (!data || !uploadedBy) return;
 
     await Promise.all([
-      admin.firestore().collection("social_profiles").doc(uploadedBy).set(
-        { uploadCount: FieldValue.increment(-1) },
-        { merge: true },
-      ),
+      admin
+        .firestore()
+        .collection("social_profiles")
+        .doc(uploadedBy)
+        .set({ uploadCount: FieldValue.increment(-1) }, { merge: true }),
       deleteUploadBlobs(data),
     ]);
   },
@@ -81,6 +87,71 @@ export const onUserLikesWritten = onDocumentWritten(
   },
 );
 
+export const toggleUploadLike = onCall(
+  { region: REGION, ...appClientCallableOptions },
+  async (request): Promise<{ liked: boolean }> => {
+    const auth = requireFullCallableAccount(
+      request.auth,
+      "A full account is required to like uploads.",
+    );
+
+    const uid = auth.uid;
+    const uploadId =
+      typeof request.data?.uploadId === "string"
+        ? request.data.uploadId.trim()
+        : "";
+    if (!/^[A-Za-z0-9_-]{6,128}$/.test(uploadId)) {
+      throw new HttpsError("invalid-argument", "Invalid upload id");
+    }
+
+    const db = admin.firestore();
+    const uploadRef = db.collection("uploads").doc(uploadId);
+    const likesRef = db.collection("user_likes").doc(uid);
+
+    return db.runTransaction(async (tx) => {
+      const [uploadSnap, likesSnap] = await Promise.all([
+        tx.get(uploadRef),
+        tx.get(likesRef),
+      ]);
+      if (!uploadSnap.exists) {
+        throw new HttpsError("not-found", "Upload not found");
+      }
+      if (uploadSnap.get("moderationStatus") !== "approved") {
+        throw new HttpsError(
+          "failed-precondition",
+          "Only approved uploads can be liked.",
+        );
+      }
+
+      const currentLikes = stringArray(likesSnap.get("uploadIds"));
+      const liked = currentLikes.includes(uploadId);
+      if (liked) {
+        tx.set(
+          likesRef,
+          { uploadIds: currentLikes.filter((id) => id !== uploadId) },
+          { merge: true },
+        );
+        tx.update(uploadRef, { likeCount: FieldValue.increment(-1) });
+        return { liked: false };
+      }
+
+      if (currentLikes.length >= 1000) {
+        throw new HttpsError(
+          "resource-exhausted",
+          "Liked upload limit reached.",
+        );
+      }
+      tx.set(
+        likesRef,
+        { uploadIds: [...new Set([...currentLikes, uploadId])] },
+        { merge: true },
+      );
+      tx.update(uploadRef, { likeCount: FieldValue.increment(1) });
+      return { liked: true };
+    });
+  },
+);
+
 export function diffStringArrays(
   before: readonly string[],
   after: readonly string[],
@@ -124,11 +195,17 @@ async function incrementUploadLikes(
   uploadId: string,
   delta: 1 | -1,
 ): Promise<void> {
-  await uploads.doc(uploadId).update({
-    likeCount: FieldValue.increment(delta),
-  }).catch((error) => {
-    logger.warn(`Skipping like count update for missing upload ${uploadId}`, error);
-  });
+  await uploads
+    .doc(uploadId)
+    .update({
+      likeCount: FieldValue.increment(delta),
+    })
+    .catch((error) => {
+      logger.warn(
+        `Skipping like count update for missing upload ${uploadId}`,
+        error,
+      );
+    });
 }
 
 async function deleteUploadBlobs(
@@ -136,26 +213,29 @@ async function deleteUploadBlobs(
 ): Promise<void> {
   const bucket = admin.storage().bucket();
   const deletes: Array<Promise<unknown>> = [];
-  for (const field of ["audioUrl", "artworkUrl"]) {
-    const path = storagePathFromUrl(data[field] as string | undefined);
+  const uploadedBy = data.uploadedBy as string | undefined;
+  if (!uploadedBy) return;
+
+  const fields: Array<{ field: string; roots: readonly string[] }> = [
+    { field: "audioUrl", roots: ["uploads"] },
+    { field: "artworkUrl", roots: ["artwork"] },
+  ];
+  for (const { field, roots } of fields) {
+    const path = ownedStoragePathFromUrl({
+      url: data[field] as string | undefined,
+      ownerUid: uploadedBy,
+      allowedRoots: roots,
+    });
     if (path) {
       deletes.push(
-        bucket.file(path).delete().catch(() => {
-          /* blob already gone — ignore */
-        }),
+        bucket
+          .file(path)
+          .delete()
+          .catch(() => {
+            /* blob already gone — ignore */
+          }),
       );
     }
   }
   await Promise.all(deletes);
-}
-
-function storagePathFromUrl(url?: string): string | null {
-  if (!url) return null;
-  const m = url.match(/\/o\/([^?]+)/);
-  if (!m) return null;
-  try {
-    return decodeURIComponent(m[1]);
-  } catch {
-    return null;
-  }
 }

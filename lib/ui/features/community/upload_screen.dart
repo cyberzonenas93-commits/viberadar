@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/config/music_genres.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../models/app_section.dart';
 import '../../../models/social_profile.dart';
@@ -21,7 +22,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   final _bpmController = TextEditingController();
   final _keyController = TextEditingController();
   final _tagsController = TextEditingController();
-  String _genre = 'Afrobeats';
+  String _genre = 'Pop';
   String? _audioPath;
   String? _artworkPath;
   String _audioFileName = '';
@@ -63,7 +64,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -0.5,
+                  letterSpacing: 0,
                 ),
               ),
             ],
@@ -162,30 +163,16 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
                                   color: AppTheme.textPrimary,
                                   fontSize: 13,
                                 ),
-                                items:
-                                    [
-                                          'Afrobeats',
-                                          'Amapiano',
-                                          'R&B',
-                                          'Hip-Hop',
-                                          'House',
-                                          'Pop',
-                                          'Dancehall',
-                                          'Afro-House',
-                                          'Drill',
-                                          'Highlife',
-                                          'Gospel',
-                                          'Other',
-                                        ]
-                                        .map(
-                                          (g) => DropdownMenuItem(
-                                            value: g,
-                                            child: Text(g),
-                                          ),
-                                        )
-                                        .toList(),
+                                items: kCanonicalMusicGenres
+                                    .map(
+                                      (g) => DropdownMenuItem(
+                                        value: g,
+                                        child: Text(g),
+                                      ),
+                                    )
+                                    .toList(),
                                 onChanged: (v) =>
-                                    setState(() => _genre = v ?? 'Afrobeats'),
+                                    setState(() => _genre = v ?? 'Pop'),
                               ),
                             ),
                           ),
@@ -323,30 +310,36 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
   }
 
   Future<void> _pickAudioFile() async {
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['mp3', 'wav', 'flac', 'aac', 'm4a', 'ogg', 'aiff'],
-    );
-    if (result != null && result.files.isNotEmpty) {
-      setState(() {
-        _audioPath = result.files.first.path;
-        _audioFileName = result.files.first.name;
-        // Auto-fill title from filename if empty
-        if (_titleController.text.isEmpty) {
-          final name = result.files.first.name.replaceAll(
-            RegExp(r'\.[^.]+$'),
-            '',
-          );
-          final parts = name.split(RegExp(r'\s+-\s+'));
-          if (parts.length >= 2) {
-            _artistController.text = parts[0].trim();
-            _titleController.text = parts[1].trim();
-          } else {
-            _titleController.text = name;
-          }
-        }
-      });
+    // Use FileType.audio (public.audio UTI) rather than FileType.custom +
+    // extensions: on iOS some of those extensions (e.g. ogg/aiff) don't map to
+    // valid UTIs, which makes the document picker fail to present — the upload
+    // flow then looks "unresponsive" (an App Review 2.1(a) finding).
+    FilePickerResult? picked;
+    try {
+      picked = await FilePicker.platform.pickFiles(type: FileType.audio);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _error = 'Could not open the file picker. Try again.');
+      }
+      return;
     }
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    setState(() {
+      _audioPath = file.path;
+      _audioFileName = file.name;
+      // Auto-fill title from filename if empty
+      if (_titleController.text.isEmpty) {
+        final name = file.name.replaceAll(RegExp(r'\.[^.]+$'), '');
+        final parts = name.split(RegExp(r'\s+-\s+'));
+        if (parts.length >= 2) {
+          _artistController.text = parts[0].trim();
+          _titleController.text = parts[1].trim();
+        } else {
+          _titleController.text = name;
+        }
+      }
+    });
   }
 
   Future<void> _pickArtwork() async {
@@ -379,9 +372,12 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
         );
       }
 
+      final uploadId = newUploadId();
+
       // Upload audio
       final audioUrl = await uploadAudio(
         userId: session.userId,
+        uploadId: uploadId,
         filePath: _audioPath!,
         fileName: _audioFileName,
         onProgress: (p) => setState(() => _progress = p * 0.8), // 80% for audio
@@ -392,6 +388,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       if (_artworkPath != null) {
         artworkUrl = await uploadArtwork(
           userId: session.userId,
+          uploadId: uploadId,
           filePath: _artworkPath!,
         );
       }
@@ -400,7 +397,7 @@ class _UploadScreenState extends ConsumerState<UploadScreen> {
       // Create upload document
       await createUpload(
         UploadedTrack(
-          id: '',
+          id: uploadId,
           title: _titleController.text.trim(),
           artistName: _artistController.text.trim().isEmpty
               ? session.displayName

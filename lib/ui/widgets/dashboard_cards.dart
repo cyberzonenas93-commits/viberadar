@@ -144,7 +144,7 @@ class DashboardCards extends StatelessWidget {
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.w900,
                     fontSize: 38,
-                    letterSpacing: -1.5,
+                    letterSpacing: 0,
                     height: 1.0,
                   ),
                 ),

@@ -39,12 +39,10 @@ class _FlutterSecureStorageBackend implements SecureStorageBackend {
       _storage.write(key: key, value: value);
 
   @override
-  Future<String?> read({required String key}) =>
-      _storage.read(key: key);
+  Future<String?> read({required String key}) => _storage.read(key: key);
 
   @override
-  Future<void> delete({required String key}) =>
-      _storage.delete(key: key);
+  Future<void> delete({required String key}) => _storage.delete(key: key);
 
   @override
   Future<bool> containsKey({required String key}) =>
@@ -89,18 +87,17 @@ class SecureStorageService {
   SecureStorageService({
     FlutterSecureStorage? storage,
     SecureStorageBackend? backend,
-  }) : _backend = backend ??
-            _FlutterSecureStorageBackend(
-              storage ??
-                  const FlutterSecureStorage(
-                    aOptions: AndroidOptions(
-                      encryptedSharedPreferences: true,
-                    ),
-                    iOptions: IOSOptions(
-                      accessibility: KeychainAccessibility.first_unlock,
-                    ),
-                  ),
-            );
+  }) : _backend =
+           backend ??
+           _FlutterSecureStorageBackend(
+             storage ??
+                 const FlutterSecureStorage(
+                   aOptions: AndroidOptions(encryptedSharedPreferences: true),
+                   iOptions: IOSOptions(
+                     accessibility: KeychainAccessibility.first_unlock,
+                   ),
+                 ),
+           );
 
   final SecureStorageBackend _backend;
 

@@ -8,7 +8,6 @@ import '../models/hot_cue.dart';
 /// These exports are read-only and do NOT modify audio files or DJ databases.
 /// They can be used for backup, sharing, or future import workflows.
 class CueExportService {
-
   // ── JSON manifest ──────────────────────────────────────────────────────────
 
   /// Export [results] to a JSON manifest file at [destinationDir].
@@ -25,9 +24,9 @@ class CueExportService {
       'trackCount': results.length,
       'tracks': results.map((r) => r.toJson()).toList(),
     };
-    await File(outPath).writeAsString(
-      const JsonEncoder.withIndent('  ').convert(payload),
-    );
+    await File(
+      outPath,
+    ).writeAsString(const JsonEncoder.withIndent('  ').convert(payload));
     return outPath;
   }
 
@@ -40,21 +39,25 @@ class CueExportService {
     String filename = 'viberadar_cues.csv',
   }) async {
     final buf = StringBuffer();
-    buf.writeln('Track Title,Artist,Cue Index,Cue Type,Label,Time (s),Time (mm:ss.d),Confidence,Source,Notes');
+    buf.writeln(
+      'Track Title,Artist,Cue Index,Cue Type,Label,Time (s),Time (mm:ss.d),Confidence,Source,Notes',
+    );
     for (final r in results) {
       for (final c in r.cues) {
-        buf.writeln([
-          _csvCell(r.trackTitle),
-          _csvCell(r.trackArtist),
-          c.cueIndex,
-          _csvCell(c.cueType.label),
-          _csvCell(c.label),
-          c.timeSeconds.toStringAsFixed(3),
-          _csvCell(c.timestampFormatted),
-          c.confidence.toStringAsFixed(2),
-          _csvCell(c.source.label),
-          _csvCell(c.notes ?? ''),
-        ].join(','));
+        buf.writeln(
+          [
+            _csvCell(r.trackTitle),
+            _csvCell(r.trackArtist),
+            c.cueIndex,
+            _csvCell(c.cueType.label),
+            _csvCell(c.label),
+            c.timeSeconds.toStringAsFixed(3),
+            _csvCell(c.timestampFormatted),
+            c.confidence.toStringAsFixed(2),
+            _csvCell(c.source.label),
+            _csvCell(c.notes ?? ''),
+          ].join(','),
+        );
       }
     }
     final outPath = p.join(destinationDir, filename);

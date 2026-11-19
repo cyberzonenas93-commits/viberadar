@@ -55,8 +55,10 @@ class SeratoExportService {
       if (!t.isLocalMatch || t.localFilePath == null) continue;
       final path = t.localFilePath!;
       if (!_isValidExportPath(path)) {
-        developer.log('Skipping Serato export for invalid path: $path',
-            name: 'SeratoExportService');
+        developer.log(
+          'Skipping Serato export for invalid path: $path',
+          name: 'SeratoExportService',
+        );
         continue;
       }
       localPaths.add(path);
@@ -64,8 +66,11 @@ class SeratoExportService {
 
     final crateBytes = buildCrateBytes(localPaths);
     final crateFilename = buildCrateFilename(playlistName, parentCrateName);
-    final outputPath =
-        await _writeCrateFile(seratoRoot, crateFilename, crateBytes);
+    final outputPath = await _writeCrateFile(
+      seratoRoot,
+      crateFilename,
+      crateBytes,
+    );
 
     return DjExportResult(
       target: DjTarget.serato,
@@ -97,7 +102,8 @@ class SeratoExportService {
       return DjExportTrack(
         cloudTrack: m.vibeTrack,
         resolution: DjTrackResolution.skipped,
-        skipReason: 'Track not found in local library — Serato requires local'
+        skipReason:
+            'Track not found in local library — Serato requires local'
             ' files',
       );
     }).toList();
@@ -167,7 +173,9 @@ class SeratoExportService {
   /// Arbitrary nesting depth is supported by passing pre-joined parent paths.
   String buildCrateFilename(String crateName, String? parentCrateName) {
     final safe = _safeCrateName(crateName);
-    if (parentCrateName == null || parentCrateName.isEmpty) return '$safe.crate';
+    if (parentCrateName == null || parentCrateName.isEmpty) {
+      return '$safe.crate';
+    }
     final safeParent = parentCrateName
         .split('%%')
         .map(_safeCrateName)

@@ -1,41 +1,221 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function fullAccount() {
+      return signedIn()
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function hasActiveProEntitlement() {
+      return fullAccount()
+        && exists(/databases/$(database)/documents/entitlements/$(request.auth.uid))
+        && get(/databases/$(database)/documents/entitlements/$(request.auth.uid)).data.get('active', false) == true
+        && get(/databases/$(database)/documents/entitlements/$(request.auth.uid)).data.get('tier', 'free') in ['pro', 'studio']
+        && (
+          !('status' in get(/databases/$(database)/documents/entitlements/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/entitlements/$(request.auth.uid)).data.status in [
+            'active',
+            'trial',
+            'trialing',
+            'grace_period',
+            'billing_retry'
+          ]
+        )
+        && (
+          !('expiresAt' in get(/databases/$(database)/documents/entitlements/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/entitlements/$(request.auth.uid)).data.expiresAt > request.time
+        );
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isShortString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function profileKeysAreValid() {
+      return request.resource.data.keys().hasOnly([
+        'userId',
+        'displayName',
+        'bio',
+        'photoUrl',
+        'genres',
+        'location',
+        'socialLinks',
+        'uploadCount',
+        'followerCount',
+        'followingCount',
+        'createdAt',
+        'updatedAt',
+        'role'
+      ]);
+    }
+
+    function profileCreateIsValid(userId) {
+      return profileKeysAreValid()
+        && request.resource.data.userId == userId
+        && isShortString(request.resource.data.displayName, 80)
+        && isShortString(request.resource.data.get('bio', ''), 500)
+        && isShortString(request.resource.data.get('location', ''), 120)
+        && isShortString(request.resource.data.get('role', 'DJ'), 40)
+        && request.resource.data.get('genres', []) is list
+        && request.resource.data.get('genres', []).size() <= 12
+        && request.resource.data.get('socialLinks', {}) is map
+        && request.resource.data.get('uploadCount', 0) == 0
+        && request.resource.data.get('followerCount', 0) == 0
+        && request.resource.data.get('followingCount', 0) == 0;
+    }
+
+    function profileUpdateIsValid(userId) {
+      return profileKeysAreValid()
+        && request.resource.data.userId == userId
+        && isShortString(request.resource.data.displayName, 80)
+        && isShortString(request.resource.data.get('bio', ''), 500)
+        && isShortString(request.resource.data.get('location', ''), 120)
+        && isShortString(request.resource.data.get('role', 'DJ'), 40)
+        && request.resource.data.get('genres', []) is list
+        && request.resource.data.get('genres', []).size() <= 12
+        && request.resource.data.get('socialLinks', {}) is map
+        && request.resource.data.get('uploadCount', 0) == resource.data.get('uploadCount', 0)
+        && request.resource.data.get('followerCount', 0) == resource.data.get('followerCount', 0)
+        && request.resource.data.get('followingCount', 0) == resource.data.get('followingCount', 0)
+        && request.resource.data.get('createdAt', null) == resource.data.get('createdAt', null);
+    }
+
+    function uploadCreateIsValid(uploadId) {
+      return request.resource.data.keys().hasOnly([
+        'title',
+        'artistName',
+        'audioUrl',
+        'artworkUrl',
+        'genre',
+        'bpm',
+        'keySignature',
+        'uploadedBy',
+        'uploaderName',
+        'uploadedAt',
+        'likeCount',
+        'playCount',
+        'featured',
+        'durationSeconds',
+        'tags',
+        'uploaderPhotoUrl',
+        'moderationStatus'
+      ])
+        && request.resource.data.uploadedBy == request.auth.uid
+        && isShortString(request.resource.data.title, 160)
+        && isShortString(request.resource.data.artistName, 160)
+        && request.resource.data.audioUrl is string
+        && request.resource.data.audioUrl.matches('^uploads/' + request.auth.uid + '/' + uploadId + '/[^/]+$')
+        && (
+          request.resource.data.get('artworkUrl', '') == ''
+          || request.resource.data.get('artworkUrl', '').matches('^artwork/' + request.auth.uid + '/' + uploadId + '/[^/]+$')
+        )
+        && isShortString(request.resource.data.get('genre', ''), 60)
+        && request.resource.data.get('bpm', 0) is number
+        && request.resource.data.get('bpm', 0) >= 0
+        && request.resource.data.get('bpm', 0) <= 300
+        && isShortString(request.resource.data.get('keySignature', ''), 20)
+        && isShortString(request.resource.data.uploaderName, 80)
+        && request.resource.data.get('tags', []) is list
+        && request.resource.data.get('tags', []).size() <= 12
+        && request.resource.data.get('moderationStatus', 'pending') == 'pending'
+        && request.resource.data.get('likeCount', 0) == 0
+        && request.resource.data.get('playCount', 0) == 0
+        && request.resource.data.get('featured', false) == false;
+    }
+
+    function uploadUpdateIsValid() {
+      return resource.data.uploadedBy == request.auth.uid
+        && request.resource.data.keys().hasOnly(resource.data.keys())
+        && request.resource.data.uploadedBy == resource.data.uploadedBy
+        && request.resource.data.get('audioUrl', '') == resource.data.get('audioUrl', '')
+        && request.resource.data.get('artworkUrl', '') == resource.data.get('artworkUrl', '')
+        && request.resource.data.get('moderationStatus', 'pending') == resource.data.get('moderationStatus', 'pending')
+        && request.resource.data.get('likeCount', 0) == resource.data.get('likeCount', 0)
+        && request.resource.data.get('playCount', 0) == resource.data.get('playCount', 0)
+        && request.resource.data.get('featured', false) == resource.data.get('featured', false);
+    }
+
+    function uploadReadAllowed() {
+      return resource.data.get('moderationStatus', 'pending') == 'approved'
+        || (signedIn() && resource.data.uploadedBy == request.auth.uid);
+    }
+
+    function reportCreateIsValid() {
+      return request.resource.data.reportedBy == request.auth.uid
+        && request.resource.data.reportedUid is string
+        && request.resource.data.reportedUid != request.auth.uid
+        && request.resource.data.contentType in ['upload', 'profile']
+        && request.resource.data.contentId is string
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() > 0
+        && request.resource.data.reason.size() <= 1000;
+    }
+
     match /tracks/{trackId} {
-      allow read: if true;
-      allow write: if request.auth != null;
+      allow read: if hasActiveProEntitlement();
+      // Track ingestion is owned by trusted backend jobs using the Admin SDK.
+      allow write: if false;
     }
 
     match /users/{userId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
 
       match /export_queue/{exportId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if isOwner(userId);
       }
+    }
+
+    // Backend-owned usage counters for spend-heavy features. Clients can read
+    // their own counters for meters/paywalls, but only trusted functions write.
+    match /usage/{userId}/{window}/{counterId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
+    }
+
+    // IAP/subscription entitlement state is backend-owned. Clients can display
+    // their own tier/status but cannot grant themselves access.
+    match /entitlements/{userId} {
+      allow read: if isOwner(userId);
+      allow write: if false;
     }
 
     // ── Community / Social ────────────────────────────────────────────────
     match /social_profiles/{userId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow create: if isOwner(userId) && profileCreateIsValid(userId);
+      allow update: if isOwner(userId) && profileUpdateIsValid(userId);
+      allow delete: if isOwner(userId);
     }
 
     match /uploads/{uploadId} {
-      allow read: if true;
-      allow create: if request.auth != null;
-      allow update, delete: if request.auth != null
-                            && resource.data.uploadedBy == request.auth.uid;
+      allow read: if uploadReadAllowed();
+      allow create: if fullAccount() && uploadCreateIsValid(uploadId);
+      allow update: if signedIn() && uploadUpdateIsValid();
+      allow delete: if signedIn() && resource.data.uploadedBy == request.auth.uid;
     }
 
     match /follows/{followDoc} {
       allow read: if true;
-      allow create: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow create: if fullAccount()
+        && request.resource.data.keys().hasOnly(['followerId', 'followeeId', 'createdAt'])
+        && request.resource.data.followerId == request.auth.uid
+        && request.resource.data.followeeId != request.auth.uid
+        && followDoc == request.auth.uid + '_' + request.resource.data.followeeId;
+      allow delete: if signedIn()
+        && resource.data.followerId == request.auth.uid;
     }
 
     match /user_likes/{userId} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
     }
 
     // ── Moderation: reports (App Store Guideline 1.2) ─────────────────────
@@ -43,7 +223,16 @@ service cloud.firestore {
     // client; they can only be read/actioned by moderators via the console
     // or a trusted backend (Admin SDK bypasses rules).
     match /reports/{reportId} {
-      allow create: if request.auth != null;
+      allow create: if fullAccount()
+        && request.resource.data.keys().hasOnly([
+          'reportedBy',
+          'reportedUid',
+          'contentType',
+          'contentId',
+          'reason',
+          'createdAt'
+        ])
+        && reportCreateIsValid();
       allow read, update, delete: if false;
     }
 
@@ -52,10 +241,13 @@ service cloud.firestore {
     // is `${blockerUid}_${blockedUid}`; ownership is enforced via the
     // blockerUid field on the document.
     match /blocks/{blockDoc} {
-      allow create: if request.auth != null
-                    && request.resource.data.blockerUid == request.auth.uid;
-      allow read, delete: if request.auth != null
-                          && resource.data.blockerUid == request.auth.uid;
+      allow create: if fullAccount()
+        && request.resource.data.keys().hasOnly(['blockerUid', 'blockedUid', 'createdAt'])
+        && request.resource.data.blockerUid == request.auth.uid
+        && request.resource.data.blockedUid != request.auth.uid
+        && blockDoc == request.auth.uid + '_' + request.resource.data.blockedUid;
+      allow read, delete: if signedIn()
+        && resource.data.blockerUid == request.auth.uid;
     }
 
     // ── Pairing (phone ↔ logged-out desktop) ──────────────────────────────
@@ -65,13 +257,14 @@ service cloud.firestore {
     // may read the pairing and read/write the shared setlists subcollection
     // (this is the bidirectional "continue anywhere" channel).
     match /pairings/{pairingId} {
-      allow read: if request.auth != null
+      allow read: if signedIn()
         && (request.auth.uid == resource.data.desktopUid
             || request.auth.uid == resource.data.claimedByUid);
       allow write: if false;
 
       match /setlists/{setlistId} {
-        allow read, write: if request.auth != null
+        allow read, write: if signedIn()
+          && get(/databases/$(database)/documents/pairings/$(pairingId)).data.status == 'active'
           && request.auth.uid in [
             get(/databases/$(database)/documents/pairings/$(pairingId)).data.desktopUid,
             get(/databases/$(database)/documents/pairings/$(pairingId)).data.claimedByUid

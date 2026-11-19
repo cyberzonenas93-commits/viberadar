@@ -23,26 +23,102 @@ export interface SoundchartsRankItem {
   oldPosition?: number | null;
 }
 
+export const SOUNDCHARTS_GLOBAL_REGION = "GLOBAL";
+
 const IRRELEVANT_PATTERNS = [
   /\bbts\b/i, /\bjungkook\b/i, /\bblackpink\b/i, /\btwice\b/i,
   /\bstray\s*kids\b/i, /\bnewjeans\b/i, /\baespa\b/i,
   /\b(k-?pop|kpop|j-?pop|jpop|c-?pop|cpop|anime|bollywood)\b/i,
   /\b(country|folk|bluegrass|gospel|christian|classical|metal|punk)\b/i,
+  // Worship/gospel dominates Boomplay NG/GH charts but isn't useful for the
+  // DJ/club use case. Kept high-precision: artist honorifics first (the
+  // strongest signal — e.g. "Sis. Chinyere Udoma", "Pastor Chris"), then a
+  // few unambiguous content terms.
+  /\b(pastor|bishop|evangelist|apostle|prophet|reverend|deaconess)\b/i,
+  /\b(sis|bro|evang|rev|min|pst|ev)\.\s/i,
+  /\b(jehovah|hallelujah|hosanna|anointing|redeemer)\b/i,
+  /\bpraise\s+(the\s+)?(lord|god|jesus)\b/i,
+  /\bworship\b/i,
 ];
 
-function isRelevant(title: string, artist: string): boolean {
+function isGlobalRegion(region: string): boolean {
+  const value = region.trim().toUpperCase();
+  return value === "" || value === "ALL" || value === SOUNDCHARTS_GLOBAL_REGION;
+}
+
+export function isRelevant(title: string, artist: string): boolean {
   return !IRRELEVANT_PATTERNS.some((p) => p.test(`${title} ${artist}`));
+}
+
+/**
+ * Whole charts that can never feed the DJ/club use case (gospel editions,
+ * radio-airplay recurrents). Filtering at chart level saves the ranking call
+ * entirely instead of discarding rows one-by-one after fetching them.
+ */
+const EXCLUDED_CHART_PATTERN =
+  /\b(christian|gospel|worship|on[ -]radio)\b/i;
+
+/**
+ * Rank a chart by how well it represents "what is actually big right now".
+ * The Soundcharts chart list is alphabetical and paginated, so taking it in
+ * list order used to select genre charts ("AfroBeats", "Country") while the
+ * real "Top 200" charts sorted last and were never picked. Higher is better;
+ * negative means never use this chart.
+ */
+export function chartPriority(chart: SoundchartsChart): number {
+  const text = `${chart.name ?? ""} ${chart.slug}`.toLowerCase();
+  if (EXCLUDED_CHART_PATTERN.test(text)) return -1;
+  if (/\btop[ -]?200\b/.test(text)) return 100;
+  if (/\btop[ -]?\d+\b/.test(text)) return 90;
+  if (/\bdaily[ -]?\d+\b/.test(text)) return 85;
+  if (/\bhot[ -]?\d+\b/.test(text)) return 80;
+  if (/\btop\b/.test(text)) return 60;
+  if (/\b(viral|trending)\b/.test(text)) return 50;
+  if (chart.slug.startsWith("genre-")) return 5;
+  return 10;
+}
+
+/**
+ * Soundcharts ranking items carry no genre, so a chart-only track would land as
+ * "Open Format" and get zeroed by the merge's genre↔region affinity gate —
+ * excluding exactly the local Shazam/TikTok/Boomplay tracks we want from the
+ * "Hot in <country>" views. Seed a region-appropriate default so they surface.
+ *
+ * Only the African markets get a default (their charts are overwhelmingly one
+ * bucket); Western markets stay undefined to avoid mislabeling their mixed
+ * charts. The default is self-correcting: any crossover hit that also appears on
+ * Spotify/Deezer/Apple is rewritten with its real genre by the 30-min job, so
+ * the default only persists for genuinely local tracks — where it's correct.
+ */
+export function defaultGenreForRegion(region: string): string | undefined {
+  const map: Record<string, string> = {
+    NG: "Afrobeats",
+    GH: "Afrobeats",
+    ZA: "Amapiano",
+  };
+  return map[region.toUpperCase()];
 }
 
 /**
  * Choose the best charts for a region: country-specific first (capped at max),
  * otherwise the global/worldwide charts (countryCode === "") as a fallback.
+ * Within the pool, charts are ranked by [chartPriority] so the main "Top N"
+ * chart wins over genre/radio editions regardless of list order.
  */
 export function selectCharts(
   charts: SoundchartsChart[],
   region: string,
   max: number,
 ): SoundchartsChart[] {
+  const pickBest = (pool: SoundchartsChart[]): SoundchartsChart[] =>
+    pool
+      .filter((c) => chartPriority(c) >= 0)
+      .sort((a, b) => chartPriority(b) - chartPriority(a))
+      .slice(0, Math.max(1, max));
+
+  if (isGlobalRegion(region)) {
+    return pickBest(charts.filter((c) => (c.countryCode ?? "") === ""));
+  }
   const r = region.toUpperCase();
   const country = charts.filter(
     (c) => (c.countryCode ?? "").toUpperCase() === r,
@@ -51,7 +127,7 @@ export function selectCharts(
     country.length > 0
       ? country
       : charts.filter((c) => (c.countryCode ?? "") === "");
-  return pool.slice(0, Math.max(1, max));
+  return pickBest(pool);
 }
 
 function clamp(v: number, lo: number, hi: number): number {
@@ -101,7 +177,7 @@ export function mapRanking(
     title: (song.name ?? "Untitled").trim(),
     artist: (song.creditName ?? "Unknown Artist").trim(),
     artworkUrl: song.imageUrl,
-    genre: undefined,
+    genre: defaultGenreForRegion(region),
     platformUrl: `https://app.soundcharts.com/app/song/${song.uuid}`,
     keywords: [`soundcharts:${chart.slug}`],
     region,
@@ -117,9 +193,35 @@ export function mapRanking(
 export type SoundchartsHttp = (path: string) => Promise<{
   items?: SoundchartsChart[] & SoundchartsRankItem[];
   related?: { chart?: SoundchartsChart };
+  page?: { next?: string | null };
 }>;
 
 const MAX_CHARTS_PER_PLATFORM = 2;
+
+/**
+ * The chart list is alphabetical, so the main "Top N" charts sort near the
+ * end (Shazam worldwide has 323 charts; "Top 200" is past index 90). Follow
+ * pagination far enough to actually see them. Pages are cacheable upstream,
+ * so the extra calls are a once-per-TTL cost, not a per-request cost.
+ */
+const MAX_CHART_LIST_PAGES = 4;
+
+async function fetchChartList(
+  get: SoundchartsHttp,
+  platformCode: string,
+  countryCode: string,
+): Promise<SoundchartsChart[]> {
+  const charts: SoundchartsChart[] = [];
+  let path: string | null =
+    `/api/v2/chart/song/by-platform/${encodeURIComponent(platformCode)}` +
+    `?countryCode=${encodeURIComponent(countryCode)}&limit=100`;
+  for (let page = 0; page < MAX_CHART_LIST_PAGES && path; page += 1) {
+    const resp = await get(path);
+    charts.push(...((resp.items as SoundchartsChart[]) ?? []));
+    path = resp.page?.next ?? null;
+  }
+  return charts;
+}
 
 export async function fetchSoundchartsSignals(input: {
   region: string;
@@ -134,15 +236,19 @@ export async function fetchSoundchartsSignals(input: {
   const get = input.httpGet ?? makeHttpGet(appId, apiKey);
   const now = Date.now();
   const out: SourceTrackSignal[] = [];
+  const signalRegion = isGlobalRegion(region)
+    ? SOUNDCHARTS_GLOBAL_REGION
+    : region.trim().toUpperCase();
+  const countryCode = signalRegion === SOUNDCHARTS_GLOBAL_REGION
+    ? ""
+    : signalRegion;
 
   for (const code of platforms) {
     try {
-      const chartResp = await get(
-        `/api/v2/chart/song/by-platform/${encodeURIComponent(code)}?countryCode=${encodeURIComponent(region)}`,
-      );
+      const allCharts = await fetchChartList(get, code, countryCode);
       const charts = selectCharts(
-        (chartResp.items as SoundchartsChart[]) ?? [],
-        region,
+        allCharts,
+        signalRegion,
         MAX_CHARTS_PER_PLATFORM,
       );
       for (const chart of charts) {
@@ -154,7 +260,7 @@ export async function fetchSoundchartsSignals(input: {
           const sig = mapRanking(
             item,
             code as SourceTrackSignal["source"],
-            region,
+            signalRegion,
             meta,
             now,
           );
@@ -168,7 +274,7 @@ export async function fetchSoundchartsSignals(input: {
   return out;
 }
 
-function makeHttpGet(appId: string, apiKey: string): SoundchartsHttp {
+export function makeHttpGet(appId: string, apiKey: string): SoundchartsHttp {
   return async (path) => {
     const res = await fetch(`${SOUNDCHARTS_BASE_URL}${path}`, {
       headers: { "x-app-id": appId, "x-api-key": apiKey },

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:viberadar/models/crate.dart';
+import 'package:viberadar/models/crate_track.dart';
 import 'package:viberadar/providers/setlist_provider.dart';
 import 'package:viberadar/ui/mobile/setlists_tab.dart';
 
@@ -13,21 +14,18 @@ Crate _crate({
   required String id,
   required String name,
   List<String> trackIds = const [],
-}) =>
-    Crate(
-      id: id,
-      name: name,
-      context: 'Open format',
-      trackIds: trackIds,
-      createdAt: DateTime(2025, 1, 1),
-      updatedAt: DateTime(2025, 6, 1, 12, 0),
-    );
+}) => Crate(
+  id: id,
+  name: name,
+  context: 'Open format',
+  tracks: trackIds.map(CrateTrack.reference).toList(),
+  createdAt: DateTime(2025, 1, 1),
+  updatedAt: DateTime(2025, 6, 1, 12, 0),
+);
 
 Widget _wrap(List<Crate> crates) {
   return ProviderScope(
-    overrides: [
-      setlistsProvider.overrideWithValue(crates),
-    ],
+    overrides: [setlistsProvider.overrideWithValue(crates)],
     child: const MaterialApp(home: SetlistsTab()),
   );
 }
@@ -66,23 +64,19 @@ void main() {
     });
 
     testWidgets('FloatingActionButton is present', (tester) async {
-      await tester.pumpWidget(_wrap([
-        _crate(id: 'x', name: 'Test Set'),
-      ]));
+      await tester.pumpWidget(_wrap([_crate(id: 'x', name: 'Test Set')]));
       await tester.pumpAndSettle();
 
       expect(find.byType(FloatingActionButton), findsOneWidget);
     });
 
-    testWidgets('empty-state message is NOT shown when list is non-empty',
-        (tester) async {
+    testWidgets('empty-state message is NOT shown when list is non-empty', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap([_crate(id: 'z', name: 'A Set')]));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('No setlists yet — tap ＋ to create one.'),
-        findsNothing,
-      );
+      expect(find.text('No setlists yet — tap ＋ to create one.'), findsNothing);
     });
   });
 
@@ -91,14 +85,13 @@ void main() {
       await tester.pumpWidget(_wrap([]));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('No setlists yet — tap ＋ to create one.'),
-        findsOneWidget,
-      );
+      expect(find.text('Plan your set here'), findsOneWidget);
+      expect(find.textContaining('Tap ＋ to start a setlist'), findsOneWidget);
     });
 
-    testWidgets('FloatingActionButton still present on empty state',
-        (tester) async {
+    testWidgets('FloatingActionButton still present on empty state', (
+      tester,
+    ) async {
       await tester.pumpWidget(_wrap([]));
       await tester.pumpAndSettle();
 

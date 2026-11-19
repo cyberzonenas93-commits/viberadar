@@ -113,12 +113,14 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
     for (final entry in _navSections) {
       final label = entry.section.label;
       if (q.isEmpty || label.toLowerCase().contains(q)) {
-        items.add(CommandPaletteItem(
-          label: label,
-          icon: entry.icon,
-          category: "Go to",
-          onSelect: () => widget.onNavigate(entry.section),
-        ));
+        items.add(
+          CommandPaletteItem(
+            label: label,
+            icon: entry.icon,
+            category: "Go to",
+            onSelect: () => widget.onNavigate(entry.section),
+          ),
+        );
       }
     }
 
@@ -134,13 +136,15 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
         }
       }
       for (final t in matches) {
-        items.add(CommandPaletteItem(
-          label: t.title.isEmpty ? t.fileName : t.title,
-          subtitle: t.artist.isEmpty ? null : t.artist,
-          icon: Icons.music_note_rounded,
-          category: "Tracks",
-          onSelect: () => widget.onOpenTrack(t),
-        ));
+        items.add(
+          CommandPaletteItem(
+            label: t.title.isEmpty ? t.fileName : t.title,
+            subtitle: t.artist.isEmpty ? null : t.artist,
+            icon: Icons.music_note_rounded,
+            category: "Tracks",
+            onSelect: () => widget.onOpenTrack(t),
+          ),
+        );
       }
     }
 
@@ -176,7 +180,7 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
       ),
       CommandPaletteItem(
         label: "Open Exports",
-        subtitle: "Export crates to Rekordbox, Serato, Virtual DJ",
+        subtitle: "Export setlists to Rekordbox, Serato, Virtual DJ",
         icon: Icons.ios_share_rounded,
         category: "Actions",
         onSelect: () => widget.onNavigate(AppSection.exports),
@@ -282,7 +286,9 @@ class _CommandPaletteState extends ConsumerState<CommandPalette> {
                   onTap: widget.onDismiss,
                   child: BackdropFilter(
                     filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
-                    child: Container(color: Colors.black.withValues(alpha: 0.35)),
+                    child: Container(
+                      color: Colors.black.withValues(alpha: 0.35),
+                    ),
                   ),
                 ),
               ),
@@ -396,7 +402,11 @@ class _SearchField extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
       child: Row(
         children: [
-          const Icon(Icons.search_rounded, color: AppTheme.textTertiary, size: 20),
+          const Icon(
+            Icons.search_rounded,
+            color: AppTheme.textTertiary,
+            size: 20,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: TextField(
@@ -417,7 +427,10 @@ class _SearchField extends StatelessWidget {
                 filled: false,
                 contentPadding: EdgeInsets.zero,
                 hintText: "Search screens, tracks, actions...",
-                hintStyle: TextStyle(color: AppTheme.textTertiary, fontSize: 16),
+                hintStyle: TextStyle(
+                  color: AppTheme.textTertiary,
+                  fontSize: 16,
+                ),
               ),
             ),
           ),
@@ -532,8 +545,7 @@ class _ResultRow extends StatelessWidget {
     final bg = isHighlighted
         ? AppTheme.violet.withValues(alpha: 0.18)
         : Colors.transparent;
-    final iconColor =
-        isHighlighted ? AppTheme.violet : AppTheme.textSecondary;
+    final iconColor = isHighlighted ? AppTheme.violet : AppTheme.textSecondary;
     return MouseRegion(
       onEnter: (_) => onEnter(),
       cursor: SystemMouseCursors.click,
@@ -588,8 +600,7 @@ class _ResultRow extends StatelessWidget {
                   ],
                 ),
               ),
-              if (isHighlighted)
-                const _KeyHint(label: "return", accent: true),
+              if (isHighlighted) const _KeyHint(label: "return", accent: true),
             ],
           ),
         ),
@@ -655,10 +666,7 @@ class _FooterHint extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
-            color: AppTheme.textTertiary,
-            fontSize: 11,
-          ),
+          style: const TextStyle(color: AppTheme.textTertiary, fontSize: 11),
         ),
       ],
     );
@@ -675,9 +683,7 @@ class _KeyHint extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: accent
-            ? AppTheme.violet.withValues(alpha: 0.2)
-            : AppTheme.panel,
+        color: accent ? AppTheme.violet.withValues(alpha: 0.2) : AppTheme.panel,
         borderRadius: BorderRadius.circular(4),
         border: Border.all(
           color: accent

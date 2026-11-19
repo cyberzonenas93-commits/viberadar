@@ -7,32 +7,32 @@ import 'package:viberadar/services/virtual_dj_cue_writer.dart';
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 HotCue _cue({
-  int    index  = 0,
-  CueType type  = CueType.intro,
-  String label  = 'Intro',
+  int index = 0,
+  CueType type = CueType.intro,
+  String label = 'Intro',
   double timeSec = 0.0,
-  double conf   = 0.85,
+  double conf = 0.85,
 }) {
   return HotCue(
-    trackId:     'track-1',
-    cueIndex:    index,
-    cueType:     type,
-    label:       label,
+    trackId: 'track-1',
+    cueIndex: index,
+    cueType: type,
+    label: label,
     timeSeconds: timeSec,
-    confidence:  conf,
-    source:      CueSource.genreTemplate,
+    confidence: conf,
+    source: CueSource.genreTemplate,
   );
 }
 
 /// Creates a minimal valid VirtualDJ database.xml in [dir].
 File _fakeDb(Directory dir, {String? songBlock}) {
-  final content = '''<?xml version="1.0" encoding="UTF-8"?>
+  final content =
+      '''<?xml version="1.0" encoding="UTF-8"?>
 <VirtualDJ_Database Version="8.5">
 ${songBlock ?? ''}
 </VirtualDJ_Database>
 ''';
-  return File(p.join(dir.path, 'database.xml'))
-    ..writeAsStringSync(content);
+  return File(p.join(dir.path, 'database.xml'))..writeAsStringSync(content);
 }
 
 /// Validation markers VirtualDJ root detection expects.
@@ -57,7 +57,6 @@ void main() {
 
   // ── Root validation ──────────────────────────────────────────────────────────
   group('VirtualDjCueWriter — root validation', () {
-
     test('validateRoot returns true for valid VDJ directory', () {
       expect(writer.validateRoot(tempDir.path), isTrue);
     });
@@ -79,13 +78,15 @@ void main() {
 
   // ── New song entry injection ───────────────────────────────────────────────
   group('VirtualDjCueWriter — new Song entry', () {
-
     test('Writes a new <Song> entry when track is not in database', () async {
       final trackPath = '/music/new_track.mp3';
       final result = await writer.writeCues(
         vdjRoot: tempDir.path,
         localFilePath: trackPath,
-        cues: [_cue(label: 'Intro', timeSec: 0.0), _cue(index: 1, type: CueType.drop, label: 'Drop', timeSec: 45.5)],
+        cues: [
+          _cue(label: 'Intro', timeSec: 0.0),
+          _cue(index: 1, type: CueType.drop, label: 'Drop', timeSec: 45.5),
+        ],
       );
       expect(result.success, isTrue);
       expect(result.cuesWritten, equals(2));
@@ -104,38 +105,50 @@ void main() {
         localFilePath: '/music/track.mp3',
         cues: [_cue()],
       );
-      final backup = File('${p.join(tempDir.path, 'database.xml')}.viberadar-backup');
+      final backup = File(
+        '${p.join(tempDir.path, 'database.xml')}.viberadar-backup',
+      );
       expect(backup.existsSync(), isTrue);
     });
   });
 
   // ── Existing Song merging ──────────────────────────────────────────────────
   group('VirtualDjCueWriter — existing Song merge', () {
-
-    test('Adds cues to existing Song entry without removing other content', () async {
-      _fakeDb(tempDir, songBlock: '''
+    test(
+      'Adds cues to existing Song entry without removing other content',
+      () async {
+        _fakeDb(
+          tempDir,
+          songBlock: '''
   <Song Filepath="/music/existing.mp3" Flag="0">
     <Tags Title="Existing Track" Author="DJ Test" />
-  </Song>''');
+  </Song>''',
+        );
 
-      await writer.writeCues(
-        vdjRoot: tempDir.path,
-        localFilePath: '/music/existing.mp3',
-        cues: [_cue(label: 'Intro', timeSec: 0.0)],
-      );
+        await writer.writeCues(
+          vdjRoot: tempDir.path,
+          localFilePath: '/music/existing.mp3',
+          cues: [_cue(label: 'Intro', timeSec: 0.0)],
+        );
 
-      final xml = File(p.join(tempDir.path, 'database.xml')).readAsStringSync();
-      expect(xml, contains('Tags Title="Existing Track"'));
-      expect(xml, contains('Poi'));
-      expect(xml, contains('Name="Intro"'));
-    });
+        final xml = File(
+          p.join(tempDir.path, 'database.xml'),
+        ).readAsStringSync();
+        expect(xml, contains('Tags Title="Existing Track"'));
+        expect(xml, contains('Poi'));
+        expect(xml, contains('Name="Intro"'));
+      },
+    );
 
     test('Replaces only matching Poi slot numbers on re-write', () async {
-      _fakeDb(tempDir, songBlock: '''
+      _fakeDb(
+        tempDir,
+        songBlock: '''
   <Song Filepath="/music/track.mp3" Flag="0">
     <Poi Pos="0.000" Type="cue" Name="Old Intro" Num="0" />
     <Poi Pos="99.000" Type="cue" Name="Manual Cue" Num="5" />
-  </Song>''');
+  </Song>''',
+      );
 
       await writer.writeCues(
         vdjRoot: tempDir.path,
@@ -153,16 +166,19 @@ void main() {
 
   // ── Dry run ────────────────────────────────────────────────────────────────
   group('VirtualDjCueWriter — dry run', () {
-
     test('Dry run does not modify database.xml', () async {
-      final before = File(p.join(tempDir.path, 'database.xml')).readAsStringSync();
+      final before = File(
+        p.join(tempDir.path, 'database.xml'),
+      ).readAsStringSync();
       final result = await writer.writeCues(
         vdjRoot: tempDir.path,
         localFilePath: '/music/dry.mp3',
         cues: [_cue()],
         dryRun: true,
       );
-      final after = File(p.join(tempDir.path, 'database.xml')).readAsStringSync();
+      final after = File(
+        p.join(tempDir.path, 'database.xml'),
+      ).readAsStringSync();
       expect(result.success, isTrue);
       expect(after, equals(before));
     });
@@ -174,22 +190,27 @@ void main() {
         cues: [_cue()],
         dryRun: true,
       );
-      final backup = File('${p.join(tempDir.path, 'database.xml')}.viberadar-backup');
+      final backup = File(
+        '${p.join(tempDir.path, 'database.xml')}.viberadar-backup',
+      );
       expect(backup.existsSync(), isFalse);
     });
   });
 
   // ── Empty cues ──────────────────────────────────────────────────────────────
   group('VirtualDjCueWriter — edge cases', () {
-
     test('Empty cue list succeeds without modifying file', () async {
-      final before = File(p.join(tempDir.path, 'database.xml')).readAsStringSync();
+      final before = File(
+        p.join(tempDir.path, 'database.xml'),
+      ).readAsStringSync();
       final result = await writer.writeCues(
         vdjRoot: tempDir.path,
         localFilePath: '/music/track.mp3',
         cues: [],
       );
-      final after = File(p.join(tempDir.path, 'database.xml')).readAsStringSync();
+      final after = File(
+        p.join(tempDir.path, 'database.xml'),
+      ).readAsStringSync();
       expect(result.success, isTrue);
       expect(result.cuesWritten, equals(0));
       expect(after, equals(before));
@@ -221,7 +242,6 @@ void main() {
 
   // ── Batch write ─────────────────────────────────────────────────────────────
   group('VirtualDjCueWriter — batch write', () {
-
     test('Writes cues for multiple tracks in one database edit', () async {
       final result = await writer.writeBatch(
         vdjRoot: tempDir.path,
@@ -244,7 +264,8 @@ void main() {
           '/music/b.mp3': [_cue()],
         },
       );
-      final backups = tempDir.listSync()
+      final backups = tempDir
+          .listSync()
           .where((e) => e.path.endsWith('.viberadar-backup'))
           .toList();
       expect(backups.length, equals(1));
@@ -253,7 +274,6 @@ void main() {
 
   // ── Library safety ─────────────────────────────────────────────────────────
   group('VirtualDjCueWriter — library safety', () {
-
     test('Does NOT modify original audio file', () async {
       final audioFile = File(p.join(tempDir.path, 'track.mp3'))
         ..writeAsBytesSync([0x49, 0x44, 0x33]); // fake ID3 header
@@ -319,7 +339,9 @@ void main() {
       // No track wrote successfully because one path was bad.
       expect(results.every((r) => r.cuesWritten == 0), isTrue);
       // database.xml on disk should NOT have gained the good track either.
-      final dbXml = File(p.join(tempDir.path, 'database.xml')).readAsStringSync();
+      final dbXml = File(
+        p.join(tempDir.path, 'database.xml'),
+      ).readAsStringSync();
       expect(dbXml.contains('good.mp3'), isFalse);
     });
   });

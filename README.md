@@ -111,6 +111,23 @@ The script builds the release app, re-signs it with a `Developer ID Application`
 
 Upload the DMG to Hosting, not the raw `.app` from `build/macos/Build/Products/Release/`.
 
+## Mac App Store release
+
+Mac App Store submission is separate from the Developer ID DMG path above. It
+requires an App Store Connect app record, a Mac App Store signing identity, and
+a provisioning profile that matches `com.viberadar.viberadar`.
+
+After those Apple-side records exist, build and validate the package:
+
+```bash
+APPLE_TEAM_ID=36TZ8UKL8W ./scripts/release_macos_appstore.sh
+```
+
+The script archives `macos/Runner.xcworkspace`, exports with
+`macos/ExportOptions-appstore.plist`, validates the `.pkg` using the App Store
+Connect API key, and prints the upload command. It intentionally fails early if
+only Developer ID signing assets are installed.
+
 ## Firebase setup
 
 Install backend dependencies:
@@ -130,6 +147,10 @@ firebase functions:secrets:set APPLE_MUSIC_DEVELOPER_TOKEN
 firebase functions:secrets:set SOUNDCLOUD_CLIENT_ID
 firebase functions:secrets:set SOUNDCLOUD_OAUTH_TOKEN
 firebase functions:secrets:set BEATPORT_API_TOKEN
+firebase functions:secrets:set OPENAI_API_KEY
+firebase functions:secrets:set APP_STORE_ISSUER_ID
+firebase functions:secrets:set APP_STORE_KEY_ID
+firebase functions:secrets:set APP_STORE_PRIVATE_KEY
 ```
 
 Set parameterized non-secret values in `functions/.env.<project_id>`:
@@ -138,8 +159,81 @@ Set parameterized non-secret values in `functions/.env.<project_id>`:
 cat > functions/.env.your-project-id <<'EOF'
 INGEST_REGIONS=US,GB,GH,NG,ZA,DE
 BEATPORT_API_BASE_URL=https://partner-endpoint.example.com/tracks
+USAGE_FREE_AI_MONTHLY_LIMIT=5
+USAGE_FREE_PLATFORM_PROXY_MONTHLY_LIMIT=100
+USAGE_FREE_MANUAL_INGEST_DAILY_LIMIT=0
+USAGE_PRO_AI_MONTHLY_LIMIT=100
+USAGE_PRO_PLATFORM_PROXY_MONTHLY_LIMIT=1500
+USAGE_PRO_MANUAL_INGEST_DAILY_LIMIT=1
+USAGE_STUDIO_AI_MONTHLY_LIMIT=400
+USAGE_STUDIO_PLATFORM_PROXY_MONTHLY_LIMIT=7500
+USAGE_STUDIO_MANUAL_INGEST_DAILY_LIMIT=3
+PAIRING_CREATE_DAILY_LIMIT=20
+PAIRING_CLAIM_DAILY_LIMIT=40
+OPENAI_DEFAULT_MODEL=gpt-4.1
+OPENAI_ALLOWED_MODELS=gpt-4.1,gpt-4o-mini
+OPENAI_MAX_COMPLETION_TOKENS=1200
+OPENAI_MAX_MESSAGES=12
+OPENAI_MAX_MESSAGE_CHARS=4000
+REQUIRE_APP_CHECK=true
+CONSUME_APP_CHECK_TOKEN=false
+APP_STORE_BUNDLE_ID=com.viberadar.viberadar
+APP_STORE_APP_APPLE_ID=1234567890
+APP_STORE_ENVIRONMENT=production
+APP_STORE_PRODUCT_IDS=viberadar_pro_monthly,viberadar_pro_yearly
 EOF
 ```
+
+`REQUIRE_APP_CHECK` and `CONSUME_APP_CHECK_TOKEN` are read when callable
+functions are deployed. Change them in the project env file, then redeploy
+Functions to change callable enforcement. The manual HTTP ingest endpoint also
+checks `REQUIRE_APP_CHECK` at runtime.
+
+For production Flutter builds that use Firebase App Check, register the iOS,
+macOS, Android, and web apps in Firebase App Check. Web release builds also need
+the reCAPTCHA site key:
+
+```bash
+flutter build web --release --no-wasm-dry-run \
+  --dart-define=FIREBASE_APPCHECK_RECAPTCHA_SITE_KEY=...
+```
+
+## IAP pricing and usage tiers
+
+Launch publicly with a single paid tier:
+
+- **VibeRadar Pro** — `$9.99/month` or `$79.99/year`
+- Product IDs: `viberadar_pro_monthly`, `viberadar_pro_yearly`
+- Limits: `100` AI requests/month, `1500` platform proxy lookups/month,
+  `1` manual ingest refresh/day
+
+Keep the higher tier backend-ready but hidden until usage data justifies it:
+
+- **VibeRadar Studio** — `$19.99/month` or `$149.99/year`
+- Product IDs: `viberadar_studio_monthly`, `viberadar_studio_yearly`
+- Limits: `400` AI requests/month, `7500` platform proxy lookups/month,
+  `3` manual ingest refreshes/day
+
+Users without an active entitlement fall back to the Free limits above. Store
+subscription state in backend-owned `entitlements/{uid}` documents with
+`tier: "pro"` or `tier: "studio"` and an active status; clients may read their
+own entitlement but cannot write it.
+
+The app syncs StoreKit purchases through the `syncAppStorePurchase` callable.
+App Store Server Notifications should be configured to call:
+
+```text
+https://us-central1-<project-id>.cloudfunctions.net/appStoreServerNotification
+```
+
+Create the subscription products in App Store Connect with the same product IDs
+used in `APP_STORE_PRODUCT_IDS`. Keep product IDs stable across iOS and macOS
+if both binaries unlock the same VibeRadar Pro entitlement.
+
+`APP_STORE_APP_APPLE_ID` is the numeric App Apple ID from App Store Connect and
+is required for production App Store signed-data verification. The Functions
+bundle includes the Apple root certificates from Apple's PKI page so
+transaction and notification JWS payloads can be certificate-chain verified.
 
 Build the backend:
 
@@ -148,10 +242,17 @@ cd functions
 npm run build
 ```
 
-Deploy rules, indexes, and functions:
+Deploy rules, indexes, Storage rules, and functions:
 
 ```bash
-firebase deploy --only firestore,functions
+firebase deploy --only firestore,storage,functions --project <project-id>
+```
+
+Deploy Hosting after building `build/web`:
+
+```bash
+flutter build web --release --no-wasm-dry-run
+firebase deploy --only hosting --project <project-id>
 ```
 
 ## Ingestion architecture

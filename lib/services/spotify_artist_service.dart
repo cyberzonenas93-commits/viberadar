@@ -2,6 +2,8 @@ import 'dart:developer' as developer;
 
 import 'package:cloud_functions/cloud_functions.dart';
 
+import '../core/utils/ttl_cache.dart';
+
 /// A lightweight Spotify client that fetches an artist's full catalogue
 /// via the server-side [spotifyProxy] Cloud Function. No API keys are
 /// held in the app bundle; authentication is handled server-side.
@@ -10,9 +12,13 @@ import 'package:cloud_functions/cloud_functions.dart';
 /// [FirebaseFunctions] without initialising a live Firebase app.
 class SpotifyArtistService {
   SpotifyArtistService({FirebaseFunctions? functions})
-      : _injectedFunctions = functions;
+    : _injectedFunctions = functions;
 
   final FirebaseFunctions? _injectedFunctions;
+  static final _proxyCache = TtlCache<String, Map<String, dynamic>>(
+    ttl: const Duration(minutes: 30),
+    maxEntries: 240,
+  );
 
   /// Returns the injected instance if provided, otherwise falls back to
   /// [FirebaseFunctions.instance]. The lazy lookup is intentional: it defers
@@ -28,25 +34,43 @@ class SpotifyArtistService {
     String path,
     Map<String, dynamic> query,
   ) async {
+    final cacheKey = _cacheKey(path, query);
+    final cached = _proxyCache.get(cacheKey);
+    if (cached != null) {
+      return Map<String, dynamic>.from(cached);
+    }
+
     final callable = _functions.httpsCallable(
       'spotifyProxy',
       options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
     );
     final result = await callable.call<Object?>({'path': path, 'query': query});
-    return Map<String, dynamic>.from(result.data as Map);
+    final data = Map<String, dynamic>.from(result.data as Map);
+    _proxyCache.put(cacheKey, data);
+    return Map<String, dynamic>.from(data);
+  }
+
+  String _cacheKey(String path, Map<String, dynamic> query) {
+    final queryKey = (query.keys.toList()..sort())
+        .map((key) => '$key=${query[key]}')
+        .join('&');
+    return '$path?$queryKey';
   }
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
   /// Search Spotify for tracks matching [query]. Returns up to [limit] results.
-  Future<List<SpotifyTrackInfo>> searchTracks(String query,
-      {int limit = 20}) async {
+  Future<List<SpotifyTrackInfo>> searchTracks(
+    String query, {
+    int limit = 20,
+    String market = 'US',
+  }) async {
     try {
       final data = await _spotifyGet('search', {
         'q': query,
         'type': 'track',
         'limit': '$limit',
-        'market': 'US',
+        'market': market,
       });
       final items = data['tracks']?['items'] as List? ?? [];
       return _parseTracks(items);
@@ -65,21 +89,61 @@ class SpotifyArtistService {
       });
       final items = data['artists']?['items'] as List? ?? [];
       return items
-          .map((a) => SpotifyArtistResult(
-                id: a['id'] ?? '',
-                name: a['name'] ?? 'Unknown',
-                imageUrl:
-                    (a['images'] as List?)?.firstOrNull?['url'] as String?,
-                genres: (a['genres'] as List?)
-                        ?.map((g) => g.toString())
-                        .toList() ??
-                    [],
-                followers: a['followers']?['total'] as int? ?? 0,
-                popularity: a['popularity'] as int? ?? 0,
-              ))
+          .map(
+            (a) => SpotifyArtistResult(
+              id: a['id'] ?? '',
+              name: a['name'] ?? 'Unknown',
+              imageUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
+              genres:
+                  (a['genres'] as List?)?.map((g) => g.toString()).toList() ??
+                  [],
+              followers: a['followers']?['total'] as int? ?? 0,
+              popularity: a['popularity'] as int? ?? 0,
+            ),
+          )
           .toList();
     } catch (_) {
       return [];
+    }
+  }
+
+  /// Fetch real Spotify artist images for the curated onboarding artist list.
+  ///
+  /// This uses a narrow pre-auth callable that accepts only known onboarding
+  /// names, keeping the general Spotify proxy behind full-account auth.
+  Future<Map<String, String>> fetchOnboardingArtistImages(
+    List<String> names,
+  ) async {
+    if (names.isEmpty) return {};
+    try {
+      final callable = _functions.httpsCallable(
+        'spotifyOnboardingArtistImages',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 30)),
+      );
+      final result = await callable.call<Object?>({'names': names});
+      final data = Map<String, dynamic>.from(result.data as Map);
+      final artists = data['artists'] as List? ?? const [];
+      final images = <String, String>{};
+      for (final raw in artists) {
+        final artist = Map<String, dynamic>.from(raw as Map);
+        final name = artist['name']?.toString().trim();
+        final imageUrl = artist['imageUrl']?.toString().trim();
+        if (name != null &&
+            name.isNotEmpty &&
+            imageUrl != null &&
+            imageUrl.isNotEmpty) {
+          images[name] = imageUrl;
+        }
+      }
+      return images;
+    } catch (e, st) {
+      developer.log(
+        'Failed to fetch onboarding Spotify artist images',
+        name: 'SpotifyArtist',
+        error: e,
+        stackTrace: st,
+      );
+      return {};
     }
   }
 
@@ -96,19 +160,25 @@ class SpotifyArtistService {
         return items[0]['id'] as String?;
       }
     } catch (e, st) {
-      developer.log('Failed to find Spotify artist ID for "$artistName"', name: 'SpotifyArtist', error: e, stackTrace: st);
+      developer.log(
+        'Failed to find Spotify artist ID for "$artistName"',
+        name: 'SpotifyArtist',
+        error: e,
+        stackTrace: st,
+      );
     }
     return null;
   }
 
   /// Fetch an artist's top tracks.
-  Future<List<SpotifyTrackInfo>> getTopTracks(String artistId,
-      {String market = 'US'}) async {
+  Future<List<SpotifyTrackInfo>> getTopTracks(
+    String artistId, {
+    String market = 'US',
+  }) async {
     try {
-      final data = await _spotifyGet(
-        'artists/$artistId/top-tracks',
-        {'market': market},
-      );
+      final data = await _spotifyGet('artists/$artistId/top-tracks', {
+        'market': market,
+      });
       return _parseTracks(data['tracks'] as List? ?? []);
     } catch (_) {
       return [];
@@ -121,23 +191,31 @@ class SpotifyArtistService {
   Future<List<SpotifyAlbumInfo>> getAlbums(String artistId) async {
     final albums = <SpotifyAlbumInfo>[];
     try {
-      final data = await _spotifyGet(
-        'artists/$artistId/albums',
-        {'include_groups': 'album,single', 'limit': '50'},
-      );
+      final data = await _spotifyGet('artists/$artistId/albums', {
+        'include_groups': 'album,single',
+        'limit': '50',
+      });
       final items = data['items'] as List? ?? [];
       for (final album in items) {
-        albums.add(SpotifyAlbumInfo(
-          id: album['id'] as String,
-          name: album['name'] as String,
-          type: album['album_type'] as String? ?? 'album',
-          imageUrl: (album['images'] as List?)?.firstOrNull?['url'] as String?,
-          releaseDate: album['release_date'] as String?,
-          totalTracks: album['total_tracks'] as int? ?? 0,
-        ));
+        albums.add(
+          SpotifyAlbumInfo(
+            id: album['id'] as String,
+            name: album['name'] as String,
+            type: album['album_type'] as String? ?? 'album',
+            imageUrl:
+                (album['images'] as List?)?.firstOrNull?['url'] as String?,
+            releaseDate: album['release_date'] as String?,
+            totalTracks: album['total_tracks'] as int? ?? 0,
+          ),
+        );
       }
     } catch (e, st) {
-      developer.log('Failed to fetch Spotify albums for artist "$artistId"', name: 'SpotifyArtist', error: e, stackTrace: st);
+      developer.log(
+        'Failed to fetch Spotify albums for artist "$artistId"',
+        name: 'SpotifyArtist',
+        error: e,
+        stackTrace: st,
+      );
     }
     return albums;
   }
@@ -145,29 +223,29 @@ class SpotifyArtistService {
   /// Fetch all tracks from a specific album.
   Future<List<SpotifyTrackInfo>> getAlbumTracks(String albumId) async {
     try {
-      final data = await _spotifyGet(
-        'albums/$albumId',
-        {'market': 'US'},
-      );
+      final data = await _spotifyGet('albums/$albumId', {'market': 'US'});
       final albumArt =
           (data['images'] as List?)?.firstOrNull?['url'] as String?;
       final tracks = data['tracks']?['items'] as List? ?? [];
       return tracks
-          .map((t) => SpotifyTrackInfo(
-                id: t['id'] as String? ?? '',
-                name: t['name'] as String? ?? 'Unknown',
-                artists: (t['artists'] as List?)
-                        ?.map((a) => a['name'].toString())
-                        .join(', ') ??
-                    '',
-                durationMs: t['duration_ms'] as int? ?? 0,
-                spotifyUrl: t['external_urls']?['spotify'] as String? ?? '',
-                albumName: data['name'] as String? ?? '',
-                albumArt: albumArt,
-                releaseDate: data['release_date'] as String?,
-                popularity: 0, // album tracks don't have popularity
-                trackNumber: t['track_number'] as int? ?? 0,
-              ))
+          .map(
+            (t) => SpotifyTrackInfo(
+              id: t['id'] as String? ?? '',
+              name: t['name'] as String? ?? 'Unknown',
+              artists:
+                  (t['artists'] as List?)
+                      ?.map((a) => a['name'].toString())
+                      .join(', ') ??
+                  '',
+              durationMs: t['duration_ms'] as int? ?? 0,
+              spotifyUrl: t['external_urls']?['spotify'] as String? ?? '',
+              albumName: data['name'] as String? ?? '',
+              albumArt: albumArt,
+              releaseDate: data['release_date'] as String?,
+              popularity: 0, // album tracks don't have popularity
+              trackNumber: t['track_number'] as int? ?? 0,
+            ),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -222,8 +300,8 @@ class SpotifyArtistService {
         id: data['id'] as String? ?? '',
         name: data['name'] as String? ?? '',
         imageUrl: (data['images'] as List?)?.firstOrNull?['url'] as String?,
-        genres: (data['genres'] as List?)?.map((g) => g.toString()).toList() ??
-            [],
+        genres:
+            (data['genres'] as List?)?.map((g) => g.toString()).toList() ?? [],
         followers: data['followers']?['total'] as int? ?? 0,
         popularity: data['popularity'] as int? ?? 0,
       );
@@ -245,18 +323,18 @@ class SpotifyArtistService {
       final data = await _spotifyGet('artists/$artistId/related-artists', {});
       final items = data['artists'] as List? ?? [];
       return items
-          .map((a) => SpotifyArtistProfile(
-                id: a['id'] as String? ?? '',
-                name: a['name'] as String? ?? '',
-                imageUrl:
-                    (a['images'] as List?)?.firstOrNull?['url'] as String?,
-                genres: (a['genres'] as List?)
-                        ?.map((g) => g.toString())
-                        .toList() ??
-                    [],
-                followers: a['followers']?['total'] as int? ?? 0,
-                popularity: a['popularity'] as int? ?? 0,
-              ))
+          .map(
+            (a) => SpotifyArtistProfile(
+              id: a['id'] as String? ?? '',
+              name: a['name'] as String? ?? '',
+              imageUrl: (a['images'] as List?)?.firstOrNull?['url'] as String?,
+              genres:
+                  (a['genres'] as List?)?.map((g) => g.toString()).toList() ??
+                  [],
+              followers: a['followers']?['total'] as int? ?? 0,
+              popularity: a['popularity'] as int? ?? 0,
+            ),
+          )
           .toList();
     } catch (_) {
       return [];
@@ -266,10 +344,11 @@ class SpotifyArtistService {
   /// Get the most recent album/single for an artist.
   Future<SpotifyAlbumInfo?> getLatestRelease(String artistId) async {
     try {
-      final data = await _spotifyGet(
-        'artists/$artistId/albums',
-        {'include_groups': 'album,single', 'limit': '1', 'market': 'US'},
-      );
+      final data = await _spotifyGet('artists/$artistId/albums', {
+        'include_groups': 'album,single',
+        'limit': '1',
+        'market': 'US',
+      });
       final items = data['items'] as List? ?? [];
       if (items.isEmpty) return null;
       final album = items[0] as Map;
@@ -277,8 +356,7 @@ class SpotifyArtistService {
         id: album['id'] as String,
         name: album['name'] as String,
         type: album['album_type'] as String? ?? 'album',
-        imageUrl:
-            (album['images'] as List?)?.firstOrNull?['url'] as String?,
+        imageUrl: (album['images'] as List?)?.firstOrNull?['url'] as String?,
         releaseDate: album['release_date'] as String?,
         totalTracks: album['total_tracks'] as int? ?? 0,
       );
@@ -296,7 +374,8 @@ class SpotifyArtistService {
       return SpotifyTrackInfo(
         id: t['id'] as String? ?? '',
         name: t['name'] as String? ?? 'Unknown',
-        artists: (t['artists'] as List?)
+        artists:
+            (t['artists'] as List?)
                 ?.map((a) => a['name'].toString())
                 .join(', ') ??
             '',
@@ -342,18 +421,18 @@ class SpotifyTrackInfo {
   });
 
   SpotifyTrackInfo copyWith({bool? isTopTrack}) => SpotifyTrackInfo(
-        id: id,
-        name: name,
-        artists: artists,
-        durationMs: durationMs,
-        spotifyUrl: spotifyUrl,
-        albumName: albumName,
-        albumArt: albumArt,
-        releaseDate: releaseDate,
-        popularity: popularity,
-        trackNumber: trackNumber,
-        isTopTrack: isTopTrack ?? this.isTopTrack,
-      );
+    id: id,
+    name: name,
+    artists: artists,
+    durationMs: durationMs,
+    spotifyUrl: spotifyUrl,
+    albumName: albumName,
+    albumArt: albumArt,
+    releaseDate: releaseDate,
+    popularity: popularity,
+    trackNumber: trackNumber,
+    isTopTrack: isTopTrack ?? this.isTopTrack,
+  );
 
   String get durationFormatted {
     final minutes = durationMs ~/ 60000;

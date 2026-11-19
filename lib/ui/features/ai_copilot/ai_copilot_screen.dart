@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
@@ -9,9 +8,7 @@ import '../../../models/track.dart';
 import '../../../providers/app_state.dart';
 import '../../../providers/library_provider.dart';
 import '../../../services/ai_copilot_service.dart';
-import '../../../services/spotify_artist_service.dart';
-import '../../../services/apple_music_artist_service.dart';
-import '../../../services/youtube_search_service.dart';
+import '../../../services/platform_search_service.dart';
 import '../../widgets/ui_kit.dart';
 
 part 'ai_copilot_screen_models.dart';
@@ -28,11 +25,9 @@ class AiCopilotScreen extends ConsumerStatefulWidget {
 class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
-  final _apiKeyController = TextEditingController();
   bool _isTyping = false;
   bool _showSettings = false;
-  String? _apiKey;
-  String _model = 'gpt-5.4';
+  String _model = AiCopilotService.defaultOpenAiModel;
   StreamSubscription<String>? _streamSub;
 
   static const _suggestions = [
@@ -50,13 +45,10 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
   Future<void> _loadSettings() async {
     final svc = ref.read(_aiServiceProvider);
-    final key = await svc.getApiKey();
     final model = await svc.getModel();
     if (mounted) {
       setState(() {
-        _apiKey = key;
         _model = model;
-        if (key != null) _apiKeyController.text = key;
       });
     }
   }
@@ -66,14 +58,12 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     _streamSub?.cancel();
     _controller.dispose();
     _scrollController.dispose();
-    _apiKeyController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final connected = _apiKey != null && _apiKey!.isNotEmpty;
     final chatState = ref.watch(_copilotChatProvider);
     final messages = chatState.messages;
 
@@ -127,7 +117,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                       style: theme.textTheme.headlineSmall?.copyWith(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.w800,
-                        letterSpacing: -0.5,
+                        letterSpacing: 0,
                       ),
                     ),
                     const SizedBox(height: 4),
@@ -149,24 +139,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: BoxDecoration(
-                            color: connected ? AppTheme.lime : AppTheme.amber,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          connected ? 'Connected' : 'No API key',
-                          style: TextStyle(
-                            color: connected ? AppTheme.lime : AppTheme.amber,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ],
@@ -226,8 +198,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
 
         // Settings panel
         if (_showSettings) _buildSettingsPanel(),
-
-        if (!connected && !_showSettings) _buildApiKeyBanner(),
 
         // Active year filter indicator
         if (chatState.yearFrom != null || chatState.yearTo != null)
@@ -394,60 +364,33 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'OpenAI API Key',
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.panel,
+                borderRadius: BorderRadius.circular(AppTheme.rSm),
+                border: Border.all(color: AppTheme.hairline),
               ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _apiKeyController,
-                    obscureText: true,
-                    style: const TextStyle(
-                      color: AppTheme.textPrimary,
-                      fontSize: 12,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'sk-…',
-                      hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                      filled: true,
-                      fillColor: AppTheme.panel,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.rSm),
-                        borderSide: const BorderSide(color: AppTheme.hairline),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppTheme.rSm),
-                        borderSide: const BorderSide(color: AppTheme.hairline),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+              child: const Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    color: AppTheme.violet,
+                    size: 16,
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'AI access',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  onPressed: () async {
-                    final key = _apiKeyController.text.trim();
-                    await ref.read(_aiServiceProvider).setApiKey(key);
-                    if (mounted) {
-                      setState(() {
-                        _apiKey = key;
-                        _showSettings = false;
-                      });
-                    }
-                  },
-                  child: const Text('Save'),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 12),
             const Text(
@@ -468,14 +411,9 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
               ),
               child: DropdownButton<String>(
                 value:
-                    [
-                      'gpt-5.4',
-                      'gpt-4.1',
-                      'gpt-4o',
-                      'gpt-4o-mini',
-                    ].contains(_model)
+                    [...AiCopilotService.allowedOpenAiModels].contains(_model)
                     ? _model
-                    : 'gpt-5.4',
+                    : AiCopilotService.defaultOpenAiModel,
                 dropdownColor: AppTheme.panelRaised,
                 style: const TextStyle(
                   color: AppTheme.textPrimary,
@@ -483,7 +421,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                 ),
                 underline: const SizedBox(),
                 isExpanded: true,
-                items: ['gpt-5.4', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini']
+                items: AiCopilotService.allowedOpenAiModels
                     .map((m) => DropdownMenuItem(value: m, child: Text(m)))
                     .toList(),
                 onChanged: (v) async {
@@ -492,53 +430,6 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
                     if (mounted) setState(() => _model = v);
                   }
                 },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildApiKeyBanner() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 0, 28, 0),
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: AppTheme.amber.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.amber.withValues(alpha: 0.2)),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              Icons.key_rounded,
-              color: AppTheme.amber.withValues(alpha: 0.7),
-              size: 16,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                'Add your OpenAI API key in Settings to get live AI responses.',
-                style: TextStyle(
-                  color: AppTheme.amber.withValues(alpha: 0.8),
-                  fontSize: 11,
-                ),
-              ),
-            ),
-            TextButton(
-              onPressed: () => setState(() => _showSettings = true),
-              style: TextButton.styleFrom(
-                foregroundColor: AppTheme.amber,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-              ),
-              child: const Text(
-                'Add Key',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ),
           ],
@@ -618,6 +509,8 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
             'key': t.keySignature,
             'genre': t.genre,
             'year': t.effectiveReleaseYear.toString(),
+            'region': t.leadRegion,
+            'sources': t.effectiveSources.join(', '),
           },
         )
         .toList();
@@ -712,7 +605,7 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     // Show searching status
     final chatNotifier = ref.read(_copilotChatProvider.notifier);
     chatNotifier.addStatusMessage(
-      '🔍 Searching Spotify & Apple Music for ${aiTracks.length} tracks…',
+      '🔍 Searching Soundcharts, Spotify, Apple Music & YouTube for ${aiTracks.length} tracks…',
     );
 
     // Search platforms in background
@@ -813,84 +706,70 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     return (name: crateName, tracks: tracks);
   }
 
-  /// Clean query — strip feat., ft., parenthetical, brackets
-  String _cleanQuery(String s) => s
-      .replaceAll(RegExp(r'\(feat\.?[^)]*\)', caseSensitive: false), '')
-      .replaceAll(RegExp(r'\(ft\.?[^)]*\)', caseSensitive: false), '')
-      .replaceAll(RegExp(r'\(.*?\)'), '')
-      .replaceAll(RegExp(r'\[.*?\]'), '')
+  PlatformTrackResult? _bestPlatformResolution(
+    List<PlatformTrackResult> hits,
+    String title,
+    String artist,
+  ) {
+    if (hits.isEmpty) return null;
+    final scored =
+        hits
+            .map(
+              (hit) => (hit: hit, score: _resolutionScore(hit, title, artist)),
+            )
+            .where((entry) => entry.score > 0)
+            .toList()
+          ..sort((a, b) => b.score.compareTo(a.score));
+    return scored.isEmpty ? hits.first : scored.first.hit;
+  }
+
+  int _resolutionScore(PlatformTrackResult hit, String title, String artist) {
+    final wantedTitle = _matchText(title);
+    final wantedArtist = _matchText(artist);
+    final hitTitle = _matchText(hit.title);
+    final hitArtist = _matchText(hit.artist);
+    var score = 0;
+
+    if (wantedTitle.isNotEmpty) {
+      if (hitTitle == wantedTitle) {
+        score += 100;
+      } else if (hitTitle.contains(wantedTitle) ||
+          wantedTitle.contains(hitTitle)) {
+        score += 55;
+      }
+    }
+
+    if (wantedArtist.isNotEmpty) {
+      if (hitArtist == wantedArtist) {
+        score += 80;
+      } else if (hitArtist.contains(wantedArtist) ||
+          wantedArtist.contains(hitArtist)) {
+        score += 40;
+      }
+    }
+
+    if (hit.spotifyUrl != null) score += 8;
+    if (hit.appleUrl != null) score += 8;
+    if (hit.youtubeUrl != null) score += 4;
+    if (hit.soundchartsUrl != null) score += 4;
+    score += (hit.popularity / 20).round();
+    return score;
+  }
+
+  String _matchText(String value) => value
+      .toLowerCase()
+      .replaceAll(RegExp(r'\(.*?\)'), ' ')
+      .replaceAll(RegExp(r'\[.*?\]'), ' ')
+      .replaceAll(RegExp(r'[^a-z0-9]+'), ' ')
       .replaceAll(RegExp(r'\s+'), ' ')
       .trim();
 
-  /// Try multiple search strategies to find a track on Spotify
-  Future<SpotifyTrackInfo?> _searchSpotify(
-    SpotifyArtistService spotify,
-    String title,
-    String artist,
-  ) async {
-    final cleanTitle = _cleanQuery(title);
-    final cleanArtist = _cleanQuery(artist);
-
-    // Strategy 1: "artist title"
-    var results = await spotify
-        .searchTracks('$cleanArtist $cleanTitle', limit: 5)
-        .catchError((_) => <SpotifyTrackInfo>[]);
-    if (results.isNotEmpty) return results.first;
-
-    // Strategy 2: "title artist" (reversed)
-    results = await spotify
-        .searchTracks('$cleanTitle $cleanArtist', limit: 5)
-        .catchError((_) => <SpotifyTrackInfo>[]);
-    if (results.isNotEmpty) return results.first;
-
-    // Strategy 3: title only (for unique song names)
-    if (cleanTitle.length > 4) {
-      results = await spotify
-          .searchTracks(cleanTitle, limit: 5)
-          .catchError((_) => <SpotifyTrackInfo>[]);
-      if (results.isNotEmpty) return results.first;
-    }
-
-    return null;
-  }
-
-  /// Try multiple search strategies to find a track on Apple Music
-  Future<AppleMusicTrack?> _searchApple(
-    AppleMusicArtistService apple,
-    String title,
-    String artist,
-  ) async {
-    final cleanTitle = _cleanQuery(title);
-    final cleanArtist = _cleanQuery(artist);
-
-    var results = await apple
-        .searchSongs('$cleanArtist $cleanTitle', limit: 5)
-        .catchError((_) => <AppleMusicTrack>[]);
-    if (results.isNotEmpty) return results.first;
-
-    results = await apple
-        .searchSongs('$cleanTitle $cleanArtist', limit: 5)
-        .catchError((_) => <AppleMusicTrack>[]);
-    if (results.isNotEmpty) return results.first;
-
-    if (cleanTitle.length > 4) {
-      results = await apple
-          .searchSongs(cleanTitle, limit: 5)
-          .catchError((_) => <AppleMusicTrack>[]);
-      if (results.isNotEmpty) return results.first;
-    }
-
-    return null;
-  }
-
-  /// Search Spotify + Apple Music for each AI track and store results
+  /// Search all live providers for each AI track and store resolved setlist links.
   Future<void> _resolveTracksOnPlatforms(
     String crateName,
     List<({String title, String artist, int bpm, String key})> aiTracks,
   ) async {
-    final spotify = SpotifyArtistService();
-    final apple = AppleMusicArtistService();
-    final youtube = YoutubeSearchService();
+    final platformSearch = PlatformSearchService();
     final chatNotifier = ref.read(_copilotChatProvider.notifier);
     final resolvedTracks = <AiCrateTrack>[];
     int found = 0;
@@ -898,45 +777,18 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
     for (var i = 0; i < aiTracks.length; i++) {
       final ai = aiTracks[i];
 
-      String? spotifyUrl;
-      String? appleUrl;
-      String? youtubeUrl;
-      String? artworkUrl;
-
-      // Search Spotify (multi-strategy)
-      final spotifyHit = await _searchSpotify(spotify, ai.title, ai.artist);
-      if (spotifyHit != null) {
-        spotifyUrl = spotifyHit.spotifyUrl;
-        artworkUrl = spotifyHit.albumArt;
-      }
-
-      // Search Apple Music (multi-strategy)
-      final appleHit = await _searchApple(apple, ai.title, ai.artist);
-      if (appleHit != null) {
-        appleUrl = appleHit.appleUrl;
-        artworkUrl ??= appleHit.artworkUrl;
-      }
-
-      // Search YouTube
-      try {
-        final ytResults = await youtube
-            .searchMusic('${ai.artist} ${ai.title}', limit: 1)
-            .catchError((_) => <YoutubeVideoResult>[]);
-        if (ytResults.isNotEmpty) {
-          youtubeUrl = ytResults.first.youtubeUrl;
-          artworkUrl ??= ytResults.first.thumbnailUrl;
-        }
-      } catch (e, st) {
-        developer.log(
-          'YouTube search failed during track resolution',
-          name: 'AiCopilot',
-          error: e,
-          stackTrace: st,
-        );
-      }
+      final hits = await platformSearch.search(
+        '${ai.artist} ${ai.title}',
+        limit: 8,
+      );
+      final hit = _bestPlatformResolution(hits, ai.title, ai.artist);
 
       final resolved =
-          spotifyUrl != null || appleUrl != null || youtubeUrl != null;
+          hit != null &&
+          (hit.spotifyUrl != null ||
+              hit.appleUrl != null ||
+              hit.youtubeUrl != null ||
+              hit.soundchartsUrl != null);
       if (resolved) found++;
 
       resolvedTracks.add(
@@ -945,10 +797,13 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
           artist: ai.artist,
           bpm: ai.bpm,
           key: ai.key,
-          spotifyUrl: spotifyUrl,
-          appleUrl: appleUrl,
-          youtubeUrl: youtubeUrl,
-          artworkUrl: artworkUrl,
+          spotifyUrl: hit?.spotifyUrl,
+          appleUrl: hit?.appleUrl,
+          youtubeUrl: hit?.youtubeUrl,
+          soundchartsUrl: hit?.soundchartsUrl,
+          soundchartsSource: hit?.soundchartsSource,
+          soundchartsRegion: hit?.soundchartsRegion,
+          artworkUrl: hit?.artworkUrl,
           resolved: resolved,
         ),
       );
@@ -956,29 +811,29 @@ class _AiCopilotScreenState extends ConsumerState<AiCopilotScreen> {
       // Update progress every 3 tracks
       if ((i + 1) % 3 == 0 && mounted) {
         chatNotifier.updateLastStatusMessage(
-          '🔍 Found $found/${i + 1} tracks on Spotify, Apple Music & YouTube… (${aiTracks.length - i - 1} remaining)',
+          '🔍 Found $found/${i + 1} tracks across Soundcharts, Spotify, Apple Music & YouTube… (${aiTracks.length - i - 1} remaining)',
         );
       }
     }
 
-    // Store the AI crate
+    // Store the AI setlist
     ref.read(aiCrateProvider.notifier).setCrate(crateName, resolvedTracks);
 
     if (!mounted) return;
 
     final missing = aiTracks.length - found;
     chatNotifier.addStatusMessage(
-      '🎧 Crate "$crateName" ready — $found/${aiTracks.length} tracks found with playable links'
+      '🎧 Setlist "$crateName" ready — $found/${aiTracks.length} tracks found with platform/source links'
       '${missing > 0 ? '\n⚠️ $missing tracks could not be found on any platform' : ''}',
     );
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('🎧 "$crateName" — $found tracks with play links'),
+        content: Text('🎧 "$crateName" — $found tracks with source links'),
         backgroundColor: AppTheme.violet,
         duration: const Duration(seconds: 4),
         action: SnackBarAction(
-          label: 'View Crate',
+          label: 'View Setlist',
           textColor: Colors.white,
           onPressed: () => ref
               .read(workspaceControllerProvider.notifier)
